@@ -4,37 +4,49 @@ export async function POST(request: NextRequest) {
   try {
     const { username, password } = await request.json();
 
-    // In a real implementation, this would authenticate with the backend
-    // For now, we'll simulate authentication with a mock response
+    // Forward the login request to the backend
+    const backendResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/auth/session-login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        username,
+        password,
+      }).toString(),
+    });
 
-    // Validate credentials (mock validation)
-    if (username === 'admin' && password === 'admin123') {
-      // Create a mock session response
-      const response = NextResponse.json({
-        authenticated: true,
-        user: {
-          id: 'user-123',
-          name: 'Admin User',
-          role: 'admin',
-          branch: 'Main Branch'
+    if (backendResponse.ok) {
+      // Extract cookies from backend response
+      const setCookieHeader = backendResponse.headers.get('set-cookie');
+      
+      // Create response with backend data
+      const backendData = await backendResponse.json();
+      const response = NextResponse.json(backendData);
+
+      // Forward the session cookie from backend to frontend
+      if (setCookieHeader) {
+        // Parse the Set-Cookie header to extract cookie information
+        const cookieMatch = setCookieHeader.match(/session_token=([^;]+)/);
+        if (cookieMatch) {
+          const sessionToken = cookieMatch[1];
+          
+          // Set the session token as a cookie in the frontend response
+          response.cookies.set('session_token', sessionToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            maxAge: 60 * 60 * 24, // 24 hours
+            path: '/',
+            sameSite: 'lax',
+          });
         }
-      });
-
-      // Set a mock session cookie
-      response.cookies.set('sessionid', 'mock-session-id-123', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 60 * 60 * 24, // 24 hours
-        path: '/',
-        sameSite: 'lax',
-      });
+      }
 
       return response;
     } else {
-      return NextResponse.json(
-        { error: 'Invalid credentials' },
-        { status: 401 }
-      );
+      // Return the error from the backend
+      const errorData = await backendResponse.json().catch(() => ({ error: 'Login failed' }));
+      return NextResponse.json(errorData, { status: backendResponse.status });
     }
   } catch (error) {
     console.error('Login error:', error);

@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
+import { useSession } from '@/auth/session-provider';
 import { useRouter } from 'next/navigation';
-import { signIn } from '@/auth/adapter';
 
 const LoginPage: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { signIn } = useSession();
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -17,12 +18,9 @@ const LoginPage: React.FC = () => {
     setError('');
 
     try {
-      // Attempt to sign in using the auth adapter
       await signIn({ username, password });
-
-      // If successful, redirect to dashboard
-      router.push('/dashboard');
-      router.refresh(); // Refresh to update session context
+      router.push('/dashboard'); // Redirect to dashboard after successful login
+      router.refresh(); // Refresh the page to update session context
     } catch (err) {
       setError('Invalid credentials. Please try again.');
       console.error('Login error:', err);

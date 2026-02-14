@@ -26,38 +26,38 @@ const SalesViewPage: React.FC = () => {
   const [filterType, setFilterType] = useState<'all' | 'customer' | 'walkin'>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
-  // Simulated data fetch
+  // Function to fetch sales data
+  const fetchSales = async () => {
+    try {
+      setLoading(true);
+
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Mock data
+      const mockInvoices: Invoice[] = [
+        { id: '1', invoice_no: 'CIV-001', customer_name: 'John Doe', total_amount: 125.50, amount_paid: 125.50, balance_due: 0.00, payment_status: 'paid', payment_method: 'cash', created_at: '2026-02-01T10:30:00.000Z', type: 'customer' },
+        { id: '2', invoice_no: 'WIV-001', customer_name: 'Walk-in Customer', total_amount: 89.99, amount_paid: 89.99, balance_due: 0.00, payment_status: 'paid', payment_method: 'card', created_at: '2026-02-01T11:15:00.000Z', type: 'walkin' },
+        { id: '3', invoice_no: 'CIV-002', customer_name: 'Jane Smith', total_amount: 245.75, amount_paid: 100.00, balance_due: 145.75, payment_status: 'partial', payment_method: 'cash', created_at: '2026-02-02T09:45:00.000Z', type: 'customer' },
+        { id: '4', invoice_no: 'WIV-002', customer_name: 'Walk-in Customer', total_amount: 56.25, amount_paid: 56.25, balance_due: 0.00, payment_status: 'paid', payment_method: 'cash', created_at: '2026-02-02T14:20:00.000Z', type: 'walkin' },
+        { id: '5', invoice_no: 'CIV-003', customer_name: 'Bob Johnson', total_amount: 320.00, amount_paid: 320.00, balance_due: 0.00, payment_status: 'paid', payment_method: 'card', created_at: '2026-02-03T16:30:00.000Z', type: 'customer' },
+        { id: '6', invoice_no: 'WIV-003', customer_name: 'Walk-in Customer', total_amount: 187.50, amount_paid: 150.00, balance_due: 37.50, payment_status: 'partial', payment_method: 'card', created_at: '2026-02-03T17:45:00.000Z', type: 'walkin' },
+        { id: '7', invoice_no: 'CIV-004', customer_name: 'Alice Williams', total_amount: 98.25, amount_paid: 98.25, balance_due: 0.00, payment_status: 'paid', payment_method: 'cash', created_at: '2026-02-04T10:15:00.000Z', type: 'customer' },
+        { id: '8', invoice_no: 'WIV-004', customer_name: 'Walk-in Customer', total_amount: 210.75, amount_paid: 210.75, balance_due: 0.00, payment_status: 'paid', payment_method: 'card', created_at: '2026-02-04T13:30:00.000Z', type: 'walkin' },
+      ];
+
+      setInvoices(mockInvoices);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch sales data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initial data fetch
   useEffect(() => {
-    // In a real app, this would be an API call
-    const fetchSales = async () => {
-      try {
-        setLoading(true);
-
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Mock data
-        const mockInvoices: Invoice[] = [
-          { id: '1', invoice_no: 'CIV-001', customer_name: 'John Doe', total_amount: 125.50, amount_paid: 125.50, balance_due: 0.00, payment_status: 'paid', payment_method: 'cash', created_at: '2026-02-01T10:30:00.000Z', type: 'customer' },
-          { id: '2', invoice_no: 'WIV-001', customer_name: 'Walk-in Customer', total_amount: 89.99, amount_paid: 89.99, balance_due: 0.00, payment_status: 'paid', payment_method: 'card', created_at: '2026-02-01T11:15:00.000Z', type: 'walkin' },
-          { id: '3', invoice_no: 'CIV-002', customer_name: 'Jane Smith', total_amount: 245.75, amount_paid: 100.00, balance_due: 145.75, payment_status: 'partial', payment_method: 'cash', created_at: '2026-02-02T09:45:00.000Z', type: 'customer' },
-          { id: '4', invoice_no: 'WIV-002', customer_name: 'Walk-in Customer', total_amount: 56.25, amount_paid: 56.25, balance_due: 0.00, payment_status: 'paid', payment_method: 'cash', created_at: '2026-02-02T14:20:00.000Z', type: 'walkin' },
-          { id: '5', invoice_no: 'CIV-003', customer_name: 'Bob Johnson', total_amount: 320.00, amount_paid: 320.00, balance_due: 0.00, payment_status: 'paid', payment_method: 'card', created_at: '2026-02-03T16:30:00.000Z', type: 'customer' },
-          { id: '6', invoice_no: 'WIV-003', customer_name: 'Walk-in Customer', total_amount: 187.50, amount_paid: 150.00, balance_due: 37.50, payment_status: 'partial', payment_method: 'card', created_at: '2026-02-03T17:45:00.000Z', type: 'walkin' },
-          { id: '7', invoice_no: 'CIV-004', customer_name: 'Alice Williams', total_amount: 98.25, amount_paid: 98.25, balance_due: 0.00, payment_status: 'paid', payment_method: 'cash', created_at: '2026-02-04T10:15:00.000Z', type: 'customer' },
-          { id: '8', invoice_no: 'WIV-004', customer_name: 'Walk-in Customer', total_amount: 210.75, amount_paid: 210.75, balance_due: 0.00, payment_status: 'paid', payment_method: 'card', created_at: '2026-02-04T13:30:00.000Z', type: 'walkin' },
-        ];
-
-        setInvoices(mockInvoices);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch sales data');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchSales();
-  }, [startDate, endDate, filterType, searchTerm]);
+  }, []);
 
   // Filter invoices based on criteria
   const filteredInvoices = invoices.filter(invoice => {
@@ -133,7 +133,7 @@ const SalesViewPage: React.FC = () => {
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value as 'all' | 'customer' | 'walkin')}
-              className="regal-input w-full"
+              className="regal-select w-full"
             >
               <option value="all">All Types</option>
               <option value="customer">Customer Invoice</option>
@@ -151,6 +151,24 @@ const SalesViewPage: React.FC = () => {
               className="regal-input w-full"
             />
           </div>
+        </div>
+
+        <div className="mt-4 flex justify-end">
+          <button 
+            onClick={fetchSales}
+            disabled={loading}
+            className="regal-btn-primary flex items-center"
+          >
+            {loading ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Fetching...
+              </>
+            ) : 'Fetch Data'}
+          </button>
         </div>
       </div>
 

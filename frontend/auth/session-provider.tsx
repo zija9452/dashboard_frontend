@@ -51,14 +51,13 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
   // Sign in function
   const signIn = async (credentials: { username: string; password: string }) => {
     try {
-      // In a real implementation, this would call the backend auth endpoint
-      // For now, we'll simulate the sign in process
+      // Call the frontend API route which forwards to the backend
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/json',
         },
-        body: new URLSearchParams({
+        body: JSON.stringify({
           username: credentials.username,
           password: credentials.password,
         }),
@@ -66,11 +65,12 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       });
 
       if (!response.ok) {
-        throw new Error('Sign in failed');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Sign in failed');
       }
 
       // Update session after sign in
-      updateSession();
+      await updateSession();
     } catch (error) {
       console.error('Sign in error:', error);
       throw error;

@@ -81,6 +81,11 @@ export class CustomerInvoiceApi {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Redirect to login if unauthorized
+        window.location.href = '/login';
+        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
+      }
       throw new Error(`Failed to fetch customer invoices: ${response.status} ${response.statusText}`);
     }
 
@@ -115,6 +120,11 @@ export class CustomerInvoiceApi {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Redirect to login if unauthorized
+        window.location.href = '/login';
+        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
+      }
       throw new Error(`Failed to fetch customer invoice: ${response.status} ${response.statusText}`);
     }
 
@@ -138,6 +148,11 @@ export class CustomerInvoiceApi {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Redirect to login if unauthorized
+        window.location.href = '/login';
+        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
+      }
       throw new Error(`Failed to create customer invoice: ${response.status} ${response.statusText}`);
     }
 
@@ -162,6 +177,11 @@ export class CustomerInvoiceApi {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Redirect to login if unauthorized
+        window.location.href = '/login';
+        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
+      }
       throw new Error(`Failed to process payment: ${response.status} ${response.statusText}`);
     }
 
@@ -186,6 +206,11 @@ export class CustomerInvoiceApi {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Redirect to login if unauthorized
+        window.location.href = '/login';
+        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
+      }
       throw new Error(`Failed to update customer invoice: ${response.status} ${response.statusText}`);
     }
 
@@ -208,6 +233,11 @@ export class CustomerInvoiceApi {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Redirect to login if unauthorized
+        window.location.href = '/login';
+        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
+      }
       throw new Error(`Failed to delete customer invoice: ${response.status} ${response.statusText}`);
     }
   }

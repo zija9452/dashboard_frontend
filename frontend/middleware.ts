@@ -15,8 +15,7 @@ const protectedRoutes = [
   '/view-custom-order',
   '/sales-view',
   '/duplicate-bill',
-  '/refund',
-  '/logout'
+  '/refund'
 ];
 
 export function middleware(request: NextRequest) {
@@ -27,11 +26,11 @@ export function middleware(request: NextRequest) {
 
   if (isProtectedRoute) {
     // Check if session cookie exists
-    const sessionId = request.cookies.get('sessionid');
+    const sessionToken = request.cookies.get('session_token');
 
-    if (!sessionId) {
+    if (!sessionToken) {
       // Redirect to login if no session exists
-      return NextResponse.redirect(new URL('/auth/login', request.url));
+      return NextResponse.redirect(new URL('/login', request.url));
     }
 
     // Verify the session with the backend
@@ -53,7 +52,7 @@ export const config = {
      * - favicon.ico (favicon file)
      */
     {
-      source: '/((?!api|_next/static|_next/image|favicon.ico).*)',
+      source: '/((?!api|_next/static|_next/image|favicon\\.ico).*)',
       missing: [
         { type: 'header', key: 'next-router-prefetch' },
         { type: 'header', key: 'purpose', value: 'prefetch' },

@@ -80,6 +80,11 @@ export class WalkInInvoiceApi {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Redirect to login if unauthorized
+        window.location.href = '/login';
+        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
+      }
       throw new Error(`Failed to fetch walk-in invoices: ${response.status} ${response.statusText}`);
     }
 
@@ -114,6 +119,11 @@ export class WalkInInvoiceApi {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Redirect to login if unauthorized
+        window.location.href = '/login';
+        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
+      }
       throw new Error(`Failed to fetch walk-in invoice: ${response.status} ${response.statusText}`);
     }
 
@@ -137,6 +147,11 @@ export class WalkInInvoiceApi {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Redirect to login if unauthorized
+        window.location.href = '/login';
+        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
+      }
       throw new Error(`Failed to create walk-in invoice: ${response.status} ${response.statusText}`);
     }
 
@@ -161,6 +176,11 @@ export class WalkInInvoiceApi {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Redirect to login if unauthorized
+        window.location.href = '/login';
+        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
+      }
       throw new Error(`Failed to update walk-in invoice: ${response.status} ${response.statusText}`);
     }
 
@@ -183,6 +203,11 @@ export class WalkInInvoiceApi {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Redirect to login if unauthorized
+        window.location.href = '/login';
+        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
+      }
       throw new Error(`Failed to delete walk-in invoice: ${response.status} ${response.statusText}`);
     }
   }

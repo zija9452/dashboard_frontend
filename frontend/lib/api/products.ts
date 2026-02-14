@@ -57,7 +57,7 @@ export class ProductsApi {
       params.append('search_string', search);
     }
 
-    const response = await fetch(`${this.baseUrl}/products/?${params.toString()}`, {
+    const response = await fetch(`${this.baseUrl}/products/view-product?${params.toString()}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -67,17 +67,44 @@ export class ProductsApi {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Redirect to login if unauthorized
+        window.location.href = '/login';
+        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
+      }
       throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const responseData = await response.json();
+
+    // Map the frontend-compatible response to our Product interface
+    const mappedData: Product[] = responseData.map((item: any) => ({
+      id: item.pro_id,
+      sku: item.pro_barcode || '', // Using barcode as SKU
+      name: item.pro_name,
+      desc: '', // Not provided in frontend format
+      unit_price: item.pro_price,
+      cost_price: item.pro_cost,
+      tax_rate: 0, // Not provided in frontend format
+      vendor_id: '', // Not provided in frontend format
+      stock_level: 0, // Not provided in frontend format
+      attributes: item.pro_image || '',
+      barcode: item.pro_barcode,
+      discount: item.pro_dis,
+      category: item.cat_id_fk,
+      branch: item.branch,
+      limited_qty: item.limitedquan,
+      brand_action: item.brand,
+      created_at: new Date().toISOString(), // Not provided in frontend format
+      updated_at: new Date().toISOString() // Not provided in frontend format
+    }));
 
     // Calculate total pages
-    const total = data.length; // This is a simplification; real API might have total in response
+    const total = mappedData.length; // This is a simplification; real API might have total in response
     const totalPages = Math.ceil(total / limit);
 
     return {
-      data,
+      data: mappedData,
       total,
       page,
       limit,
@@ -91,7 +118,7 @@ export class ProductsApi {
    * @returns Promise<Product>
    */
   async getProductById(id: string): Promise<Product> {
-    const response = await fetch(`${this.baseUrl}/products/${id}`, {
+    const response = await fetch(`${this.baseUrl}/products/get-products/${id}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -101,10 +128,37 @@ export class ProductsApi {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Redirect to login if unauthorized
+        window.location.href = '/login';
+        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
+      }
       throw new Error(`Failed to fetch product: ${response.status} ${response.statusText}`);
     }
 
-    return response.json();
+    const item = await response.json();
+
+    // Map the frontend-compatible response to our Product interface
+    return {
+      id: item.pro_id,
+      sku: item.pro_barcode || '', // Using barcode as SKU
+      name: item.pro_name,
+      desc: '', // Not provided in frontend format
+      unit_price: item.pro_price,
+      cost_price: item.pro_cost,
+      tax_rate: 0, // Not provided in frontend format
+      vendor_id: '', // Not provided in frontend format
+      stock_level: 0, // Not provided in frontend format
+      attributes: item.pro_image || '',
+      barcode: item.pro_barcode,
+      discount: item.pro_dis,
+      category: item.cat_id_fk,
+      branch: item.branch,
+      limited_qty: item.limitedquan,
+      brand_action: item.brand,
+      created_at: new Date().toISOString(), // Not provided in frontend format
+      updated_at: new Date().toISOString() // Not provided in frontend format
+    };
   }
 
   /**
@@ -113,6 +167,25 @@ export class ProductsApi {
    * @returns Promise<Product>
    */
   async createProduct(product: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<Product> {
+    // Prepare the payload in the expected format for the backend
+    const payload = {
+      sku: product.sku,
+      name: product.name,
+      desc: product.desc,
+      unit_price: product.unit_price,
+      cost_price: product.cost_price,
+      tax_rate: product.tax_rate,
+      vendor_id: product.vendor_id,
+      stock_level: product.stock_level,
+      attributes: product.attributes,
+      barcode: product.barcode,
+      discount: product.discount,
+      category: product.category,
+      branch: product.branch,
+      limited_qty: product.limited_qty,
+      brand_action: product.brand_action
+    };
+
     const response = await fetch(`${this.baseUrl}/products/`, {
       method: 'POST',
       headers: {
@@ -120,10 +193,15 @@ export class ProductsApi {
         'Accept': 'application/json',
       },
       credentials: 'include', // Include session cookies
-      body: JSON.stringify(product),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Redirect to login if unauthorized
+        window.location.href = '/login';
+        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
+      }
       throw new Error(`Failed to create product: ${response.status} ${response.statusText}`);
     }
 
@@ -137,6 +215,25 @@ export class ProductsApi {
    * @returns Promise<Product>
    */
   async updateProduct(id: string, product: Partial<Omit<Product, 'id'>>): Promise<Product> {
+    // Prepare the payload in the expected format for the backend
+    const payload = {
+      ...(product.sku !== undefined && { sku: product.sku }),
+      ...(product.name !== undefined && { name: product.name }),
+      ...(product.desc !== undefined && { desc: product.desc }),
+      ...(product.unit_price !== undefined && { unit_price: product.unit_price }),
+      ...(product.cost_price !== undefined && { cost_price: product.cost_price }),
+      ...(product.tax_rate !== undefined && { tax_rate: product.tax_rate }),
+      ...(product.vendor_id !== undefined && { vendor_id: product.vendor_id }),
+      ...(product.stock_level !== undefined && { stock_level: product.stock_level }),
+      ...(product.attributes !== undefined && { attributes: product.attributes }),
+      ...(product.barcode !== undefined && { barcode: product.barcode }),
+      ...(product.discount !== undefined && { discount: product.discount }),
+      ...(product.category !== undefined && { category: product.category }),
+      ...(product.branch !== undefined && { branch: product.branch }),
+      ...(product.limited_qty !== undefined && { limited_qty: product.limited_qty }),
+      ...(product.brand_action !== undefined && { brand_action: product.brand_action })
+    };
+
     const response = await fetch(`${this.baseUrl}/products/${id}`, {
       method: 'PUT',
       headers: {
@@ -144,10 +241,15 @@ export class ProductsApi {
         'Accept': 'application/json',
       },
       credentials: 'include', // Include session cookies
-      body: JSON.stringify(product),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Redirect to login if unauthorized
+        window.location.href = '/login';
+        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
+      }
       throw new Error(`Failed to update product: ${response.status} ${response.statusText}`);
     }
 
@@ -160,8 +262,8 @@ export class ProductsApi {
    * @returns Promise<void>
    */
   async deleteProduct(id: string): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/products/${id}`, {
-      method: 'DELETE',
+    const response = await fetch(`${this.baseUrl}/products/delete-product/${id}`, {
+      method: 'POST', // Using POST as per the API doc for frontend-compatible endpoint
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -170,8 +272,16 @@ export class ProductsApi {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Redirect to login if unauthorized
+        window.location.href = '/login';
+        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
+      }
       throw new Error(`Failed to delete product: ${response.status} ${response.statusText}`);
     }
+    
+    // The response might be JSON, so we parse it but don't necessarily return anything
+    await response.json();
   }
 }
 

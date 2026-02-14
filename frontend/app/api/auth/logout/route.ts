@@ -2,19 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    // In a real implementation, this would invalidate the session with the backend
-    // For now, we'll just clear the session cookie
+    // Get the session cookie to forward to the backend
+    const sessionToken = request.cookies.get('session_token');
+    
+    // Forward the logout request to the backend
+    if (sessionToken) {
+      await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cookie': `session_token=${sessionToken.value}`,
+        },
+      });
+    }
 
     const response = NextResponse.json({ message: 'Logged out successfully' });
 
     // Clear the session cookie
-    response.cookies.set('sessionid', '', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 0, // Expire immediately
-      path: '/',
-      sameSite: 'lax',
-    });
+    response.cookies.delete('session_token');
 
     return response;
   } catch (error) {

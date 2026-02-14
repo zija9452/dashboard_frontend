@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --regal-yellow: #FFD700;
+  --regal-black: #000000;
+  --regal-white: #FFFFFF;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-regal-yellow: var(--regal-yellow);
+  --color-regal-black: var(--regal-black);
+  --color-regal-white: var(--regal-white);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+@layer components {
+  .regal-card {
+    @apply bg-regal-white border border-gray-200 rounded-lg shadow-sm p-6;
+  }
+
+  .regal-table {
+    @apply min-w-full divide-y divide-gray-200 rounded-lg overflow-hidden border border-gray-200;
+  }
+
+  .regal-btn {
+    @apply px-4 py-2 bg-regal-yellow text-regal-black font-medium rounded-md hover:bg-yellow-400 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-regal-yellow;
+  }
+
+  .regal-input {
+    @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-regal-yellow focus:ring-regal-yellow sm:text-sm p-2 border;
+  }
+
+  .regal-pagination {
+    @apply flex items-center justify-between border-t border-gray-200 px-4 py-3 sm:px-6;
+  }
+
+  .regal-pagination-prev-next {
+    @apply relative inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50;
+  }
+
+  .regal-pagination-current {
+    @apply z-10 bg-regal-yellow border-regal-yellow text-regal-black relative inline-flex items-center px-4 py-2 border text-sm font-medium;
+  }
+
+  .regal-pagination-default {
+    @apply bg-white border-gray-300 text-gray-500 hover:bg-gray-50 relative inline-flex items-center px-4 py-2 border text-sm font-medium;
+  }
+}

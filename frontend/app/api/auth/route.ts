@@ -8,16 +8,18 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const username = formData.get('username') as string;
     const password = formData.get('password') as string;
+    const role = formData.get('role') as string;
 
     // Forward the login request to the backend
     const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/session-login`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
       },
-      body: new URLSearchParams({
+      body: JSON.stringify({
         username,
         password,
+        role,
       }),
     });
 

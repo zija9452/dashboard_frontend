@@ -6,7 +6,6 @@ export async function GET(request: NextRequest) {
     // Extract query parameters
     const url = new URL(request.url);
     const searchString = url.searchParams.get('search_string') || '';
-    const includePasswordHash = url.searchParams.get('include_password_hash') || 'false';
     const skip = url.searchParams.get('skip') || '0';
     const limit = url.searchParams.get('limit') || '100';
 
@@ -17,12 +16,11 @@ export async function GET(request: NextRequest) {
     // Construct the backend API URL with all query parameters
     const params = new URLSearchParams();
     if (searchString) params.append('search_string', searchString);
-    params.append('include_password_hash', includePasswordHash);  // Add include_password_hash parameter
     params.append('skip', skip);
     params.append('limit', limit);
     
     const queryString = params.toString();
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/admin/viewadmins${queryString ? '?' + queryString : ''}`;
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/users/${queryString ? '?' + queryString : ''}`;
 
     console.log('Forwarding request to backend:', backendUrl);
     console.log('Cookies being sent:', cookieHeader);

@@ -2,18 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { username, password } = await request.json();
+    const { username, password, role } = await request.json();
 
     // Forward the login request to the backend
     const backendResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/auth/session-login`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
       },
-      body: new URLSearchParams({
+      body: JSON.stringify({
         username,
         password,
-      }).toString(),
+        role, // Include the selected role
+      }),
     });
 
     if (backendResponse.ok) {

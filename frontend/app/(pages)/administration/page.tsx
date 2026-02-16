@@ -2,49 +2,85 @@
 
 import React, { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
+import Swal from 'sweetalert2';
 
 // Define TypeScript interface for admin user
 interface AdminUser {
-  ad_id: string;
-  ad_name: string;
-  ad_role: string;
+  id: string;
+  full_name: string;
+  role_id: string;
+  phone?: string;
+  address?: string;
+  cnic?: string;
+  branch?: string;
+  password_hash?: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  email?: string;
+  username?: string;
+  company_id?: string | null;
+  is_biometric_enabled?: boolean;
+  original_password?: string;
+  // Legacy fields for backward compatibility
+  ad_id?: string;
+  ad_name?: string;
+  ad_role?: string;
   ad_phone?: string;
   ad_address?: string;
   ad_cnic?: string;
   ad_branch?: string;
   ad_password?: string;
-  is_active?: boolean;
-  created_at?: string;
 }
 
 const AdministrationPage: React.FC = () => {
   const { showToast } = useToast();
+  
+  // Function to map role UUIDs to role names
+  const getRoleName = (roleId: string | undefined): string => {
+    if (!roleId) return 'unknown';
+    
+    // Common role UUIDs based on the backend data
+    if (roleId === '33128819-80ae-4a6a-9ab7-7eff272a81ff') return 'admin';
+    if (roleId === '42a87026-09e0-40d2-8c21-23df1914e34d') return 'cashier';
+    if (roleId === '66ab52f4-391d-43ba-b569-21ec43a74aac') return 'employee';
+    
+    // For other UUIDs, return as is or implement a lookup mechanism
+    return roleId;
+  };
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
+  const [showFormPassword, setShowFormPassword] = useState(false);
 
   // State for form inputs
-  const [formData, setFormData] = useState<Omit<AdminUser, 'ad_id' | 'is_active' | 'created_at'>>({ 
-    ad_name: '', 
-    ad_role: 'cashier', 
-    ad_phone: '', 
-    ad_address: '', 
-    ad_cnic: '', 
-    ad_branch: '',
-    ad_password: ''
+  const [formData, setFormData] = useState<AdminUser>({
+    id: '',
+    full_name: '',
+    role_id: 'admin',
+    phone: '',
+    address: '',
+    cnic: '',
+    branch: '',
+    password_hash: '',
+    email: '',
+    username: '',
+    company_id: null,
+    is_biometric_enabled: false,
+    original_password: ''
   });
 
 
-  // Fetch admin users
+  // Fetch all users (not just admins)
   const fetchAdminUsers = async () => {
     try {
       setLoading(true);
-      console.log('Fetching admin users with search term:', searchTerm);
-      
-      const response = await fetch(`/api/admin/viewadmins?search_string=${encodeURIComponent(searchTerm)}`, {
+      console.log('Fetching all users with search term:', searchTerm);
+
+      const response = await fetch(`/api/users/?search_string=${encodeURIComponent(searchTerm)}&skip=0&limit=1000`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -81,7 +117,40 @@ const AdministrationPage: React.FC = () => {
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
         console.log('Fetched data:', data);
-        setAdminUsers(Array.isArray(data) ? data : []);
+        
+        // Map the API response to the modern format
+        const mappedData = Array.isArray(data) ? data.map((user: any) => {
+          const mappedUser: AdminUser = {
+            id: user.id || '',
+            full_name: user.full_name || 'N/A',
+            role_id: user.role_id || 'N/A',
+            phone: user.phone,
+            address: user.address,
+            cnic: user.cnic,
+            branch: user.branch,
+            password_hash: user.password_hash,
+            is_active: user.is_active,
+            created_at: user.created_at,
+            updated_at: user.updated_at,
+            email: user.email,
+            username: user.username,
+            company_id: user.company_id,
+            is_biometric_enabled: user.is_biometric_enabled,
+            original_password: user.original_password,
+            // Legacy fields for backward compatibility (empty since users endpoint doesn't return them)
+            ad_id: user.ad_id || user.id,
+            ad_name: user.ad_name || user.full_name,
+            ad_role: user.ad_role || getRoleName(user.role_id), // Store role name for compatibility
+            ad_phone: user.ad_phone || user.phone,
+            ad_address: user.ad_address || user.address,
+            ad_cnic: user.ad_cnic || user.cnic,
+            ad_branch: user.ad_branch || user.branch,
+            ad_password: user.ad_password || user.password_hash
+          };
+          return mappedUser;
+        }) : [];
+        
+        setAdminUsers(mappedData);
       } else {
         const text = await response.text();
         console.error('Non-JSON response:', text);
@@ -118,14 +187,20 @@ const AdministrationPage: React.FC = () => {
 
   // Reset form
   const resetForm = () => {
-    setFormData({ 
-      ad_name: '', 
-      ad_role: 'cashier', 
-      ad_phone: '', 
-      ad_address: '', 
-      ad_cnic: '', 
-      ad_branch: '',
-      ad_password: ''
+    setFormData({
+      id: '',
+      full_name: '',
+      role_id: 'admin',
+      phone: '',
+      address: '',
+      cnic: '',
+      branch: '',
+      password_hash: '',
+      email: '',
+      username: '',
+      company_id: null,
+      is_biometric_enabled: false,
+      original_password: ''
     });
     setEditingUser(null);
     setShowAddForm(false);
@@ -140,19 +215,19 @@ const AdministrationPage: React.FC = () => {
         // Update existing user
         console.log('Updating user with data:', formData);
 
-        const response = await fetch(`/api/admin/updateadmin/${editingUser.ad_id}`, {
+        const response = await fetch(`/api/admin/updateadmin/${editingUser.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            ad_name: formData.ad_name || '',
-            ad_role: formData.ad_role || '',
-            ad_phone: formData.ad_phone || '',
-            ad_address: formData.ad_address || '',
-            ad_cnic: formData.ad_cnic || '',
-            ad_branch: formData.ad_branch || '',
-            ad_password: formData.ad_password || ''
+            ad_name: formData.full_name || '',
+            ad_role: formData.role_id || '',
+            ad_phone: formData.phone || '',
+            ad_address: formData.address || '',
+            ad_cnic: formData.cnic || '',
+            ad_branch: formData.branch || '',
+            ad_password: formData.password_hash || ''
           }),
         });
 
@@ -182,8 +257,45 @@ const AdministrationPage: React.FC = () => {
         const result = await response.json();
         console.log('Update result:', result);
 
-        setAdminUsers(adminUsers.map(user => user.ad_id === editingUser.ad_id ? result : user));
-        showToast('User updated successfully', 'success');
+        // Map the admin API response to the modern format
+        const mappedResult: AdminUser = {
+          id: result.id || result.ad_id,
+          full_name: result.full_name || result.ad_name || 'N/A',
+          role_id: result.role_id || result.ad_role || 'N/A',
+          phone: result.phone || result.ad_phone,
+          address: result.address || result.ad_address,
+          cnic: result.cnic || result.ad_cnic,
+          branch: result.branch || result.ad_branch,
+          password_hash: result.password_hash || result.ad_password,
+          is_active: result.is_active,
+          created_at: result.created_at,
+          updated_at: result.updated_at,
+          email: result.email,
+          username: result.username,
+          company_id: result.company_id,
+          is_biometric_enabled: result.is_biometric_enabled,
+          original_password: result.original_password,
+          // Legacy fields for backward compatibility
+          ad_id: result.ad_id,
+          ad_name: result.ad_name,
+          ad_role: result.ad_role,
+          ad_phone: result.ad_phone,
+          ad_address: result.ad_address,
+          ad_cnic: result.ad_cnic,
+          ad_branch: result.ad_branch,
+          ad_password: result.ad_password
+        };
+
+        setAdminUsers(adminUsers.map(user => user.id === editingUser.id ? mappedResult : user));
+        // Show success alert
+        Swal.fire({
+          title: 'Updated!',
+          text: 'User has been updated successfully.',
+          icon: 'success',
+          timer: 2000,
+          timerProgressBar: true,
+          showConfirmButton: false
+        });
       } else {
         // Create new user
         console.log('Creating user with data:', formData);
@@ -194,13 +306,13 @@ const AdministrationPage: React.FC = () => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            ad_name: formData.ad_name || '',
-            ad_role: formData.ad_role || 'cashier',
-            ad_phone: formData.ad_phone || '',
-            ad_address: formData.ad_address || '',
-            ad_cnic: formData.ad_cnic || '',
-            ad_branch: formData.ad_branch || '',
-            ad_password: formData.ad_password || ''
+            ad_name: formData.full_name || '',
+            ad_role: formData.role_id || 'cashier',
+            ad_phone: formData.phone || '',
+            ad_address: formData.address || '',
+            ad_cnic: formData.cnic || '',
+            ad_branch: formData.branch || '',
+            ad_password: formData.password_hash || ''
           }),
         });
 
@@ -230,8 +342,45 @@ const AdministrationPage: React.FC = () => {
         const result = await response.json();
         console.log('Create result:', result);
 
-        setAdminUsers([...adminUsers, result]);
-        showToast('User created successfully', 'success');
+        // Map the admin API response to the modern format
+        const mappedResult: AdminUser = {
+          id: result.id || result.ad_id,
+          full_name: result.full_name || result.ad_name || 'N/A',
+          role_id: result.role_id || result.ad_role || 'N/A',
+          phone: result.phone || result.ad_phone,
+          address: result.address || result.ad_address,
+          cnic: result.cnic || result.ad_cnic,
+          branch: result.branch || result.ad_branch,
+          password_hash: result.password_hash || result.ad_password,
+          is_active: result.is_active,
+          created_at: result.created_at,
+          updated_at: result.updated_at,
+          email: result.email,
+          username: result.username,
+          company_id: result.company_id,
+          is_biometric_enabled: result.is_biometric_enabled,
+          original_password: result.original_password,
+          // Legacy fields for backward compatibility
+          ad_id: result.ad_id,
+          ad_name: result.ad_name,
+          ad_role: result.ad_role,
+          ad_phone: result.ad_phone,
+          ad_address: result.ad_address,
+          ad_cnic: result.ad_cnic,
+          ad_branch: result.ad_branch,
+          ad_password: result.ad_password
+        };
+
+        setAdminUsers([...adminUsers, mappedResult]);
+        // Show success alert
+        Swal.fire({
+          title: 'Created!',
+          text: 'User has been created successfully.',
+          icon: 'success',
+          timer: 2000,
+          timerProgressBar: true,
+          showConfirmButton: false
+        });
       }
 
       resetForm();
@@ -253,104 +402,162 @@ const AdministrationPage: React.FC = () => {
   const handleEdit = (user: AdminUser) => {
     setEditingUser(user);
     setFormData({
-      ad_name: user.ad_name,
-      ad_role: user.ad_role,
-      ad_phone: user.ad_phone || '',
-      ad_address: user.ad_address || '',
-      ad_cnic: user.ad_cnic || '',
-      ad_branch: user.ad_branch || '',
-      ad_password: user.ad_password || ''
+      id: user.id,
+      full_name: user.full_name || '',
+      role_id: user.role_id || 'admin',
+      phone: user.phone || '',
+      address: user.address || '',
+      cnic: user.cnic || '',
+      branch: user.branch || '',
+      password_hash: user.password_hash || '',
+      email: user.email || '',
+      username: user.username || '',
+      company_id: user.company_id || null,
+      is_biometric_enabled: user.is_biometric_enabled || false,
+      original_password: user.original_password || ''
     });
     setShowAddForm(true);
   };
 
-  // Delete user
+  // Delete user with SweetAlert2 confirmation
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this user?')) return;
-    
-    try {
-      console.log('Deleting user with id:', id);
-      
-      const response = await fetch(`/api/admin/deleteadmin/${id}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: "You won't be able to revert this!",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel'
+    });
 
-      if (!response.ok) {
-        // Try to get error details from response
-        let errorDetails = `HTTP error! status: ${response.status}`;
-        try {
-          const errorData = await response.json();
-          // Handle the case where errorData might be an object
-          if (typeof errorData === 'object' && errorData !== null) {
-            errorDetails = errorData.detail || errorData.error || JSON.stringify(errorData) || errorDetails;
-          } else {
-            errorDetails = errorData || errorDetails;
-          }
-        } catch (e) {
-          // If response is not JSON, get text
+    if (result.isConfirmed) {
+      try {
+        console.log('Deleting user with id:', id);
+
+        const response = await fetch(`/api/admin/deleteadmin/${id}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include', // Include session cookies
+        });
+
+        if (!response.ok) {
+          // Try to get error details from response
+          let errorDetails = `HTTP error! status: ${response.status}`;
           try {
-            const errorText = await response.text();
-            errorDetails = errorText || errorDetails;
-          } catch (textError) {
-            // Use default error message
+            const errorData = await response.json();
+            // Handle the case where errorData might be an object
+            if (typeof errorData === 'object' && errorData !== null) {
+              errorDetails = errorData.detail || errorData.error || JSON.stringify(errorData) || errorDetails;
+            } else {
+              errorDetails = errorData || errorDetails;
+            }
+          } catch (e) {
+            // If response is not JSON, get text
+            try {
+              const errorText = await response.text();
+              errorDetails = errorText || errorDetails;
+            } catch (textError) {
+              // Use default error message
+            }
           }
+          throw new Error(errorDetails);
         }
-        throw new Error(errorDetails);
-      }
 
-      const result = await response.json();
-      console.log('Delete result:', result);
+        const result = await response.json();
+        console.log('Delete result:', result);
 
-      setAdminUsers(adminUsers.filter(user => user.ad_id !== id));
-      showToast(result.message || 'User deleted successfully', 'success');
-    } catch (error) {
-      console.error('Error deleting user:', error);
-      const errorMessage = (error as Error).message;
-      
-      // Check if it's an authentication issue
-      if (errorMessage.includes('401') || errorMessage.toLowerCase().includes('unauthorized') || errorMessage.includes('session') || errorMessage.includes('auth')) {
-        showToast('Authentication required. Please log in again.', 'error');
-      } else {
-        showToast(error instanceof Error ? error.message : 'Failed to delete user', 'error');
+        setAdminUsers(adminUsers.filter(user => user.id !== id));
+        
+        // Show success alert
+        Swal.fire({
+          title: 'Deleted!',
+          text: result.message || 'User has been deleted.',
+          icon: 'success',
+          timer: 2000,
+          timerProgressBar: true,
+          showConfirmButton: false
+        });
+      } catch (error) {
+        console.error('Error deleting user:', error);
+        const errorMessage = (error as Error).message;
+
+        // Check if it's an authentication issue
+        if (errorMessage.includes('401') || errorMessage.toLowerCase().includes('unauthorized') || errorMessage.includes('session') || errorMessage.includes('auth')) {
+          showToast('Authentication required. Please log in again.', 'error');
+        } else {
+          // Show error alert
+          Swal.fire({
+            title: 'Error!',
+            text: error instanceof Error ? error.message : 'Failed to delete user',
+            icon: 'error',
+            timer: 3000,
+            timerProgressBar: true,
+            showConfirmButton: false
+          });
+        }
       }
     }
   };
 
   return (
-    <div className="p-6">
+    <div className="p-0">
       {/* Heading */}
-      <h1 className="text-2xl font-bold text-center mb-6">Administration</h1>
+      <h1 className="text-2xl font-medium text-center mb-6">View User</h1>
 
-      {/* Buttons */}
-      <div className="flex justify-center gap-4 mb-6">
+      {/* Controls Section - Single row with Add New and Search */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+        {/* Left side - Add New button */}
         <button
           onClick={() => {
             resetForm();
             setShowAddForm(!showAddForm);
           }}
-          className="regal-btn bg-regal-yellow text-regal-black"
+          className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
         >
-          {showAddForm ? 'Cancel' : 'Add New'}
+          {showAddForm ? 'Cancel' : '+ Add New User'}
         </button>
-        <button
-          className="regal-btn bg-regal-yellow text-regal-black"
-          onClick={() => {
-            setSearchTerm('');
-            document.getElementById('searchInput')?.focus();
-          }}
-        >
-          Search
-        </button>
+        
+        {/* Center - Search bar with Search button */}
+        <div className="w-full sm:w-auto flex gap-2">
+          <div className="relative">
+            <input
+              id="searchInput"
+              type="text"
+              placeholder="Search admins..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="regal-input w-full pl-10 pr-4 py-2"
+            />
+            <svg 
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <button
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+            onClick={() => {
+              setSearchTerm('');
+              document.getElementById('searchInput')?.focus();
+            }}
+          >
+            Search
+          </button>
+        </div>
       </div>
 
-      {/* Add/Edit Form */}
+      {/* Add/Edit Form - Collapsible */}
       {showAddForm && (
-        <div className="regal-card p-6 mb-6">
+        <div className="border-0 p-0 mb-6 transition-all duration-300">
           <h3 className="text-lg font-semibold mb-4">
-            {editingUser ? 'Edit User' : 'Add New User'}
+            {editingUser ? 'Edit Admin User' : 'Add New Admin User'}
           </h3>
           <form onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -358,8 +565,8 @@ const AdministrationPage: React.FC = () => {
                 <label className="block text-sm font-medium mb-1">Name *</label>
                 <input
                   type="text"
-                  name="ad_name"
-                  value={formData.ad_name}
+                  name="full_name"
+                  value={formData.full_name}
                   onChange={handleInputChange}
                   className="regal-input w-full"
                   placeholder="Enter name"
@@ -367,12 +574,36 @@ const AdministrationPage: React.FC = () => {
                 />
               </div>
               <div>
+                <label className="block text-sm font-medium mb-1">Username *</label>
+                <input
+                  type="text"
+                  name="username"
+                  value={formData.username}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                  placeholder="Enter username"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Email *</label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                  placeholder="Enter email"
+                  required
+                />
+              </div>
+              <div>
                 <label className="block text-sm font-medium mb-1">Password *</label>
                 <div className="relative">
                   <input
-                    type={showPassword ? "text" : "password"}
-                    name="ad_password"
-                    value={formData.ad_password}
+                    type={showFormPassword ? "text" : "password"}
+                    name="password_hash"
+                    value={formData.password_hash}
                     onChange={handleInputChange}
                     className="regal-input w-full pr-10"
                     placeholder="Enter password"
@@ -381,17 +612,17 @@ const AdministrationPage: React.FC = () => {
                   <button
                     type="button"
                     className="absolute inset-y-0 right-0 pr-3 flex items-center text-sm"
-                    onClick={() => setShowPassword(!showPassword)}
+                    onClick={() => setShowFormPassword(!showFormPassword)}
                   >
-                    {showPassword ? 'Hide' : 'Show'}
+                    {showFormPassword ? 'Hide' : 'Show'}
                   </button>
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Role</label>
                 <select
-                  name="ad_role"
-                  value={formData.ad_role}
+                  name="role_id"
+                  value={formData.role_id}
                   onChange={handleInputChange}
                   className="regal-select w-full"
                 >
@@ -404,8 +635,8 @@ const AdministrationPage: React.FC = () => {
                 <label className="block text-sm font-medium mb-1">Phone</label>
                 <input
                   type="text"
-                  name="ad_phone"
-                  value={formData.ad_phone}
+                  name="phone"
+                  value={formData.phone}
                   onChange={handleInputChange}
                   className="regal-input w-full"
                   placeholder="Enter phone"
@@ -415,8 +646,8 @@ const AdministrationPage: React.FC = () => {
                 <label className="block text-sm font-medium mb-1">CNIC</label>
                 <input
                   type="text"
-                  name="ad_cnic"
-                  value={formData.ad_cnic}
+                  name="cnic"
+                  value={formData.cnic}
                   onChange={handleInputChange}
                   className="regal-input w-full"
                   placeholder="Enter CNIC"
@@ -426,8 +657,8 @@ const AdministrationPage: React.FC = () => {
                 <label className="block text-sm font-medium mb-1">Branch</label>
                 <input
                   type="text"
-                  name="ad_branch"
-                  value={formData.ad_branch}
+                  name="branch"
+                  value={formData.branch}
                   onChange={handleInputChange}
                   className="regal-input w-full"
                   placeholder="Enter branch"
@@ -437,101 +668,102 @@ const AdministrationPage: React.FC = () => {
                 <label className="block text-sm font-medium mb-1">Address</label>
                 <input
                   type="text"
-                  name="ad_address"
-                  value={formData.ad_address}
+                  name="address"
+                  value={formData.address}
                   onChange={handleInputChange}
                   className="regal-input w-full"
                   placeholder="Enter address"
                 />
               </div>
             </div>
-            <div className="mt-4">
-              <button 
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
                 type="submit"
                 className="regal-btn bg-regal-yellow text-regal-black"
               >
                 {editingUser ? 'Update User' : 'Add User'}
               </button>
               {editingUser && (
-                <button 
+                <button
                   type="button"
                   onClick={resetForm}
-                  className="regal-btn ml-2"
+                  className="regal-btn bg-gray-500 text-white"
                 >
                   Cancel
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => setShowAddForm(false)}
+                className="regal-btn bg-gray-300 text-black"
+              >
+                Close
+              </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Search Input */}
-      <div className="mb-4">
-        <input
-          id="searchInput"
-          type="text"
-          placeholder="Search users..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="regal-input w-full max-w-md mx-auto block"
-        />
-      </div>
-
       {/* Users Table */}
-      <div className="regal-card">
+      <div className="border-0 p-0">
         {loading ? (
           <div className="text-center py-4">Loading...</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="regal-table w-full">
+            <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Password</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CNIC</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Branch</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Password</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CNIC</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Branch</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {adminUsers.map((user) => (
-                  <tr key={user.ad_id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.ad_name}</td>
+                  <tr key={user.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.full_name}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {showPassword ? (user.ad_password || 'N/A') : '••••••••'}
+                      {showPasswords[user.id] ? 
+                        (user.original_password && user.original_password !== '' ? user.original_password : 
+                         user.password_hash && user.password_hash !== '' ? user.password_hash : 'N/A') 
+                        : '••••••••'}
                       <button
                         className="ml-2 text-xs text-blue-600 hover:text-blue-900"
-                        onClick={() => setShowPassword(!showPassword)}
+                        onClick={() => setShowPasswords(prev => ({
+                          ...prev,
+                          [user.id]: !(prev[user.id])
+                        }))}
                       >
-                        {showPassword ? 'Hide' : 'Show'}
+                        {showPasswords[user.id] ? 'Hide' : 'Show'}
                       </button>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        user.ad_role === 'admin' ? 'bg-yellow-100 text-regal-black' : 
-                        user.ad_role === 'cashier' ? 'bg-blue-100 text-blue-800' : 
+                        getRoleName(user.role_id)?.toLowerCase()?.includes('admin') || user.ad_role === 'admin' ? 'bg-yellow-100 text-regal-black' :
+                        getRoleName(user.role_id)?.toLowerCase()?.includes('cashier') || user.ad_role === 'cashier' ? 'bg-blue-100 text-blue-800' :
                         'bg-gray-100 text-gray-800'
                       }`}>
-                        {user.ad_role}
+                        {user.ad_role || getRoleName(user.role_id) || user.role_id}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.ad_phone || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.ad_cnic || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.ad_address || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.ad_branch || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.phone || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.cnic || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.address || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.branch || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button 
+                      <button
                         onClick={() => handleEdit(user)}
                         className="text-indigo-600 hover:text-indigo-900 mr-3"
                       >
                         Edit
                       </button>
-                      <button 
-                        onClick={() => handleDelete(user.ad_id)}
+                      <button
+                        onClick={() => handleDelete(user.id)}
                         className="text-red-600 hover:text-red-900"
                       >
                         Delete

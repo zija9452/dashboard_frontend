@@ -19,6 +19,21 @@ const protectedRoutes = [
 ];
 
 export function middleware(request: NextRequest) {
+  // Security: Check for credentials in URL parameters and remove them
+  const urlParams = request.nextUrl.searchParams;
+  if (urlParams.has('username') || urlParams.has('password')) {
+    // Remove credentials from URL if they somehow got there
+    urlParams.delete('username');
+    urlParams.delete('password');
+    
+    // Create a new URL without the credentials
+    const cleanUrl = request.nextUrl.clone();
+    cleanUrl.search = urlParams.toString();
+    
+    // Redirect to the clean URL
+    return NextResponse.redirect(cleanUrl);
+  }
+
   // Check if the route is protected
   const isProtectedRoute = protectedRoutes.some(route =>
     request.nextUrl.pathname.startsWith(route)

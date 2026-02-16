@@ -7,7 +7,7 @@ import { getSession } from './adapter';
 interface SessionContextType {
   session: any | null;
   loading: boolean;
-  signIn: (credentials: { username: string; password: string }) => Promise<void>;
+  signIn: (credentials: { username: string; password: string; role?: string }) => Promise<void>;
   signOut: () => Promise<void>;
   updateSession: () => void;
 }
@@ -49,24 +49,13 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
   };
 
   // Sign in function
-  const signIn = async (credentials: { username: string; password: string }) => {
+  const signIn = async (credentials: { username: string; password: string; role?: string }) => {
     try {
-      // Call the frontend API route which forwards to the backend
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username: credentials.username,
-          password: credentials.password,
-        }),
-        credentials: 'include', // Include cookies
-      });
+      // Use Better-Auth's signIn function
+      const result = await import('./adapter').then(adapter => adapter.signIn(credentials));
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Sign in failed');
+      if (result.error) {
+        throw new Error(result.error);
       }
 
       // Update session after sign in
@@ -80,12 +69,9 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
   // Sign out function
   const signOut = async () => {
     try {
-      // Call the backend to invalidate the session
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include', // Include cookies
-      });
-
+      // Use Better-Auth's signOut function
+      await import('./adapter').then(adapter => adapter.signOut());
+      
       // Clear the session
       setSession(null);
     } catch (error) {

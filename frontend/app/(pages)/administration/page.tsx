@@ -742,12 +742,8 @@ const AdministrationPage: React.FC = () => {
                         {showPasswords[user.id] ? 'Hide' : 'Show'}
                       </button>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        getRoleName(user.role_id)?.toLowerCase()?.includes('admin') || user.ad_role === 'admin' ? 'bg-yellow-100 text-regal-black' :
-                        getRoleName(user.role_id)?.toLowerCase()?.includes('cashier') || user.ad_role === 'cashier' ? 'bg-blue-100 text-blue-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <span className={`px-2 inline-flex text-sm leading-5 font-medium `}>
                         {user.ad_role || getRoleName(user.role_id) || user.role_id}
                       </span>
                     </td>

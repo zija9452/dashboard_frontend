@@ -17,7 +17,6 @@ interface AdminUser {
   is_active?: boolean;
   created_at?: string;
   updated_at?: string;
-  email?: string;
   username?: string;
   company_id?: string | null;
   is_biometric_enabled?: boolean;
@@ -39,14 +38,22 @@ const AdministrationPage: React.FC = () => {
   // Function to map role UUIDs to role names
   const getRoleName = (roleId: string | undefined): string => {
     if (!roleId) return 'unknown';
-    
+
     // Common role UUIDs based on the backend data
     if (roleId === '33128819-80ae-4a6a-9ab7-7eff272a81ff') return 'admin';
     if (roleId === '42a87026-09e0-40d2-8c21-23df1914e34d') return 'cashier';
     if (roleId === '66ab52f4-391d-43ba-b569-21ec43a74aac') return 'employee';
-    
+
     // For other UUIDs, return as is or implement a lookup mechanism
     return roleId;
+  };
+
+  // Function to map role names to UUIDs
+  const getRoleIdFromName = (roleName: string): string => {
+    if (roleName === 'admin') return '33128819-80ae-4a6a-9ab7-7eff272a81ff';
+    if (roleName === 'cashier') return '42a87026-09e0-40d2-8c21-23df1914e34d';
+    if (roleName === 'employee') return '66ab52f4-391d-43ba-b569-21ec43a74aac';
+    return '42a87026-09e0-40d2-8c21-23df1914e34d'; // default to cashier
   };
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(false);
@@ -66,7 +73,6 @@ const AdministrationPage: React.FC = () => {
     cnic: '',
     branch: '',
     password_hash: '',
-    email: '',
     username: '',
     company_id: null,
     is_biometric_enabled: false,
@@ -132,7 +138,6 @@ const AdministrationPage: React.FC = () => {
             is_active: user.is_active,
             created_at: user.created_at,
             updated_at: user.updated_at,
-            email: user.email,
             username: user.username,
             company_id: user.company_id,
             is_biometric_enabled: user.is_biometric_enabled,
@@ -196,7 +201,6 @@ const AdministrationPage: React.FC = () => {
       cnic: '',
       branch: '',
       password_hash: '',
-      email: '',
       username: '',
       company_id: null,
       is_biometric_enabled: false,
@@ -212,22 +216,23 @@ const AdministrationPage: React.FC = () => {
 
     try {
       if (editingUser) {
-        // Update existing user
+        // Update existing user using /users/ endpoint
         console.log('Updating user with data:', formData);
 
-        const response = await fetch(`/api/admin/updateadmin/${editingUser.id}`, {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/users/${editingUser.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
           },
+          credentials: 'include',
           body: JSON.stringify({
-            ad_name: formData.full_name || '',
-            ad_role: formData.role_id || '',
-            ad_phone: formData.phone || '',
-            ad_address: formData.address || '',
-            ad_cnic: formData.cnic || '',
-            ad_branch: formData.branch || '',
-            ad_password: formData.password_hash || ''
+            full_name: formData.full_name || '',
+            role_id: getRoleIdFromName(formData.role_id),
+            phone: formData.phone || '',
+            address: formData.address || '',
+            cnic: formData.cnic || '',
+            branch: formData.branch || '',
+            password: formData.password_hash || undefined,
           }),
         });
 
@@ -257,36 +262,9 @@ const AdministrationPage: React.FC = () => {
         const result = await response.json();
         console.log('Update result:', result);
 
-        // Map the admin API response to the modern format
-        const mappedResult: AdminUser = {
-          id: result.id || result.ad_id,
-          full_name: result.full_name || result.ad_name || 'N/A',
-          role_id: result.role_id || result.ad_role || 'N/A',
-          phone: result.phone || result.ad_phone,
-          address: result.address || result.ad_address,
-          cnic: result.cnic || result.ad_cnic,
-          branch: result.branch || result.ad_branch,
-          password_hash: result.password_hash || result.ad_password,
-          is_active: result.is_active,
-          created_at: result.created_at,
-          updated_at: result.updated_at,
-          email: result.email,
-          username: result.username,
-          company_id: result.company_id,
-          is_biometric_enabled: result.is_biometric_enabled,
-          original_password: result.original_password,
-          // Legacy fields for backward compatibility
-          ad_id: result.ad_id,
-          ad_name: result.ad_name,
-          ad_role: result.ad_role,
-          ad_phone: result.ad_phone,
-          ad_address: result.ad_address,
-          ad_cnic: result.ad_cnic,
-          ad_branch: result.ad_branch,
-          ad_password: result.ad_password
-        };
-
-        setAdminUsers(adminUsers.map(user => user.id === editingUser.id ? mappedResult : user));
+        // Update user in local state
+        setAdminUsers(adminUsers.map(user => user.id === editingUser.id ? result : user));
+        
         // Show success alert
         Swal.fire({
           title: 'Updated!',
@@ -297,22 +275,24 @@ const AdministrationPage: React.FC = () => {
           showConfirmButton: false
         });
       } else {
-        // Create new user
+        // Create new user using /users/ endpoint
         console.log('Creating user with data:', formData);
 
-        const response = await fetch(`/api/admin/createadmin`, {
+        const response = await fetch(`/api/users`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
+          credentials: 'include',
           body: JSON.stringify({
-            ad_name: formData.full_name || '',
-            ad_role: formData.role_id || 'cashier',
-            ad_phone: formData.phone || '',
-            ad_address: formData.address || '',
-            ad_cnic: formData.cnic || '',
-            ad_branch: formData.branch || '',
-            ad_password: formData.password_hash || ''
+            full_name: formData.full_name || '',
+            username: formData.username || '',
+            role_id: getRoleIdFromName(formData.role_id),
+            phone: formData.phone || '',
+            address: formData.address || '',
+            cnic: formData.cnic || '',
+            branch: formData.branch || '',
+            password: formData.password_hash || ''
           }),
         });
 
@@ -342,36 +322,9 @@ const AdministrationPage: React.FC = () => {
         const result = await response.json();
         console.log('Create result:', result);
 
-        // Map the admin API response to the modern format
-        const mappedResult: AdminUser = {
-          id: result.id || result.ad_id,
-          full_name: result.full_name || result.ad_name || 'N/A',
-          role_id: result.role_id || result.ad_role || 'N/A',
-          phone: result.phone || result.ad_phone,
-          address: result.address || result.ad_address,
-          cnic: result.cnic || result.ad_cnic,
-          branch: result.branch || result.ad_branch,
-          password_hash: result.password_hash || result.ad_password,
-          is_active: result.is_active,
-          created_at: result.created_at,
-          updated_at: result.updated_at,
-          email: result.email,
-          username: result.username,
-          company_id: result.company_id,
-          is_biometric_enabled: result.is_biometric_enabled,
-          original_password: result.original_password,
-          // Legacy fields for backward compatibility
-          ad_id: result.ad_id,
-          ad_name: result.ad_name,
-          ad_role: result.ad_role,
-          ad_phone: result.ad_phone,
-          ad_address: result.ad_address,
-          ad_cnic: result.ad_cnic,
-          ad_branch: result.ad_branch,
-          ad_password: result.ad_password
-        };
-
-        setAdminUsers([...adminUsers, mappedResult]);
+        // Add new user to local state
+        setAdminUsers([...adminUsers, result]);
+        
         // Show success alert
         Swal.fire({
           title: 'Created!',
@@ -401,16 +354,17 @@ const AdministrationPage: React.FC = () => {
   // Edit user
   const handleEdit = (user: AdminUser) => {
     setEditingUser(user);
+    // Convert UUID to role name for dropdown
+    const roleName = getRoleName(user.role_id);
     setFormData({
       id: user.id,
       full_name: user.full_name || '',
-      role_id: user.role_id || 'admin',
+      role_id: roleName, // Use role name for dropdown
       phone: user.phone || '',
       address: user.address || '',
       cnic: user.cnic || '',
       branch: user.branch || '',
-      password_hash: user.password_hash || '',
-      email: user.email || '',
+      password_hash: user.original_password || '', // Show original password if available
       username: user.username || '',
       company_id: user.company_id || null,
       is_biometric_enabled: user.is_biometric_enabled || false,
@@ -436,12 +390,12 @@ const AdministrationPage: React.FC = () => {
       try {
         console.log('Deleting user with id:', id);
 
-        const response = await fetch(`/api/admin/deleteadmin/${id}`, {
-          method: 'POST',
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/users/${id}`, {
+          method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
           },
-          credentials: 'include', // Include session cookies
+          credentials: 'include',
         });
 
         if (!response.ok) {
@@ -562,15 +516,14 @@ const AdministrationPage: React.FC = () => {
           <form onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Name *</label>
+                <label className="block text-sm font-medium mb-1">Full Name</label>
                 <input
                   type="text"
                   name="full_name"
                   value={formData.full_name}
                   onChange={handleInputChange}
                   className="regal-input w-full"
-                  placeholder="Enter name"
-                  required
+                  placeholder="Enter full name (optional)"
                 />
               </div>
               <div>
@@ -582,18 +535,6 @@ const AdministrationPage: React.FC = () => {
                   onChange={handleInputChange}
                   className="regal-input w-full"
                   placeholder="Enter username"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Email *</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  className="regal-input w-full"
-                  placeholder="Enter email"
                   required
                 />
               </div>
@@ -623,8 +564,11 @@ const AdministrationPage: React.FC = () => {
                 <select
                   name="role_id"
                   value={formData.role_id}
-                  onChange={handleInputChange}
-                  className="regal-select w-full"
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    role_id: e.target.value
+                  }))}
+                  className="regal-select w-full regal-input"
                 >
                   <option value="admin">Admin</option>
                   <option value="cashier">Cashier</option>
@@ -683,15 +627,7 @@ const AdministrationPage: React.FC = () => {
               >
                 {editingUser ? 'Update User' : 'Add User'}
               </button>
-              {editingUser && (
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="regal-btn bg-gray-500 text-white"
-                >
-                  Cancel
-                </button>
-              )}
+             
               <button
                 type="button"
                 onClick={() => setShowAddForm(false)}
@@ -706,27 +642,32 @@ const AdministrationPage: React.FC = () => {
 
       {/* Users Table */}
       <div className="border-0 p-0">
-        {loading ? (
-          <div className="text-center py-4">Loading...</div>
+         {loading ? (
+          <div className="text-center py-4">
+            <div className="animate-pulse">
+              <div className="h-12 bg-gray-200 rounded mb-4"></div>
+              <div className="h-64 bg-gray-200 rounded"></div>
+            </div>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Password</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CNIC</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Branch</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              <thead className="bg-gray-100">
+                <tr className='text-black font-semibold text-xs uppercase'>
+                  <th className="px-6 py-4 text-left tracking-wider">Username</th>
+                  <th className="px-6 py-4 text-left tracking-wider">Password</th>
+                  <th className="px-6 py-4 text-left tracking-wider">Role</th>
+                  <th className="px-6 py-4 text-left tracking-wider">Phone</th>
+                  <th className="px-6 py-4 text-left tracking-wider">CNIC</th>
+                  <th className="px-6 py-4 text-left tracking-wider">Address</th>
+                  <th className="px-6 py-4 text-left tracking-wider">Branch</th>
+                  <th className="px-6 py-4 text-left tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {adminUsers.map((user) => (
                   <tr key={user.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.full_name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.username}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {showPasswords[user.id] ? 
                         (user.original_password && user.original_password !== '' ? user.original_password : 

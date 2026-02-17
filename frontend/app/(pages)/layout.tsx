@@ -30,7 +30,7 @@ export default function PagesLayout({
           <SidebarClientWrapper />
 
           {/* Desktop Sidebar */}
-          <div id="desktop-sidebar" className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 z-30 border-r border-gray-200 border-b border-gray-200 bg-white shadow-lg transition-all duration-300">
+          <div id="desktop-sidebar" className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 z-30 border-r border-gray-200 border-b bg-white shadow-lg transition-all duration-300">
             <div className="flex flex-col flex-grow pt-8 pb-3">
               <div className="flex-shrink-0 px-4 flex items-center justify-start pb-4">
                 <Image width={180} height={180} src="/jns_logo.svg" alt="J&S Dashboard Logo" className="h-20 w-auto" />
@@ -81,7 +81,7 @@ export default function PagesLayout({
                   <SidebarLink href="/refund" className="text-base py-3 border-b border-gray-200">
                     Refund
                   </SidebarLink>
-                  <SidebarLink href="/logout" className="hover:bg-red-500 hover:text-white text-base py-3">
+                  <SidebarLink href="/logout" className="text-base py-3">
                     Logout
                   </SidebarLink>
                 </nav>

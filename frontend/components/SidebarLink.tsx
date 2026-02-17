@@ -22,7 +22,7 @@ export default function SidebarLink({ href, children, className }: SidebarLinkPr
         'flex items-center px-4 text-base font-medium rounded-lg transition-all duration-200',
         isActive
           ? 'bg-regal-yellow text-regal-black'
-          : 'text-gray-700 hover:bg-regal-yellow hover:text-regal-black',
+          : 'text-gray-700 hover:bg-yellow-200 hover:text-regal-black',
         className
       )}
     >

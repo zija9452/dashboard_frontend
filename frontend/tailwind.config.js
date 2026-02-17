@@ -9,7 +9,8 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        'regal-yellow': '#FFD700',  // Gold color for the regal theme
+        'regal-yellow': '#FFD01F',  // Gold color for the regal theme
+        'regal-orange' : '#F79720',
         'regal-black': '#000000',   // Black for contrast
         'regal-white': '#FFFFFF',   // White for backgrounds
       },

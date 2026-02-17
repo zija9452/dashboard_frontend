@@ -95,7 +95,7 @@ const LoginPage: React.FC = () => {
                   id="role"
                   name="role"
                   required
-                  className="block w-full pl-10 pr-3 py-3 border border-regal-yellow/30 rounded-lg shadow-sm focus:ring-2 focus:ring-regal-yellow focus:border-regal-yellow bg-white"
+                  className="block w-full pl-10 pr-3 py-3 border border-regal-yellow/30 rounded-lg shadow-sm focus:ring-2 focus:ring-regal-yellow focus:border-regal-yellow bg-white appearance-none"
                   value={selectedRole}
                   onChange={(e) => setSelectedRole(e.target.value as 'admin' | 'cashier' | 'employee')}
                   disabled={loading}
@@ -130,6 +130,8 @@ const LoginPage: React.FC = () => {
                 />
               </div>
             </div>
+
+            
 
             {/* Password Field */}
             <div>

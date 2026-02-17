@@ -1,26 +1,40 @@
+import axios from 'axios';
 import { pageToQueryParams } from './pagination';
 import { DEFAULT_PAGE_SIZE } from '@/lib/constants/pagination';
 
-// Define TypeScript interfaces for Product entity
+// Define TypeScript interfaces for Product entity (matching backend request format)
 export interface Product {
-  id: string;
+  pro_id: string;
+  pro_name: string;
+  pro_price: number;
+  pro_cost: number;
+  pro_barcode: string;
+  pro_dis: number;
+  cat_id_fk: string;
+  limitedquan: number;
+  branch: string;
+  brand: string;
+  pro_image: string;
+  stock: number;
+}
+
+// Backend request format
+export interface ProductCreateRequest {
   sku: string;
   name: string;
   desc?: string;
   unit_price: number;
   cost_price: number;
   tax_rate?: number;
-  vendor_id: string;
+  vendor_id?: string | null;
   stock_level: number;
   attributes?: string;
   barcode?: string;
   discount?: number;
   category?: string;
   branch?: string;
-  limited_qty?: boolean;
+  limited_qty: number;
   brand_action?: string;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface ProductListResponse {
@@ -34,9 +48,20 @@ export interface ProductListResponse {
 // API client for products with pagination support
 export class ProductsApi {
   private baseUrl: string;
+  private apiClient: any;
 
   constructor(baseUrl: string = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000') {
     this.baseUrl = baseUrl;
+    
+    // Create axios instance with default config - call backend directly
+    this.apiClient = axios.create({
+      baseURL: baseUrl, // Backend server
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      withCredentials: true, // Include session cookies
+    });
   }
 
   /**
@@ -51,60 +76,32 @@ export class ProductsApi {
 
     const params = new URLSearchParams();
     params.append('skip', skip.toString());
-    params.append('limit', limit.toString());
+    // Fetch one extra to check if more items exist
+    params.append('limit', (limit + 1).toString());
 
     if (search) {
       params.append('search_string', search);
     }
 
-    const response = await fetch(`${this.baseUrl}/products/view-product?${params.toString()}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      credentials: 'include', // Include session cookies
-    });
+    // Call backend directly
+    const response = await this.apiClient.get(`/products/view-product?${params.toString()}`);
 
-    if (!response.ok) {
-      if (response.status === 401) {
-        // Redirect to login if unauthorized
-        window.location.href = '/login';
-        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
-      }
-      throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}`);
+    // Check if we got an extra item
+    let data = response.data;
+    let hasMore = data.length > limit;
+    
+    // Remove the extra item if present
+    if (hasMore) {
+      data = data.slice(0, limit);
     }
-
-    const responseData = await response.json();
-
-    // Map the frontend-compatible response to our Product interface
-    const mappedData: Product[] = responseData.map((item: any) => ({
-      id: item.pro_id,
-      sku: item.pro_barcode || '', // Using barcode as SKU
-      name: item.pro_name,
-      desc: '', // Not provided in frontend format
-      unit_price: item.pro_price,
-      cost_price: item.pro_cost,
-      tax_rate: 0, // Not provided in frontend format
-      vendor_id: '', // Not provided in frontend format
-      stock_level: 0, // Not provided in frontend format
-      attributes: item.pro_image || '',
-      barcode: item.pro_barcode,
-      discount: item.pro_dis,
-      category: item.cat_id_fk,
-      branch: item.branch,
-      limited_qty: item.limitedquan,
-      brand_action: item.brand,
-      created_at: new Date().toISOString(), // Not provided in frontend format
-      updated_at: new Date().toISOString() // Not provided in frontend format
-    }));
-
-    // Calculate total pages
-    const total = mappedData.length; // This is a simplification; real API might have total in response
+    
+    // Calculate total: if we're on page 1 and got full page, assume there are more
+    // This is a simplification - ideally backend should return total count
+    const total = hasMore ? skip + limit + 1 : skip + data.length;
     const totalPages = Math.ceil(total / limit);
 
     return {
-      data: mappedData,
+      data,
       total,
       page,
       limit,
@@ -113,99 +110,14 @@ export class ProductsApi {
   }
 
   /**
-   * Get a specific product by ID
-   * @param id Product ID
-   * @returns Promise<Product>
-   */
-  async getProductById(id: string): Promise<Product> {
-    const response = await fetch(`${this.baseUrl}/products/get-products/${id}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      credentials: 'include', // Include session cookies
-    });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        // Redirect to login if unauthorized
-        window.location.href = '/login';
-        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
-      }
-      throw new Error(`Failed to fetch product: ${response.status} ${response.statusText}`);
-    }
-
-    const item = await response.json();
-
-    // Map the frontend-compatible response to our Product interface
-    return {
-      id: item.pro_id,
-      sku: item.pro_barcode || '', // Using barcode as SKU
-      name: item.pro_name,
-      desc: '', // Not provided in frontend format
-      unit_price: item.pro_price,
-      cost_price: item.pro_cost,
-      tax_rate: 0, // Not provided in frontend format
-      vendor_id: '', // Not provided in frontend format
-      stock_level: 0, // Not provided in frontend format
-      attributes: item.pro_image || '',
-      barcode: item.pro_barcode,
-      discount: item.pro_dis,
-      category: item.cat_id_fk,
-      branch: item.branch,
-      limited_qty: item.limitedquan,
-      brand_action: item.brand,
-      created_at: new Date().toISOString(), // Not provided in frontend format
-      updated_at: new Date().toISOString() // Not provided in frontend format
-    };
-  }
-
-  /**
    * Create a new product
    * @param product Product data to create
    * @returns Promise<Product>
    */
-  async createProduct(product: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<Product> {
-    // Prepare the payload in the expected format for the backend
-    const payload = {
-      sku: product.sku,
-      name: product.name,
-      desc: product.desc,
-      unit_price: product.unit_price,
-      cost_price: product.cost_price,
-      tax_rate: product.tax_rate,
-      vendor_id: product.vendor_id,
-      stock_level: product.stock_level,
-      attributes: product.attributes,
-      barcode: product.barcode,
-      discount: product.discount,
-      category: product.category,
-      branch: product.branch,
-      limited_qty: product.limited_qty,
-      brand_action: product.brand_action
-    };
-
-    const response = await fetch(`${this.baseUrl}/products/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      credentials: 'include', // Include session cookies
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        // Redirect to login if unauthorized
-        window.location.href = '/login';
-        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
-      }
-      throw new Error(`Failed to create product: ${response.status} ${response.statusText}`);
-    }
-
-    return response.json();
+  async createProduct(product: ProductCreateRequest): Promise<Product> {
+    // Call backend directly, not through frontend API route
+    const response = await this.apiClient.post('/products/', product);
+    return response.data;
   }
 
   /**
@@ -214,46 +126,9 @@ export class ProductsApi {
    * @param product Partial product data to update
    * @returns Promise<Product>
    */
-  async updateProduct(id: string, product: Partial<Omit<Product, 'id'>>): Promise<Product> {
-    // Prepare the payload in the expected format for the backend
-    const payload = {
-      ...(product.sku !== undefined && { sku: product.sku }),
-      ...(product.name !== undefined && { name: product.name }),
-      ...(product.desc !== undefined && { desc: product.desc }),
-      ...(product.unit_price !== undefined && { unit_price: product.unit_price }),
-      ...(product.cost_price !== undefined && { cost_price: product.cost_price }),
-      ...(product.tax_rate !== undefined && { tax_rate: product.tax_rate }),
-      ...(product.vendor_id !== undefined && { vendor_id: product.vendor_id }),
-      ...(product.stock_level !== undefined && { stock_level: product.stock_level }),
-      ...(product.attributes !== undefined && { attributes: product.attributes }),
-      ...(product.barcode !== undefined && { barcode: product.barcode }),
-      ...(product.discount !== undefined && { discount: product.discount }),
-      ...(product.category !== undefined && { category: product.category }),
-      ...(product.branch !== undefined && { branch: product.branch }),
-      ...(product.limited_qty !== undefined && { limited_qty: product.limited_qty }),
-      ...(product.brand_action !== undefined && { brand_action: product.brand_action })
-    };
-
-    const response = await fetch(`${this.baseUrl}/products/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      credentials: 'include', // Include session cookies
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        // Redirect to login if unauthorized
-        window.location.href = '/login';
-        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
-      }
-      throw new Error(`Failed to update product: ${response.status} ${response.statusText}`);
-    }
-
-    return response.json();
+  async updateProduct(id: string, product: Partial<ProductCreateRequest>): Promise<Product> {
+    const response = await this.apiClient.put(`/products/${id}`, product);
+    return response.data;
   }
 
   /**
@@ -262,26 +137,7 @@ export class ProductsApi {
    * @returns Promise<void>
    */
   async deleteProduct(id: string): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/products/delete-product/${id}`, {
-      method: 'POST', // Using POST as per the API doc for frontend-compatible endpoint
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      credentials: 'include', // Include session cookies
-    });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        // Redirect to login if unauthorized
-        window.location.href = '/login';
-        throw new Error(`Unauthorized: ${response.status} ${response.statusText}`);
-      }
-      throw new Error(`Failed to delete product: ${response.status} ${response.statusText}`);
-    }
-    
-    // The response might be JSON, so we parse it but don't necessarily return anything
-    await response.json();
+    await this.apiClient.post(`/products/delete-product/${id}`);
   }
 }
 

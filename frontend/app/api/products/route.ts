@@ -1,27 +1,50 @@
 import { NextRequest } from 'next/server';
-import { cookies } from 'next/headers';
 
 export async function GET(request: NextRequest) {
   try {
-    // Extract query parameters
     const url = new URL(request.url);
-    const searchString = url.searchParams.get('search_string') || '';
+    const pathname = url.pathname;
+    
+    // Check if this is a barcode generation request
+    if (pathname.endsWith('/generate-barcode')) {
+      const cookieHeader = request.headers.get('cookie') || '';
+      const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/products/generate-barcode`;
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (cookieHeader) {
+        headers['Cookie'] = cookieHeader;
+      }
+
+      const response = await fetch(backendUrl, {
+        method: 'GET',
+        headers,
+        cache: 'no-store'
+      });
+
+      const data = await response.json();
+      return Response.json(data, {
+        status: response.status,
+      });
+    }
+    
+    // Default: view products
     const skip = url.searchParams.get('skip') || '0';
     const limit = url.searchParams.get('limit') || '100';
+    const search_string = url.searchParams.get('search_string') || '';
 
-    // Get all cookies to forward authentication
     const cookieHeader = request.headers.get('cookie') || '';
 
-    // Construct the backend API URL with all query parameters
     const params = new URLSearchParams();
-    if (searchString) params.append('search_string', searchString);
     params.append('skip', skip);
     params.append('limit', limit);
+    if (search_string) params.append('search_string', search_string);
 
     const queryString = params.toString();
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/users/${queryString ? '?' + queryString : ''}`;
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/products/view-product${queryString ? '?' + queryString : ''}`;
 
-    // Prepare headers
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -30,32 +53,18 @@ export async function GET(request: NextRequest) {
       headers['Cookie'] = cookieHeader;
     }
 
-    // Forward the GET request to the backend
     const response = await fetch(backendUrl, {
       method: 'GET',
       headers,
       cache: 'no-store'
     });
 
-    const contentType = response.headers.get('content-type');
-
-    if (contentType && contentType.includes('application/json')) {
-      const data = await response.json();
-      return Response.json(data, {
-        status: response.status,
-      });
-    } else {
-      const text = await response.text();
-      return Response.json(
-        {
-          error: 'Backend returned non-JSON response',
-          details: text,
-          status: response.status
-        },
-        { status: response.status || 500 }
-      );
-    }
+    const data = await response.json();
+    return Response.json(data, {
+      status: response.status,
+    });
   } catch (error) {
+    console.error('Error in products API:', error);
     return Response.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
@@ -68,7 +77,7 @@ export async function POST(request: NextRequest) {
     const cookieHeader = request.headers.get('cookie') || '';
     const body = await request.json();
 
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/users/`;
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/products/`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -101,13 +110,13 @@ export async function PUT(request: NextRequest) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
     const body = await request.json();
-    
-    // Extract user ID from URL path
+
+    // Extract product ID from URL path
     const url = new URL(request.url);
     const pathParts = url.pathname.split('/');
-    const userId = pathParts[pathParts.length - 1];
+    const productId = pathParts[pathParts.length - 1];
 
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/users/${userId}`;
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/products/${productId}`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -139,13 +148,13 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
-    
-    // Extract user ID from URL path
+
+    // Extract product ID from URL path
     const url = new URL(request.url);
     const pathParts = url.pathname.split('/');
-    const userId = pathParts[pathParts.length - 1];
+    const productId = pathParts[pathParts.length - 1];
 
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/users/${userId}`;
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/products/delete-product/${productId}`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -156,7 +165,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const response = await fetch(backendUrl, {
-      method: 'DELETE',
+      method: 'POST',
       headers,
       cache: 'no-store'
     });

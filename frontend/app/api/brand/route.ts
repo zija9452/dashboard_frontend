@@ -1,27 +1,11 @@
 import { NextRequest } from 'next/server';
-import { cookies } from 'next/headers';
 
 export async function GET(request: NextRequest) {
   try {
-    // Extract query parameters
-    const url = new URL(request.url);
-    const searchString = url.searchParams.get('search_string') || '';
-    const skip = url.searchParams.get('skip') || '0';
-    const limit = url.searchParams.get('limit') || '100';
-
-    // Get all cookies to forward authentication
     const cookieHeader = request.headers.get('cookie') || '';
 
-    // Construct the backend API URL with all query parameters
-    const params = new URLSearchParams();
-    if (searchString) params.append('search_string', searchString);
-    params.append('skip', skip);
-    params.append('limit', limit);
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/brand/`;
 
-    const queryString = params.toString();
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/users/${queryString ? '?' + queryString : ''}`;
-
-    // Prepare headers
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -30,7 +14,6 @@ export async function GET(request: NextRequest) {
       headers['Cookie'] = cookieHeader;
     }
 
-    // Forward the GET request to the backend
     const response = await fetch(backendUrl, {
       method: 'GET',
       headers,
@@ -47,12 +30,8 @@ export async function GET(request: NextRequest) {
     } else {
       const text = await response.text();
       return Response.json(
-        {
-          error: 'Backend returned non-JSON response',
-          details: text,
-          status: response.status
-        },
-        { status: response.status || 500 }
+        { error: 'Backend returned non-JSON response', details: text },
+        { status: response.status }
       );
     }
   } catch (error) {
@@ -68,7 +47,7 @@ export async function POST(request: NextRequest) {
     const cookieHeader = request.headers.get('cookie') || '';
     const body = await request.json();
 
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/users/`;
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/brand/`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -101,13 +80,12 @@ export async function PUT(request: NextRequest) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
     const body = await request.json();
-    
-    // Extract user ID from URL path
+
     const url = new URL(request.url);
     const pathParts = url.pathname.split('/');
-    const userId = pathParts[pathParts.length - 1];
+    const brandId = pathParts[pathParts.length - 1];
 
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/users/${userId}`;
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/brand/${brandId}`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -139,13 +117,12 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
-    
-    // Extract user ID from URL path
+
     const url = new URL(request.url);
     const pathParts = url.pathname.split('/');
-    const userId = pathParts[pathParts.length - 1];
+    const brandId = pathParts[pathParts.length - 1];
 
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/users/${userId}`;
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/brand/${brandId}`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',

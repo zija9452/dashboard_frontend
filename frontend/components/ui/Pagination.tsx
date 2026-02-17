@@ -20,7 +20,8 @@ const Pagination: React.FC<PaginationProps> = ({
   totalItems,
   pageSize,
   baseUrl,
-  onPageChange
+  onPageChange,
+  onPageSizeChange
 }) => {
   const searchParams = useSearchParams();
   const otherParams = searchParams?.toString() || '';
@@ -71,15 +72,7 @@ const Pagination: React.FC<PaginationProps> = ({
 
   return (
     <div className="regal-pagination">
-      <div className="text-sm text-gray-700 mb-2">
-        Showing <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span> to{' '}
-        <span className="font-medium">
-          {Math.min(currentPage * pageSize, totalItems)}
-        </span>{' '}
-        of <span className="font-medium">{totalItems}</span> results
-      </div>
-
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center justify-center space-x-2 w-full">
         {/* Previous button */}
         <Link
           href={getPageHref(Math.max(1, currentPage - 1))}
@@ -127,32 +120,6 @@ const Pagination: React.FC<PaginationProps> = ({
         >
           Next
         </Link>
-      </div>
-
-      {/* Page size selector */}
-      <div className="mt-4 flex items-center">
-        <label htmlFor="pageSize" className="mr-2 text-sm text-gray-700">
-          Show
-        </label>
-        <select
-          id="pageSize"
-          value={pageSize}
-          onChange={(e) => {
-            const newSize = parseInt(e.target.value, 10);
-            const params = new URLSearchParams(otherParams);
-            params.set('limit', newSize.toString());
-            params.set('page', '1'); // Reset to first page when changing page size
-            window.location.href = `${baseUrl}?${params.toString()}`;
-          }}
-          className="border border-gray-300 rounded-md px-2 py-1 text-sm"
-        >
-          {PAGE_SIZE_OPTIONS.map((size) => (
-            <option key={size} value={size}>
-              {size}
-            </option>
-          ))}
-        </select>
-        <span className="ml-2 text-sm text-gray-700">per page</span>
       </div>
     </div>
   );

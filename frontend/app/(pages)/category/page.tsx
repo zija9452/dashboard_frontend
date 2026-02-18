@@ -47,13 +47,13 @@ const CategoryPage: React.FC = () => {
       }
 
       const data = await response.json();
-      
+
       // Filter by search term
       const filtered = data.filter((cat: Category) =>
         cat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         cat.branch.toLowerCase().includes(searchTerm.toLowerCase())
       );
-      
+
       setCategories(filtered);
     } catch (error) {
       console.error('Error fetching categories:', error);

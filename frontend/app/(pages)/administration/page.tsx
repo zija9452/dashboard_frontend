@@ -34,29 +34,31 @@ interface AdminUser {
 
 const AdministrationPage: React.FC = () => {
   const { showToast } = useToast();
-  
-  // Function to map role UUIDs to role names
+
+  // Function to map role UUIDs to role names (hardcoded for common IDs)
   const getRoleName = (roleId: string | undefined): string => {
     if (!roleId) return 'unknown';
 
-    // Common role UUIDs based on the backend data
-    if (roleId === '33128819-80ae-4a6a-9ab7-7eff272a81ff') return 'admin';
-    if (roleId === '42a87026-09e0-40d2-8c21-23df1914e34d') return 'cashier';
-    if (roleId === '66ab52f4-391d-43ba-b569-21ec43a74aac') return 'employee';
+    // Common role UUIDs - hardcoded for performance
+    if (roleId === '58e08ebd-c5ce-4005-96ed-31ddbe5ee204') return 'admin';
+    if (roleId === '6c44d6cc-2287-49d9-8018-9013c3469627') return 'cashier';
+    if (roleId === 'dd14c670-cba6-43c5-b863-b4f06dfb78d0') return 'employee';
 
-    // For other UUIDs, return as is or implement a lookup mechanism
-    return roleId;
+    // For other UUIDs, return unknown
+    return 'unknown';
   };
 
-  // Function to map role names to UUIDs
+  // Function to map role names to UUIDs (hardcoded)
   const getRoleIdFromName = (roleName: string): string => {
-    if (roleName === 'admin') return '33128819-80ae-4a6a-9ab7-7eff272a81ff';
-    if (roleName === 'cashier') return '42a87026-09e0-40d2-8c21-23df1914e34d';
-    if (roleName === 'employee') return '66ab52f4-391d-43ba-b569-21ec43a74aac';
-    return '42a87026-09e0-40d2-8c21-23df1914e34d'; // default to cashier
+    if (roleName === 'admin') return '58e08ebd-c5ce-4005-96ed-31ddbe5ee204';
+    if (roleName === 'cashier') return '6c44d6cc-2287-49d9-8018-9013c3469627';
+    if (roleName === 'employee') return 'dd14c670-cba6-43c5-b863-b4f06dfb78d0';
+    return '6c44d6cc-2287-49d9-8018-9013c3469627'; // default to cashier
   };
+
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false); // Prevent duplicate submissions
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -67,7 +69,7 @@ const AdministrationPage: React.FC = () => {
   const [formData, setFormData] = useState<AdminUser>({
     id: '',
     full_name: '',
-    role_id: 'admin',
+    role_id: '',
     phone: '',
     address: '',
     cnic: '',
@@ -78,7 +80,6 @@ const AdministrationPage: React.FC = () => {
     is_biometric_enabled: false,
     original_password: ''
   });
-
 
   // Fetch all users (not just admins)
   const fetchAdminUsers = async () => {
@@ -96,7 +97,7 @@ const AdministrationPage: React.FC = () => {
       console.log('Response status:', response.status);
       const contentType = response.headers.get('content-type');
       console.log('Response content-type:', contentType);
-      
+
       if (!response.ok) {
         // Try to get error details from response
         let errorDetails = `HTTP error! status: ${response.status}`;
@@ -123,7 +124,7 @@ const AdministrationPage: React.FC = () => {
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
         console.log('Fetched data:', data);
-        
+
         // Map the API response to the modern format
         const mappedData = Array.isArray(data) ? data.map((user: any) => {
           const mappedUser: AdminUser = {
@@ -145,7 +146,7 @@ const AdministrationPage: React.FC = () => {
             // Legacy fields for backward compatibility (empty since users endpoint doesn't return them)
             ad_id: user.ad_id || user.id,
             ad_name: user.ad_name || user.full_name,
-            ad_role: user.ad_role || getRoleName(user.role_id), // Store role name for compatibility
+            ad_role: getRoleName(user.role_id), // Store role name for compatibility
             ad_phone: user.ad_phone || user.phone,
             ad_address: user.ad_address || user.address,
             ad_cnic: user.ad_cnic || user.cnic,
@@ -154,7 +155,7 @@ const AdministrationPage: React.FC = () => {
           };
           return mappedUser;
         }) : [];
-        
+
         setAdminUsers(mappedData);
       } else {
         const text = await response.text();
@@ -164,7 +165,7 @@ const AdministrationPage: React.FC = () => {
     } catch (error) {
       console.error('Error fetching admin users:', error);
       const errorMessage = (error as Error).message;
-      
+
       // Check if it's an authentication issue
       if (errorMessage.includes('401') || errorMessage.toLowerCase().includes('unauthorized') || errorMessage.includes('session') || errorMessage.includes('auth')) {
         showToast('Authentication required. Please log in again.', 'error');
@@ -213,6 +214,11 @@ const AdministrationPage: React.FC = () => {
   // Submit form (create or update)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Prevent duplicate submissions
+    if (submitting) return;
+
+    setSubmitting(true);
 
     try {
       if (editingUser) {
@@ -336,8 +342,8 @@ const AdministrationPage: React.FC = () => {
         });
       }
 
-      resetForm();
-      fetchAdminUsers(); // Refresh the list
+      await resetForm();
+      await fetchAdminUsers(); // Refresh the list
     } catch (error) {
       console.error('Error saving user:', error);
       const errorMessage = (error as Error).message;
@@ -348,6 +354,8 @@ const AdministrationPage: React.FC = () => {
       } else {
         showToast(error instanceof Error ? error.message : 'Failed to save user', 'error');
       }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -424,8 +432,9 @@ const AdministrationPage: React.FC = () => {
         const result = await response.json();
         console.log('Delete result:', result);
 
-        setAdminUsers(adminUsers.filter(user => user.id !== id));
-        
+        // Refresh user list from backend
+        await fetchAdminUsers();
+
         // Show success alert
         Swal.fire({
           title: 'Deleted!',
@@ -623,15 +632,27 @@ const AdministrationPage: React.FC = () => {
             <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="submit"
-                className="regal-btn bg-regal-yellow text-regal-black"
+                disabled={submitting}
+                className={`regal-btn bg-regal-yellow text-regal-black ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                {editingUser ? 'Update User' : 'Add User'}
+                {submitting ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    {editingUser ? 'Updating...' : 'Adding...'}
+                  </span>
+                ) : (
+                  editingUser ? 'Update User' : 'Add User'
+                )}
               </button>
-             
+
               <button
                 type="button"
                 onClick={() => setShowAddForm(false)}
-                className="regal-btn bg-gray-300 text-black"
+                disabled={submitting}
+                className={`regal-btn bg-gray-300 text-black ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 Close
               </button>
@@ -685,7 +706,7 @@ const AdministrationPage: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <span className={`px-2 inline-flex text-sm leading-5 font-medium `}>
-                        {user.ad_role || getRoleName(user.role_id) || user.role_id}
+                        {getRoleName(user.role_id)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.phone || '-'}</td>

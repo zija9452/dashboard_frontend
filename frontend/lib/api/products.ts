@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { pageToQueryParams } from './pagination';
 import { DEFAULT_PAGE_SIZE } from '@/lib/constants/pagination';
 
 // Define TypeScript interfaces for Product entity (matching backend request format)
@@ -45,17 +44,28 @@ export interface ProductListResponse {
   totalPages: number;
 }
 
-// API client for products with pagination support
+// Cache for storing all fetched products
+interface ProductsCache {
+  data: Product[];
+  timestamp: number;
+  search: string;
+}
+
+// Cache validity: 5 minutes
+const CACHE_DURATION = 5 * 60 * 1000;
+
+// API client for products with frontend pagination
 export class ProductsApi {
   private baseUrl: string;
   private apiClient: any;
+  private cache: ProductsCache | null = null;
 
   constructor(baseUrl: string = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000') {
     this.baseUrl = baseUrl;
-    
-    // Create axios instance with default config - call backend directly
+
+    // Create axios instance with default config - use Next.js API routes for proper cookie handling
     this.apiClient = axios.create({
-      baseURL: baseUrl, // Backend server
+      baseURL: '/api', // Use Next.js API routes
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -65,43 +75,72 @@ export class ProductsApi {
   }
 
   /**
-   * Get list of products with pagination
+   * Get list of products with frontend pagination
+   * Fetches 40 products from backend and paginates on frontend
    * @param page Page number (default: 1)
    * @param limit Number of items per page (default: 8)
    * @param search Optional search string
    * @returns Promise<ProductListResponse>
    */
   async getProducts(page: number = 1, limit: number = DEFAULT_PAGE_SIZE, search?: string): Promise<ProductListResponse> {
-    const { skip } = pageToQueryParams(page, limit);
+    const searchQuery = search || '';
+    const now = Date.now();
 
+    // Check if cache is valid
+    if (this.cache &&
+        this.cache.search === searchQuery &&
+        (now - this.cache.timestamp) < CACHE_DURATION) {
+      // Use cached data
+      const allProducts = this.cache.data;
+      const total = allProducts.length;
+
+      // Calculate start and end indices for frontend pagination
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      const paginatedData = allProducts.slice(startIndex, endIndex);
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        data: paginatedData,
+        total,
+        page,
+        limit,
+        totalPages
+      };
+    }
+
+    // Fetch 40 products from backend
     const params = new URLSearchParams();
-    params.append('skip', skip.toString());
-    // Fetch one extra to check if more items exist
-    params.append('limit', (limit + 1).toString());
-
-    if (search) {
-      params.append('search_string', search);
+    params.append('limit', '40'); // Fetch 40 products
+    if (searchQuery) {
+      params.append('search_string', searchQuery);
     }
 
-    // Call backend directly
-    const response = await this.apiClient.get(`/products/view-product?${params.toString()}`);
+    // Call Next.js API route which forwards to backend with proper cookie handling
+    const response = await this.apiClient.get(`/products?${params.toString()}`);
 
-    // Check if we got an extra item
-    let data = response.data;
-    let hasMore = data.length > limit;
+    const allProducts = response.data;
     
-    // Remove the extra item if present
-    if (hasMore) {
-      data = data.slice(0, limit);
-    }
+    console.log('Backend response:', allProducts);
+    console.log('Total products fetched:', allProducts.length);
+
+    // Update cache
+    this.cache = {
+      data: allProducts,
+      timestamp: now,
+      search: searchQuery
+    };
+
+    const total = allProducts.length;
     
-    // Calculate total: if we're on page 1 and got full page, assume there are more
-    // This is a simplification - ideally backend should return total count
-    const total = hasMore ? skip + limit + 1 : skip + data.length;
+    // Calculate start and end indices for frontend pagination
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedData = allProducts.slice(startIndex, endIndex);
     const totalPages = Math.ceil(total / limit);
 
     return {
-      data,
+      data: paginatedData,
       total,
       page,
       limit,
@@ -110,13 +149,20 @@ export class ProductsApi {
   }
 
   /**
+   * Clear the products cache
+   */
+  clearCache(): void {
+    this.cache = null;
+  }
+
+  /**
    * Create a new product
    * @param product Product data to create
    * @returns Promise<Product>
    */
   async createProduct(product: ProductCreateRequest): Promise<Product> {
-    // Call backend directly, not through frontend API route
-    const response = await this.apiClient.post('/products/', product);
+    // Call Next.js API route which forwards to backend with proper cookie handling
+    const response = await this.apiClient.post('/products?action=create', product);
     return response.data;
   }
 

@@ -108,11 +108,11 @@ export const getSession = async (): Promise<SessionData | null> => {
     }
 
     const sessionData = await response.json();
-    
+
     // Cache the session
     cachedSession = sessionData;
     sessionTimestamp = Date.now();
-    
+
     return sessionData;
   } catch (error) {
     console.error('Get session error:', error);

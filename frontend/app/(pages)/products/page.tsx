@@ -275,8 +275,10 @@ const ProductsPage: React.FC = () => {
         });
       }
 
+      // Clear cache to fetch fresh data
+      productsApi.clearCache();
       await resetForm();
-      fetchProducts();
+      await fetchProducts();
     } catch (error) {
       console.error('Error saving product:', error);
       showToast(error instanceof Error ? error.message : 'Failed to save product', 'error');
@@ -326,7 +328,11 @@ const ProductsPage: React.FC = () => {
       try {
         await productsApi.deleteProduct(id);
 
-        setProducts(products.filter(p => p.pro_id !== id));
+        // Clear cache to fetch fresh data
+        productsApi.clearCache();
+
+        // Refresh product list from backend
+        await fetchProducts();
 
         Swal.fire({
           title: 'Deleted!',
@@ -358,11 +364,37 @@ const ProductsPage: React.FC = () => {
         {/* Left side - Action Buttons */}
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={async () => {
+            onClick={() => {
               if (!showAddForm) {
-                // Opening form - generate new barcode
-                await resetForm();
+                // Opening form - generate new barcode synchronously with fallback
+                const prefix = "690";
+                const randomPart = Math.floor(10000 + Math.random() * 90000).toString();
+                const baseCode = prefix + randomPart;
+                let sum = 0;
+                for (let i = 0; i < baseCode.length; i++) {
+                  sum += parseInt(baseCode[i]) * (i % 2 === 0 ? 1 : 3);
+                }
+                const checkDigit = (10 - (sum % 10)) % 10;
+                const localBarcode = baseCode + checkDigit;
+                
+                setFormData({
+                  name: '',
+                  unit_price: 0,
+                  cost_price: 0,
+                  barcode: localBarcode,
+                  discount: 0,
+                  limited_qty: 0,
+                  category: '',
+                  branch: '',
+                  brand_action: '',
+                  sku: '',
+                  desc: '',
+                  attributes: ''
+                });
+                setEditingProduct(null);
                 setShowAddForm(true);
+                setSelectedImage(null);
+                setImagePreview('');
               } else {
                 // Closing form
                 setShowAddForm(false);
@@ -641,17 +673,17 @@ const ProductsPage: React.FC = () => {
             <table className="w-full table-fixed">
               <thead className="bg-gray-100">
                 <tr className='text-black font-semibold text-xs uppercase'>
-                  <th className="px-2 py-5 text-left w-16">S.No</th>
+                  <th className="px-3 py-5 text-left w-12">S.No</th>
                   <th className="px-2 py-5 text-left w-24">Image</th>
-                  <th className="px-2 py-5 text-left">Name</th>
-                  <th className="px-2 py-5 text-left w-28">Price</th>
-                  <th className="px-2 py-5 text-left w-28">Cost</th>
+                  <th className="px-2 py-5 text-left w-32">Name</th>
+                  <th className="px-2 py-5 text-left w-20">Price</th>
+                  <th className="px-2 py-5 text-left w-20">Cost</th>
                   <th className="px-2 py-5 text-left w-32">Barcode</th>
                   <th className="px-2 py-5 text-left w-24">Discount</th>
                   <th className="px-2 py-5 text-left w-20">Stock</th>
-                  <th className="px-2 py-5 text-left w-24">Limited Qty</th>
-                  <th className="px-2 py-5 text-left">Category</th>
-                  <th className="px-2 py-5 text-left">Branch</th>
+                  <th className="px-2 py-5 text-left w-28">Limited Qty</th>
+                  <th className="px-2 py-5 text-left w-28">Category</th>
+                  <th className="px-2 py-5 text-left w-32">Branch</th>
                   <th className="px-2 py-5 text-left">Brand</th>
                   <th className="px-2 py-5 text-center w-32">Actions</th>
                 </tr>
@@ -669,7 +701,7 @@ const ProductsPage: React.FC = () => {
                         </div>
                       )}
                     </td>
-                    <td className="px-2 py-4 text-sm font-medium text-gray-900">{product.pro_name}</td>
+                    <td className="px-3 py-4 text-sm font-medium text-gray-900">{product.pro_name}</td>
                     <td className="px-2 py-4 text-sm text-gray-900">{product.pro_price.toFixed(2)}</td>
                     <td className="px-2 py-4 text-sm text-gray-900">{product.pro_cost.toFixed(2)}</td>
                     <td className="px-2 py-4 text-sm text-gray-900">{product.pro_barcode || 'N/A'}</td>

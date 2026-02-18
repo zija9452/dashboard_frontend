@@ -53,10 +53,10 @@ const LoginPage: React.FC = () => {
       <div className="max-w-md w-full space-y-8">
         {/* Logo and Header */}
         <div className="text-center">
-          <div className="mx-auto h-16 w-16 rounded-full bg-gradient-to-r from-regal-yellow to-regal-black flex items-center justify-center">
+          <div className="mx-auto h-16 w-16 rounded-full bg-gradient-to-r from-regal-orange to-regal-yellow flex items-center justify-center">
             <LockClosedIcon className="h-8 w-8 text-white" />
           </div>
-          <h2 className="mt-6 text-3xl font-bold bg-gradient-to-r from-regal-yellow to-regal-black bg-clip-text text-transparent">
+          <h2 className="mt-6 text-3xl font-bold bg-gradient-to-r from-regal-orange to-regal-yellow bg-clip-text text-transparent">
             Welcome Back
           </h2>
           <p className="mt-2 text-sm text-gray-600">
@@ -173,10 +173,10 @@ const LoginPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className={`group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-semibold rounded-lg shadow-sm text-white ${
+                className={`group relative w-full flex justify-center py-3 px-4 border border-transparent text-md font-semibold rounded-lg shadow-sm text-regal-black ${
                   loading 
                     ? 'bg-gray-400 cursor-not-allowed' 
-                    : 'bg-gradient-to-r from-regal-yellow to-regal-black hover:from-regal-yellow/90 hover:to-regal-black/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-regal-yellow'
+                    : 'bg-gradient-to-r from-regal-orange to-regal-yellow hover:from-regal-orange/90 hover:to-regal-yellow/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-regal-yellow'
                 }`}
               >
                 {loading ? (

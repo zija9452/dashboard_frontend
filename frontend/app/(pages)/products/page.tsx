@@ -690,7 +690,7 @@ const ProductsPage: React.FC = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {products.map((product, index) => (
-                  <tr key={product.pro_id} className="hover:bg-gray-50">
+                  <tr key={product.pro_id} className="hover:bg-gray-50 text-sm text-gray-900">
                     <td className="px-3 py-4 text-sm text-gray-900">{((currentPage - 1) * pageSize) + index + 1}</td>
                     <td className="px-3 py-4 text-sm">
                       {product.pro_image ? (
@@ -701,17 +701,17 @@ const ProductsPage: React.FC = () => {
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-4 text-sm font-medium text-gray-900">{product.pro_name}</td>
-                    <td className="px-2 py-4 text-sm text-gray-900">{product.pro_price.toFixed(2)}</td>
-                    <td className="px-2 py-4 text-sm text-gray-900">{product.pro_cost.toFixed(2)}</td>
-                    <td className="px-2 py-4 text-sm text-gray-900">{product.pro_barcode || 'N/A'}</td>
-                    <td className="px-2 py-4 text-sm text-gray-900">{product.pro_dis}%</td>
-                    <td className="px-2 py-4 text-sm text-gray-900">{product.stock || 0}</td>
-                    <td className="px-2 py-4 text-sm text-gray-900">{product.limitedquan || 0}</td>
-                    <td className="px-2 py-4 text-sm text-gray-900">{product.cat_id_fk || 'N/A'}</td>
-                    <td className="px-2 py-4 text-sm text-gray-900">{product.branch || 'N/A'}</td>
-                    <td className="px-2 py-4 text-sm text-gray-900">{product.brand || 'N/A'}</td>
-                    <td className="px-2 py-4 text-sm text-center">
+                    <td className="px-3 py-4">{product.pro_name}</td>
+                    <td className="px-2 py-4">{product.pro_price.toFixed(2)}</td>
+                    <td className="px-2 py-4">{product.pro_cost.toFixed(2)}</td>
+                    <td className="px-2 py-4">{product.pro_barcode || 'N/A'}</td>
+                    <td className="px-2 py-4">{product.pro_dis}%</td>
+                    <td className="px-2 py-4">{product.stock || 0}</td>
+                    <td className="px-5 py-4">{product.limitedquan || 0}</td>
+                    <td className="px-2 py-4">{product.cat_id_fk || 'N/A'}</td>
+                    <td className="px-2 py-4">{product.branch || 'N/A'}</td>
+                    <td className="px-2 py-4">{product.brand || 'N/A'}</td>
+                    <td className="px-2 py-4 text-center">
                       <div className="flex justify-center items-center gap-3">
                         <button
                           onClick={() => handleEdit(product)}

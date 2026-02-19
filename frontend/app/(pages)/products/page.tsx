@@ -27,7 +27,7 @@ const ProductsPage: React.FC = () => {
   // Generate unique barcode by calling backend API (production-ready approach)
   const generateBarcode = async (): Promise<string> => {
     try {
-      const response = await fetch('/api/products/generate-barcode', {
+      const response = await fetch('/api/products/generatebarcode', {
         method: 'GET',
         credentials: 'include',
       });
@@ -64,9 +64,10 @@ const ProductsPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(8);
   const [totalItems, setTotalItems] = useState(0);
+  const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
 
-  // Calculate totalPages
-  const totalPages = Math.ceil(totalItems / pageSize);
+  // Calculate totalPages - limit to max 5 pages
+  const totalPages = Math.min(totalPagesFromApi, 5);
 
   // Form state - barcode will be set when form is shown
   const [formData, setFormData] = useState({
@@ -104,9 +105,23 @@ const ProductsPage: React.FC = () => {
       console.log('Current page:', currentPage);
       setProducts(response.data);
       setTotalItems(response.total);
-    } catch (error) {
+      setTotalPagesFromApi(response.totalPages);
+    } catch (error: any) {
       console.error('Error fetching products:', error);
-      showToast('Failed to fetch products', 'error');
+      
+      // Handle different error types
+      if (error?.response?.data?.type === 'TIMEOUT' || error?.response?.status === 504) {
+        showToast('Request timeout. Please try again.', 'error');
+      } else if (error?.response?.status === 500) {
+        const errorMsg = error?.response?.data?.error || 'Internal server error';
+        showToast(`Server error: ${errorMsg}`, 'error');
+      } else if (error?.response?.status === 401 || error?.response?.status === 403) {
+        showToast('Session expired. Please login again.', 'error');
+        setTimeout(() => router.push('/login'), 2000);
+      } else {
+        const errorMsg = error?.response?.data?.error || 'Failed to fetch products';
+        showToast(errorMsg, 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -275,14 +290,14 @@ const ProductsPage: React.FC = () => {
         });
       }
 
-      // Clear cache to fetch fresh data
+      // Clear cache and refresh products
       productsApi.clearCache();
-      await resetForm();
       await fetchProducts();
+      await resetForm();
+      setSubmitting(false);
     } catch (error) {
       console.error('Error saving product:', error);
       showToast(error instanceof Error ? error.message : 'Failed to save product', 'error');
-    } finally {
       setSubmitting(false);
     }
   };

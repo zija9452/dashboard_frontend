@@ -12,6 +12,7 @@ interface PaginationProps {
   pageSize: number;
   baseUrl: string; // Base URL without query parameters
   onPageChange?: (page: number) => void; // Optional callback for client-side navigation
+  onPageSizeChange?: (size: number) => void;
 }
 
 const Pagination: React.FC<PaginationProps> = ({
@@ -41,7 +42,7 @@ const Pagination: React.FC<PaginationProps> = ({
     }
   };
 
-  // Generate page numbers to show
+  // Generate page numbers to show (limited to 7 buttons max)
   const getPageNumbers = () => {
     const delta = 2; // How many pages to show around current page
     const range = [];
@@ -70,20 +71,37 @@ const Pagination: React.FC<PaginationProps> = ({
 
   const pageNumbers = getPageNumbers();
 
+  if (totalPages === 0) return null;
+
   return (
     <div className="regal-pagination">
       <div className="flex items-center justify-center space-x-2 w-full">
+        {/* First button */}
+        <Link
+          href={getPageHref(1)}
+          onClick={() => handlePageChange(1)}
+          className={`regal-pagination-prev-next ${
+            currentPage === 1
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : 'bg-white text-gray-700 hover:bg-gray-50'
+          }`}
+          aria-disabled={currentPage === 1}
+        >
+          First
+        </Link>
+
         {/* Previous button */}
         <Link
           href={getPageHref(Math.max(1, currentPage - 1))}
           onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-          className={`regal-pagination-prev-next ${currentPage === 1
-            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-            : 'bg-white text-gray-700 hover:bg-gray-50'
-            }`}
+          className={`regal-pagination-prev-next ${
+            currentPage === 1
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : 'bg-white text-gray-700 hover:bg-gray-50'
+          }`}
           aria-disabled={currentPage === 1}
         >
-          Previous
+          &lt;
         </Link>
 
         {/* Page numbers */}
@@ -112,13 +130,28 @@ const Pagination: React.FC<PaginationProps> = ({
         <Link
           href={getPageHref(Math.min(totalPages, currentPage + 1))}
           onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
-          className={`regal-pagination-prev-next ${currentPage === totalPages
-            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-            : 'bg-white text-gray-700 hover:bg-gray-50'
-            }`}
+          className={`regal-pagination-prev-next ${
+            currentPage === totalPages
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : 'bg-white text-gray-700 hover:bg-gray-50'
+          }`}
           aria-disabled={currentPage === totalPages}
         >
-          Next
+          &gt;
+        </Link>
+
+        {/* Last button */}
+        <Link
+          href={getPageHref(totalPages)}
+          onClick={() => handlePageChange(totalPages)}
+          className={`regal-pagination-prev-next ${
+            currentPage === totalPages
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : 'bg-white text-gray-700 hover:bg-gray-50'
+          }`}
+          aria-disabled={currentPage === totalPages}
+        >
+          Last
         </Link>
       </div>
     </div>

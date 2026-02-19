@@ -71,80 +71,53 @@ export class ProductsApi {
         'Accept': 'application/json',
       },
       withCredentials: true, // Include session cookies
+      timeout: 30000, // 30 second timeout
     });
   }
 
   /**
-   * Get list of products with frontend pagination
-   * Fetches 40 products from backend and paginates on frontend
+   * Get list of products with backend pagination
+   * Returns total count for proper frontend pagination
    * @param page Page number (default: 1)
    * @param limit Number of items per page (default: 8)
    * @param search Optional search string
    * @returns Promise<ProductListResponse>
    */
-  async getProducts(page: number = 1, limit: number = DEFAULT_PAGE_SIZE, search?: string): Promise<ProductListResponse> {
+  async getProducts(page: number = 1, limit: number = 8, search?: string): Promise<ProductListResponse> {
     const searchQuery = search || '';
-    const now = Date.now();
 
-    // Check if cache is valid
-    if (this.cache &&
-        this.cache.search === searchQuery &&
-        (now - this.cache.timestamp) < CACHE_DURATION) {
-      // Use cached data
-      const allProducts = this.cache.data;
-      const total = allProducts.length;
-
-      // Calculate start and end indices for frontend pagination
-      const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + limit;
-      const paginatedData = allProducts.slice(startIndex, endIndex);
-      const totalPages = Math.ceil(total / limit);
-
-      return {
-        data: paginatedData,
-        total,
-        page,
-        limit,
-        totalPages
-      };
-    }
-
-    // Fetch 40 products from backend
+    // Build query params for backend pagination
     const params = new URLSearchParams();
-    params.append('limit', '40'); // Fetch 40 products
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
     if (searchQuery) {
       params.append('search_string', searchQuery);
     }
 
     // Call Next.js API route which forwards to backend with proper cookie handling
-    const response = await this.apiClient.get(`/products?${params.toString()}`);
+    const response = await this.apiClient.get(`/products?${params.toString()}`, {
+      timeout: 120000, // 2 minute timeout
+    });
 
-    const allProducts = response.data;
-    
-    console.log('Backend response:', allProducts);
-    console.log('Total products fetched:', allProducts.length);
+    const result = response.data;
 
-    // Update cache
-    this.cache = {
-      data: allProducts,
-      timestamp: now,
-      search: searchQuery
-    };
+    console.log('Backend response:', result);
+    console.log('Products on page:', result.data?.length || 0);
+    console.log('Total count:', result.total);
+    console.log('Total pages:', result.total_pages);
 
-    const total = allProducts.length;
-    
-    // Calculate start and end indices for frontend pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    const paginatedData = allProducts.slice(startIndex, endIndex);
-    const totalPages = Math.ceil(total / limit);
+    // Check for error responses from backend
+    if (result.error) {
+      throw new Error(result.error);
+    }
 
     return {
-      data: paginatedData,
-      total,
-      page,
-      limit,
-      totalPages
+      data: result.data || [],
+      total: result.total || 0,
+      page: result.page || page,
+      limit: result.limit || limit,
+      totalPages: result.total_pages || 0,
+      hasMore: result.has_more || false
     };
   }
 
@@ -163,6 +136,8 @@ export class ProductsApi {
   async createProduct(product: ProductCreateRequest): Promise<Product> {
     // Call Next.js API route which forwards to backend with proper cookie handling
     const response = await this.apiClient.post('/products?action=create', product);
+    // Clear cache after creating product
+    this.clearCache();
     return response.data;
   }
 
@@ -174,6 +149,8 @@ export class ProductsApi {
    */
   async updateProduct(id: string, product: Partial<ProductCreateRequest>): Promise<Product> {
     const response = await this.apiClient.put(`/products/${id}`, product);
+    // Clear cache after updating product
+    this.clearCache();
     return response.data;
   }
 
@@ -183,7 +160,10 @@ export class ProductsApi {
    * @returns Promise<void>
    */
   async deleteProduct(id: string): Promise<void> {
-    await this.apiClient.post(`/products/delete-product/${id}`);
+    const result = await this.apiClient.post(`/products/deleteproduct/${id}`);
+    // Clear cache after deleting product
+    this.clearCache();
+    return result;
   }
 }
 

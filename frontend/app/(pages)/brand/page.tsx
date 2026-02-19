@@ -18,6 +18,7 @@ const BrandPage: React.FC = () => {
 
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false); // Prevent duplicate submissions
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -86,6 +87,11 @@ const BrandPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Prevent duplicate submissions
+    if (submitting) return;
+
+    setSubmitting(true);
+
     try {
       if (editingBrand) {
         // Update brand
@@ -138,11 +144,13 @@ const BrandPage: React.FC = () => {
         });
       }
 
+      await fetchBrands();
       resetForm();
-      fetchBrands();
+      setSubmitting(false);
     } catch (error) {
       console.error('Error saving brand:', error);
       showToast(error instanceof Error ? error.message : 'Failed to save brand', 'error');
+      setSubmitting(false);
     }
   };
 
@@ -223,7 +231,7 @@ const BrandPage: React.FC = () => {
           
           <button
             onClick={() => router.push('/products')}
-            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+            className="regal-btn bg-gray-900 text-white whitespace-nowrap"
           >
             ← Back to Products
           </button>
@@ -286,11 +294,12 @@ const BrandPage: React.FC = () => {
             <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="submit"
-                className="regal-btn bg-regal-yellow text-regal-black"
+                disabled={submitting}
+                className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {editingBrand ? 'Update Brand' : 'Add Brand'}
+                {submitting ? 'Saving...' : (editingBrand ? 'Update Brand' : 'Add Brand')}
               </button>
-              
+
               <button
                 type="button"
                 onClick={() => setShowAddForm(false)}
@@ -305,16 +314,21 @@ const BrandPage: React.FC = () => {
 
       {/* Brands Table */}
       <div className="border-0 p-0">
-        {loading ? (
-          <div className="text-center py-4">Loading...</div>
+       {loading ? (
+          <div className="text-center py-4">
+            <div className="animate-pulse">
+              <div className="h-12 bg-gray-200 rounded mb-4"></div>
+              <div className="h-64 bg-gray-200 rounded"></div>
+            </div>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-100">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Created At</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                  <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">Created At</th>
+                  <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">

@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     const role = formData.get('role') as string;
 
     // Forward the login request to the backend
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/session-login`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

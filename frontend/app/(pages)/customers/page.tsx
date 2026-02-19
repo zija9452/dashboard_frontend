@@ -1,401 +1,576 @@
 'use client';
 
-'use client';
-
-import React, { useState, useEffect } from 'react';
-import { Customer, customersApi } from '@/lib/api/customers';
-import DataTable from '@/components/ui/DataTable';
-import Button from '@/components/ui/Button';
-import Modal from '@/components/ui/Modal';
-import { FormField, Form } from '@/components/ui/Form';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/components/ui/Toast';
+import Swal from 'sweetalert2';
+import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
-import { DEFAULT_PAGE_SIZE } from '@/lib/constants/pagination';
+
+interface Customer {
+  cus_id: string;
+  cus_name: string;
+  cus_phone: string;
+  cus_cnic: string;
+  cus_address: string;
+  cus_balance: number;
+  cus_sal_id_fk: string;
+  branch: string;
+}
+
+interface Salesman {
+  sal_id: string;
+  sal_name: string;
+}
 
 const CustomersPage: React.FC = () => {
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [totalItems, setTotalItems] = useState<number>(0);
-  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  const [formData, setFormData] = useState<Omit<Customer, 'id' | 'created_at' | 'updated_at' | 'closing_balance' | 'credit_balance'>>({
-    name: '',
-    phone: '',
-    email: '',
-    address: '',
-    city: '',
-    state: '',
-    zip_code: '',
-    country: '',
-    gst_no: '',
-    opening_balance: 0,
-  });
-
+  const router = useRouter();
   const { showToast } = useToast();
 
-  // Calculate totalPages based on totalItems and pageSize
-  const totalPages = Math.ceil(totalItems / pageSize);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [salesmans, setSalesmans] = useState<Salesman[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false); // Prevent duplicate submissions
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  // Fetch customers from API
-  useEffect(() => {
-    const fetchCustomers = async () => {
-      try {
-        setLoading(true);
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(8);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
 
-        // Fetch customers from API
-        const response = await customersApi.getCustomers(currentPage, pageSize, searchTerm);
-        setCustomers(response.data);
-        setTotalItems(response.total || response.data.length); // Use response.total if available
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch customers');
-      } finally {
-        setLoading(false);
+  // Calculate totalPages - limit to max 5 pages
+  const totalPages = Math.min(totalPagesFromApi, 5);
+
+  // Form state
+  const [formData, setFormData] = useState({
+    cus_name: '',
+    cus_phone: '',
+    cus_cnic: '',
+    cus_address: '',
+    cus_sal_id_fk: '',
+    branch: ''
+  });
+
+  // Predefined branch options
+  const branchOptions = [
+    'European Sports Light House'
+  ];
+
+  // Fetch customers
+  const fetchCustomers = async () => {
+    try {
+      setLoading(true);
+
+      // Build query params for search - same as products API
+      const params = new URLSearchParams();
+      params.append('page', currentPage.toString());
+      params.append('limit', pageSize.toString());
+      if (searchTerm) {
+        params.append('search_string', searchTerm);
       }
-    };
 
-    fetchCustomers();
+      const response = await fetch(`/api/customers/viewcustomer?${params.toString()}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Backend returns: { data: [...], page, limit, total, totalPages }
+        console.log('API Response:', data);
+        console.log('Data array length:', data.data?.length);
+        console.log('Total from API:', data.total);
+        console.log('TotalPages from API:', data.totalPages);
+        
+        const customersList = Array.isArray(data.data) ? data.data : [];
+        const total = data.total || customersList.length;
+        const totalPages = data.totalPages || Math.ceil(total / pageSize);
+
+        console.log('Setting customers:', customersList.length);
+        console.log('Setting totalItems:', total);
+        console.log('Setting totalPagesFromApi:', totalPages);
+        
+        setCustomers(customersList);
+        setTotalItems(total);
+        setTotalPagesFromApi(totalPages);
+      }
+    } catch (error: any) {
+      console.error('Error fetching customers:', error);
+      showToast(error.message || 'Failed to fetch customers', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch salesmans for dropdown
+  const fetchSalesmans = async () => {
+    try {
+      const response = await fetch('/api/admin/getcustomervendorbybranch', {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSalesmans(data.salesmans || []);
+      }
+    } catch (error) {
+      console.error('Error fetching salesmans:', error);
+    }
+  };
+
+  // Debounced fetch for customers - only fetch after user stops typing for 300ms
+  useEffect(() => {
+    console.log('useEffect triggered - currentPage:', currentPage, 'searchTerm:', searchTerm);
+    const timer = setTimeout(() => {
+      console.log('Calling fetchCustomers...');
+      fetchCustomers();
+    }, 300);
+
+    return () => {
+      console.log('Clearing timer');
+      clearTimeout(timer);
+    };
   }, [currentPage, pageSize, searchTerm]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
+  // Fetch salesmans on mount
+  useEffect(() => {
+    fetchSalesmans();
+  }, []);
 
+  // Handle form input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'opening_balance' ? Number(value) : value
+      [name]: value
     }));
   };
 
+  // Reset form
+  const resetForm = () => {
+    setFormData({
+      cus_name: '',
+      cus_phone: '',
+      cus_cnic: '',
+      cus_address: '',
+      cus_sal_id_fk: '',
+      branch: ''
+    });
+    setEditingCustomer(null);
+    setShowAddForm(false);
+  };
+
+  // Submit form
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Prevent duplicate submissions
+    if (submitting) return;
+
+    setSubmitting(true);
+
     try {
       if (editingCustomer) {
-        // Update existing customer
-        await customersApi.updateCustomer(editingCustomer.id, formData);
-        showToast('Customer updated successfully', 'success');
+        // Update existing customer - using customers API
+        const response = await fetch(`/api/customers/${editingCustomer.cus_id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            name: formData.cus_name,
+            contacts: JSON.stringify({
+              phone: formData.cus_phone,
+              email: "",
+              address: formData.cus_address
+            }),
+            billing_addr: JSON.stringify({
+              street: formData.cus_address,
+              city: "",
+              country: ""
+            }),
+            shipping_addr: JSON.stringify({
+              street: formData.cus_address,
+              city: "",
+              country: ""
+            }),
+            cnic: formData.cus_cnic,
+            sal_id_fk: formData.cus_sal_id_fk || null,
+            branch: formData.branch || null
+          }),
+        });
+
+        if (response.ok) {
+          Swal.fire({
+            title: 'Updated!',
+            text: 'Customer has been updated successfully.',
+            icon: 'success',
+            timer: 2000,
+            timerProgressBar: true,
+            showConfirmButton: false
+          });
+        } else {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to update customer');
+        }
       } else {
-        // Create new customer
-        await customersApi.createCustomer(formData);
-        showToast('Customer created successfully', 'success');
+        // Create new customer - using customerinvoice API
+        const response = await fetch('/api/customerinvoice/Customers', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            cus_name: formData.cus_name,
+            cus_phone: formData.cus_phone,
+            cus_address: formData.cus_address,
+            cus_cnic: formData.cus_cnic,
+            cus_sal_id_fk: formData.cus_sal_id_fk,
+            branch: formData.branch
+          }),
+        });
+
+        if (response.ok) {
+          Swal.fire({
+            title: 'Created!',
+            text: 'Customer has been created successfully.',
+            icon: 'success',
+            timer: 2000,
+            timerProgressBar: true,
+            showConfirmButton: false
+          });
+        } else {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to create customer');
+        }
       }
 
-      setIsModalOpen(false);
-      setEditingCustomer(null);
-      setFormData({
-        name: '',
-        phone: '',
-        email: '',
-        address: '',
-        city: '',
-        state: '',
-        zip_code: '',
-        country: '',
-        gst_no: '',
-        opening_balance: 0,
-      });
-
-      // Refresh customers
-      const response = await customersApi.getCustomers(currentPage, pageSize, searchTerm);
-      setCustomers(response.data);
-      setTotalItems(response.total || response.data.length);
-    } catch (error) {
+      await fetchCustomers();
+      await resetForm();
+      setSubmitting(false);
+    } catch (error: any) {
       console.error('Error saving customer:', error);
-      showToast('Failed to save customer', 'error');
+      showToast(error.message || 'Failed to save customer', 'error');
+      setSubmitting(false);
     }
   };
 
+  // Edit customer
   const handleEdit = (customer: Customer) => {
     setEditingCustomer(customer);
     setFormData({
-      name: customer.name,
-      phone: customer.phone,
-      email: customer.email || '',
-      address: customer.address || '',
-      city: customer.city || '',
-      state: customer.state || '',
-      zip_code: customer.zip_code || '',
-      country: customer.country || '',
-      gst_no: customer.gst_no || '',
-      opening_balance: customer.opening_balance,
+      cus_name: customer.cus_name,
+      cus_phone: customer.cus_phone,
+      cus_cnic: customer.cus_cnic || '',
+      cus_address: customer.cus_address || '',
+      cus_sal_id_fk: customer.cus_sal_id_fk || '',
+      branch: customer.branch || ''
     });
-    setIsModalOpen(true);
+    setShowAddForm(true);
   };
 
+  // Delete customer
   const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this customer?')) {
-      try {
-        await customersApi.deleteCustomer(id);
-        showToast('Customer deleted successfully', 'success');
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: "You won't be able to revert this!",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel'
+    });
 
-        // Refresh customers
-        const response = await customersApi.getCustomers(currentPage, pageSize, searchTerm);
-        setCustomers(response.data);
-        setTotalItems(response.total || response.data.length);
-      } catch (error) {
+    if (result.isConfirmed) {
+      try {
+        const response = await fetch('/api/customers/' + id, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+
+        if (response.ok) {
+          Swal.fire({
+            title: 'Deleted!',
+            text: 'Customer has been deleted successfully.',
+            icon: 'success',
+            timer: 2000,
+            timerProgressBar: true,
+            showConfirmButton: false
+          });
+          await fetchCustomers();
+        } else {
+          const errorData = await response.json();
+          throw new Error(errorData.error || errorData.detail || 'Failed to delete customer');
+        }
+      } catch (error: any) {
         console.error('Error deleting customer:', error);
-        showToast('Failed to delete customer', 'error');
+        showToast(error.message || 'Failed to delete customer', 'error');
       }
     }
-  };
-
-  const openCreateModal = () => {
-    setEditingCustomer(null);
-    setFormData({
-      name: '',
-      phone: '',
-      email: '',
-      address: '',
-      city: '',
-      state: '',
-      zip_code: '',
-      country: '',
-      gst_no: '',
-      opening_balance: 0,
-    });
-    setIsModalOpen(true);
   };
 
   // Handle page change
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
-    // Update URL with new page
-    const params = new URLSearchParams(window.location.search);
-    params.set('page', page.toString());
-    params.set('limit', pageSize.toString());
-    if (searchTerm) params.set('search', searchTerm);
-    window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
   };
-
-  // Handle search
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setCurrentPage(1); // Reset to first page when searching
-
-    // Update URL with search term
-    const params = new URLSearchParams(window.location.search);
-    params.set('page', '1');
-    params.set('limit', pageSize.toString());
-    if (searchTerm) params.set('search', searchTerm);
-    else params.delete('search');
-
-    window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
-  };
-
-  if (error) {
-    return (
-      <div className="regal-card m-6">
-        <div className="text-red-600 p-4">Error: {error}</div>
-      </div>
-    );
-  }
-
-  const columns = [
-    { key: 'name', title: 'Name' },
-    { key: 'phone', title: 'Phone' },
-    { key: 'email', title: 'Email' },
-    { key: 'city', title: 'City' },
-    { key: 'opening_balance', title: 'Opening Balance', render: (value: number) => `₹${value.toFixed(2)}` },
-  ];
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Customers</h1>
-        <Button onClick={openCreateModal}>Add Customer</Button>
+      <div className="mb-6">
+      <h1 className="text-2xl font-medium text-center mb-6">View Customer</h1>
       </div>
-
-      {/* Search Form */}
-      <form onSubmit={handleSearch} className="mb-6">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search customers..."
-            className="regal-input flex-grow"
-          />
-          <button type="submit" className="regal-btn">Search</button>
+      
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+        {/* Left side - Add New and Back button */}
+        <div className="flex flex-wrap gap-2">
           <button
-            type="button"
+            onClick={() => {
+              resetForm();
+              setShowAddForm(!showAddForm);
+            }}
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+          >
+            {showAddForm ? 'Cancel' : '+ Add Customer'}
+          </button>
+
+          <button
+            onClick={() => router.push('/customer-payment')}
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+          >
+            Customer Payment
+          </button>
+
+        </div>
+
+        {/* Right side - Search */}
+        <div className="w-full sm:w-auto flex gap-2">
+          <div className="relative">
+            <input
+              id="customerSearchInput"
+              type="text"
+              placeholder="Search customers..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              disabled={loading}
+              className="regal-input w-full pl-10 pr-4 py-2 disabled:opacity-50"
+            />
+            <svg
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <button
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap disabled:opacity-50"
             onClick={() => {
               setSearchTerm('');
-              setCurrentPage(1);
+              document.getElementById('customerSearchInput')?.focus();
             }}
-            className="regal-btn bg-gray-500 hover:bg-gray-600"
+            disabled={loading}
           >
-            Clear
+            Search
           </button>
         </div>
-      </form>
-
-      <div className="regal-card">
-        <DataTable
-          columns={columns}
-          data={customers}
-          loading={loading}
-          actions={(record) => (
-            <>
-              <Button variant="outline" size="sm" onClick={() => handleEdit(record)}>
-                Edit
-              </Button>
-              <Button variant="danger" size="sm" onClick={() => handleDelete(record.id)} className="ml-2">
-                Delete
-              </Button>
-            </>
-          )}
-        />
       </div>
 
-      {/* Pagination Controls */}
-      {totalPages > 1 && (
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          totalItems={totalItems}
-          pageSize={pageSize}
-          baseUrl="/customers"
-          onPageChange={handlePageChange}
-        />
-      )}
+      {/* Add/Edit Form */}
+      {showAddForm && (
+        <div className="border-0 p-0 mb-6 transition-all duration-300">
+          <h3 className="text-lg font-semibold mb-4">
+            {editingCustomer ? 'Edit Customer' : 'Add New Customer'}
+          </h3>
+          <form onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Name *</label>
+                <input
+                  type="text"
+                  name="cus_name"
+                  value={formData.cus_name}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                  placeholder="Enter customer name"
+                  required
+                />
+              </div>
 
-      {/* Empty State */}
-      {customers.length === 0 && !loading && (
-        <div className="text-center py-12">
-          <p className="text-gray-500">No customers found.</p>
-          {searchTerm && (
-            <button
-              onClick={() => {
-                setSearchTerm('');
-                setCurrentPage(1);
-              }}
-              className="regal-btn mt-4"
-            >
-              Clear Search
-            </button>
-          )}
+              <div>
+                <label className="block text-sm font-medium mb-1">Phone *</label>
+                <input
+                  type="text"
+                  name="cus_phone"
+                  value={formData.cus_phone}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                  placeholder="Enter phone number"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">CNIC *</label>
+                <input
+                  type="text"
+                  name="cus_cnic"
+                  value={formData.cus_cnic}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                  placeholder="Enter CNIC"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Address *</label>
+                <input
+                  type="text"
+                  name="cus_address"
+                  value={formData.cus_address}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                  placeholder="Enter address"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Salesman</label>
+                <select
+                  name="cus_sal_id_fk"
+                  value={formData.cus_sal_id_fk}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                >
+                  <option value="">Select Salesman</option>
+                  {salesmans.map((salesman) => (
+                    <option key={salesman.sal_id} value={salesman.sal_id}>
+                      {salesman.sal_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Branch</label>
+                <select
+                  name="branch"
+                  value={formData.branch}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                >
+                  <option value="">Select Branch</option>
+                  {branchOptions.map((branch) => (
+                    <option key={branch} value={branch}>
+                      {branch}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? 'Saving...' : (editingCustomer ? 'Update Customer' : 'Add Customer')}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowAddForm(false)}
+                className="regal-btn bg-gray-300 text-black"
+              >
+                Close
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
-      {/* Customer Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={editingCustomer ? 'Edit Customer' : 'Create Customer'}
-      >
-        <Form onSubmit={handleSubmit}>
-          <FormField
-            label="Name"
-            id="name"
-            name="name"
-            type="text"
-            value={formData.name}
-            onChange={handleInputChange}
-            required
-          />
-
-          <FormField
-            label="Phone"
-            id="phone"
-            name="phone"
-            type="text"
-            value={formData.phone}
-            onChange={handleInputChange}
-            required
-          />
-
-          <FormField
-            label="Email"
-            id="email"
-            name="email"
-            type="email"
-            value={formData.email}
-            onChange={handleInputChange}
-          />
-
-          <FormField
-            label="Address"
-            id="address"
-            name="address"
-            type="text"
-            value={formData.address}
-            onChange={handleInputChange}
-            textarea
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField
-              label="City"
-              id="city"
-              name="city"
-              type="text"
-              value={formData.city}
-              onChange={handleInputChange}
-            />
-
-            <FormField
-              label="State"
-              id="state"
-              name="state"
-              type="text"
-              value={formData.state}
-              onChange={handleInputChange}
-            />
+      {/* Customers Table */}
+      <div className="border-0 p-0">
+         {loading ? (
+          <div className="text-center py-4">
+            <div className="animate-pulse">
+              <div className="h-12 bg-gray-200 rounded mb-4"></div>
+              <div className="h-64 bg-gray-200 rounded"></div>
+            </div>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField
-              label="ZIP Code"
-              id="zip_code"
-              name="zip_code"
-              type="text"
-              value={formData.zip_code}
-              onChange={handleInputChange}
-            />
-
-            <FormField
-              label="Country"
-              id="country"
-              name="country"
-              type="text"
-              value={formData.country}
-              onChange={handleInputChange}
-            />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-100 border-b">
+                <tr className='text-xs text-gray-900 uppercase tracking-wider font-semibol'>
+                  <th className="px-4 py-5 text-left">Name</th>
+                  <th className="px-4 py-5 text-left">Phone</th>
+                  <th className="px-4 py-5 text-left">CNIC</th>
+                  <th className="px-4 py-5 text-left">Address</th>
+                  <th className="px-4 py-5 text-left">Balance</th>
+                  <th className="px-4 py-5 text-left">Salesman</th>
+                  <th className="px-4 py-5 text-left">Branch</th>
+                  <th className="px-4 py-5 text-left">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {customers.map((customer) => (
+                  <tr key={customer.cus_id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 whitespace-nowrap">{customer.cus_name}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{customer.cus_phone}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{customer.cus_cnic || '-'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{customer.cus_address || '-'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{customer.cus_balance?.toFixed(2) || '0.00'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {salesmans.find(s => s.sal_id === customer.cus_sal_id_fk)?.sal_name || '-'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">{customer.branch || '-'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleEdit(customer)}
+                          className="text-blue-600 hover:text-blue-800"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(customer.cus_id)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+        )}
+      </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField
-              label="GST Number"
-              id="gst_no"
-              name="gst_no"
-              type="text"
-              value={formData.gst_no}
-              onChange={handleInputChange}
-            />
-
-            <FormField
-              label="Opening Balance"
-              id="opening_balance"
-              name="opening_balance"
-              type="number"
-              value={formData.opening_balance}
-              onChange={handleInputChange}
-            />
-          </div>
-
-          <div className="flex justify-end space-x-3 mt-6">
-            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary">
-              {editingCustomer ? 'Update' : 'Create'} Customer
-            </Button>
-          </div>
-        </Form>
-      </Modal>
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-6">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            baseUrl="/customers"
+            onPageChange={handlePageChange}
+          />
+        </div>
+      )}
     </div>
   );
 };

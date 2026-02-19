@@ -58,8 +58,9 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
         throw new Error(result.error);
       }
 
-      // Update session after sign in
-      await updateSession();
+      // Don't wait for session update - it will be fetched on next page load
+      // This makes login faster
+      setSession({ user: { username: credentials.username, role: credentials.role } });
     } catch (error) {
       console.error('Sign in error:', error);
       throw error;

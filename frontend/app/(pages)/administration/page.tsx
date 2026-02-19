@@ -674,15 +674,15 @@ const AdministrationPage: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-100">
-                <tr className='text-black font-semibold text-xs uppercase'>
-                  <th className="px-6 py-4 text-left tracking-wider">Username</th>
-                  <th className="px-6 py-4 text-left tracking-wider">Password</th>
-                  <th className="px-6 py-4 text-left tracking-wider">Role</th>
-                  <th className="px-6 py-4 text-left tracking-wider">Phone</th>
-                  <th className="px-6 py-4 text-left tracking-wider">CNIC</th>
-                  <th className="px-6 py-4 text-left tracking-wider">Address</th>
-                  <th className="px-6 py-4 text-left tracking-wider">Branch</th>
-                  <th className="px-6 py-4 text-left tracking-wider">Actions</th>
+                <tr className='text-gray-900 font-semibold text-xs uppercase tracking-wider'>
+                  <th className="px-6 py-5 text-left">Username</th>
+                  <th className="px-6 py-5 text-left">Password</th>
+                  <th className="px-6 py-5 text-left">Role</th>
+                  <th className="px-6 py-5 text-left">Phone</th>
+                  <th className="px-6 py-5 text-left">CNIC</th>
+                  <th className="px-6 py-5 text-left">Address</th>
+                  <th className="px-6 py-5 text-left">Branch</th>
+                  <th className="px-6 py-5 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">

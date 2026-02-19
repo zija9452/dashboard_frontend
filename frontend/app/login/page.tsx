@@ -39,7 +39,6 @@ const LoginPage: React.FC = () => {
       setPassword('');
 
       router.push('/dashboard'); // Redirect to dashboard after successful login
-      router.refresh(); // Refresh the page to update session context
     } catch (err) {
       setError('Invalid credentials. Please try again.');
       console.error('Login error:', err);
@@ -49,7 +48,7 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-regal-yellow/10 via-white to-regal-black/10 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-regal-yellow/10 via-white to-regal-black/10 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         {/* Logo and Header */}
         <div className="text-center">

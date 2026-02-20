@@ -1,188 +1,468 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useToast } from '@/components/ui/Toast';
+import Swal from 'sweetalert2';
+import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
-import { DEFAULT_PAGE_SIZE } from '@/lib/constants/pagination';
+import ReportModal from '@/components/ui/ReportModal';
+import PageHeader from '@/components/ui/PageHeader';
 
-// Define salesman interface
 interface Salesman {
-  id: string;
-  name: string;
-  code: string;
-  phone?: string;
-  address?: string;
+  sal_id: string;
+  sal_name: string;
+  sal_phone: string;
+  sal_address: string;
   branch: string;
-  commission_rate: number;
 }
 
 const SalesmanPage: React.FC = () => {
+  const router = useRouter();
+  const { showToast } = useToast();
+
   const [salesmen, setSalesmen] = useState<Salesman[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [totalItems, setTotalItems] = useState<number>(0);
-  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
-  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingSalesman, setEditingSalesman] = useState<Salesman | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showReportModal, setShowReportModal] = useState(false);
 
-  // Calculate totalPages based on totalItems and pageSize
-  const totalPages = Math.ceil(totalItems / pageSize);
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(8);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
 
-  // Simulated data fetch
-  useEffect(() => {
-    // In a real app, this would be an API call
-    const fetchSalesmen = async () => {
-      try {
-        setLoading(true);
+  // Calculate totalPages - limit to max 5 pages
+  const totalPages = Math.min(totalPagesFromApi, 5);
 
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 500));
+  // Form state
+  const [formData, setFormData] = useState({
+    sal_name: '',
+    sal_phone: '',
+    sal_address: '',
+    branch: ''
+  });
 
-        // Mock data
-        const mockSalesmen: Salesman[] = [
-          { id: '1', name: 'John Smith', code: 'SM001', phone: '123-456-7890', branch: 'Main Branch', commission_rate: 5.0 },
-          { id: '2', name: 'Jane Doe', code: 'SM002', phone: '098-765-4321', branch: 'Downtown Branch', commission_rate: 7.5 },
-          { id: '3', name: 'Bob Johnson', code: 'SM003', phone: '555-555-5555', branch: 'West Branch', commission_rate: 6.0 },
-          { id: '4', name: 'Alice Williams', code: 'SM004', phone: '111-222-3333', branch: 'East Branch', commission_rate: 4.5 },
-          { id: '5', name: 'Charlie Brown', code: 'SM005', phone: '444-555-6666', branch: 'North Branch', commission_rate: 8.0 },
-          { id: '6', name: 'Diana Miller', code: 'SM006', phone: '777-888-9999', branch: 'South Branch', commission_rate: 5.5 },
-          { id: '7', name: 'Edward Davis', code: 'SM007', phone: '333-444-5555', branch: 'Central Branch', commission_rate: 7.0 },
-          { id: '8', name: 'Fiona Garcia', code: 'SM008', phone: '666-777-8888', branch: 'Main Branch', commission_rate: 6.5 },
-        ];
+  // Predefined branch options
+  const branchOptions = [
+    'European Sports Light House'
+  ];
 
-        setSalesmen(mockSalesmen);
-        setTotalItems(mockSalesmen.length);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch salesmen');
-      } finally {
-        setLoading(false);
+  // Fetch salesmen
+  const fetchSalesmen = async () => {
+    try {
+      setLoading(true);
+
+      const params = new URLSearchParams();
+      params.append('skip', ((currentPage - 1) * pageSize).toString());
+      params.append('limit', pageSize.toString());
+      if (searchTerm) {
+        params.append('search_string', searchTerm);
       }
-    };
 
+      const response = await fetch(`/api/salesman/viewsalesman?${params.toString()}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const salesmenList = Array.isArray(data) ? data : [];
+        const total = salesmenList.length;
+        const totalPages = Math.ceil(total / pageSize);
+
+        setSalesmen(salesmenList);
+        setTotalItems(total);
+        setTotalPagesFromApi(totalPages);
+      }
+    } catch (error: any) {
+      console.error('Error fetching salesmen:', error);
+      showToast(error.message || 'Failed to fetch salesmen', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch salesmen on page change or search term change
+  useEffect(() => {
     fetchSalesmen();
   }, [currentPage, pageSize, searchTerm]);
+
+  // Handle form input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Reset form
+  const resetForm = () => {
+    setFormData({
+      sal_name: '',
+      sal_phone: '',
+      sal_address: '',
+      branch: ''
+    });
+    setEditingSalesman(null);
+    setShowAddForm(false);
+  };
+
+  // Submit form
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (submitting) return;
+    setSubmitting(true);
+
+    try {
+      if (editingSalesman) {
+        // Update existing salesman
+        const response = await fetch(`/api/salesman/${editingSalesman.sal_id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            name: formData.sal_name,
+            phone: formData.sal_phone,
+            address: formData.sal_address,
+            branch: formData.branch
+          }),
+        });
+
+        if (response.ok) {
+          Swal.fire({
+            title: 'Updated!',
+            text: 'Salesman has been updated successfully.',
+            icon: 'success',
+            timer: 2000,
+            timerProgressBar: true,
+            showConfirmButton: false
+          });
+        } else {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Failed to update salesman');
+        }
+      } else {
+        // Create new salesman
+        const response = await fetch('/api/salesman/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            name: formData.sal_name,
+            phone: formData.sal_phone,
+            address: formData.sal_address,
+            branch: formData.branch
+          }),
+        });
+
+        if (response.ok) {
+          Swal.fire({
+            title: 'Created!',
+            text: 'Salesman has been created successfully.',
+            icon: 'success',
+            timer: 2000,
+            timerProgressBar: true,
+            showConfirmButton: false
+          });
+        } else {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Failed to create salesman');
+        }
+      }
+
+      await fetchSalesmen();
+      await resetForm();
+      setSubmitting(false);
+    } catch (error: any) {
+      console.error('Error saving salesman:', error);
+      showToast(error.message || 'Failed to save salesman', 'error');
+      setSubmitting(false);
+    }
+  };
+
+  // Edit salesman
+  const handleEdit = (salesman: Salesman) => {
+    setEditingSalesman(salesman);
+    setFormData({
+      sal_name: salesman.sal_name,
+      sal_phone: salesman.sal_phone || '',
+      sal_address: salesman.sal_address || '',
+      branch: salesman.branch || ''
+    });
+    setShowAddForm(true);
+  };
+
+  // Delete salesman
+  const handleDelete = async (id: string) => {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: "You won't be able to revert this!",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel'
+    });
+
+    if (result.isConfirmed) {
+      try {
+        const response = await fetch(`/api/salesman/${id}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+
+        if (response.ok) {
+          Swal.fire({
+            title: 'Deleted!',
+            text: 'Salesman has been deleted successfully.',
+            icon: 'success',
+            timer: 2000,
+            timerProgressBar: true,
+            showConfirmButton: false
+          });
+          await fetchSalesmen();
+        } else {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Failed to delete salesman');
+        }
+      } catch (error: any) {
+        console.error('Error deleting salesman:', error);
+        showToast(error.message || 'Failed to delete salesman', 'error');
+      }
+    }
+  };
 
   // Handle page change
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
   };
 
-  // Handle search
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setCurrentPage(1); // Reset to first page when searching
-  };
-
-  if (loading) {
-    return (
-      <div className="regal-card m-6">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
-          <div className="space-y-4">
-            {[...Array(8)].map((_, i) => (
-              <div key={i} className="h-16 bg-gray-200 rounded"></div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="regal-card m-6">
-        <div className="text-red-600 p-4">Error: {error}</div>
-      </div>
-    );
-  }
-
   return (
-    <div className="regal-card m-6">
-      <h1 className="text-2xl font-bold mb-6">Salesmen</h1>
+    <div className="p-6">
+      <PageHeader title="View Salesman" />
 
-      {/* Search Form */}
-      <form onSubmit={handleSearch} className="mb-6">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search salesmen..."
-            className="regal-input flex-grow"
-          />
-          <button type="submit" className="regal-btn">Search</button>
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+        {/* Left side - Add New and Report buttons */}
+        <div className="flex flex-wrap gap-2">
           <button
-            type="button"
+            onClick={() => {
+              resetForm();
+              setShowAddForm(!showAddForm);
+            }}
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+          >
+            {showAddForm ? 'Cancel' : '+ Add Salesman'}
+          </button>
+
+          <button
+            onClick={() => setShowReportModal(true)}
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+          >
+            Salesman Details
+          </button>
+        </div>
+
+        {/* Right side - Search */}
+        <div className="w-full sm:w-auto flex gap-2">
+          <div className="relative">
+            <input
+              id="salesmanSearchInput"
+              type="text"
+              placeholder="Search salesmen..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="regal-input w-full pl-10 pr-4 py-2"
+            />
+            <svg
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <button
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
             onClick={() => {
               setSearchTerm('');
-              setCurrentPage(1);
+              document.getElementById('salesmanSearchInput')?.focus();
             }}
-            className="regal-btn bg-gray-500 hover:bg-gray-600"
           >
             Clear
           </button>
         </div>
-      </form>
-
-      {/* Salesmen Table */}
-      <div className="overflow-x-auto">
-        <table className="regal-table">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Branch</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Commission Rate</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {salesmen.map((salesman) => (
-              <tr key={salesman.id}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{salesman.name}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{salesman.code}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{salesman.phone || '-'}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{salesman.branch}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{salesman.commission_rate}%</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button className="text-indigo-600 hover:text-indigo-900 mr-3">Edit</button>
-                  <button className="text-red-600 hover:text-red-900">Delete</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
 
-      {/* Pagination Controls */}
-      {totalPages > 1 && (
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          totalItems={totalItems}
-          pageSize={pageSize}
-          baseUrl="/salesman"
-          onPageChange={handlePageChange}
-        />
-      )}
+      {/* Add/Edit Form */}
+      {showAddForm && (
+        <div className="border-0 p-0 mb-6 transition-all duration-300">
+          <h3 className="text-lg font-semibold mb-4">
+            {editingSalesman ? 'Edit Salesman' : 'Add New Salesman'}
+          </h3>
+          <form onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Name *</label>
+                <input
+                  type="text"
+                  name="sal_name"
+                  value={formData.sal_name}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                  placeholder="Enter salesman name"
+                  required
+                />
+              </div>
 
-      {/* Empty State */}
-      {salesmen.length === 0 && !loading && (
-        <div className="text-center py-12">
-          <p className="text-gray-500">No salesmen found.</p>
-          {searchTerm && (
-            <button
-              onClick={() => {
-                setSearchTerm('');
-                setCurrentPage(1);
-              }}
-              className="regal-btn mt-4"
-            >
-              Clear Search
-            </button>
-          )}
+              <div>
+                <label className="block text-sm font-medium mb-1">Phone *</label>
+                <input
+                  type="text"
+                  name="sal_phone"
+                  value={formData.sal_phone}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                  placeholder="Enter phone number"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Address *</label>
+                <input
+                  type="text"
+                  name="sal_address"
+                  value={formData.sal_address}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                  placeholder="Enter address"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Branch</label>
+                <select
+                  name="branch"
+                  value={formData.branch}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                >
+                  <option value="">Select Branch</option>
+                  {branchOptions.map((branch) => (
+                    <option key={branch} value={branch}>
+                      {branch}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? 'Saving...' : (editingSalesman ? 'Update Salesman' : 'Add Salesman')}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowAddForm(false)}
+                className="regal-btn bg-gray-300 text-black"
+              >
+                Close
+              </button>
+            </div>
+          </form>
         </div>
       )}
+
+      {/* Salesmen Table */}
+      <div className="border-0 p-0">
+        {loading ? (
+          <div className="text-center py-4">
+            <div className="animate-pulse">
+              <div className="h-12 bg-gray-200 rounded mb-4"></div>
+              <div className="h-64 bg-gray-200 rounded"></div>
+            </div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full table-fixed">
+              <thead className="bg-gray-100 border-b">
+                <tr className='text-xs text-gray-900 uppercase tracking-wider font-semibold'>
+                  <th className="px-4 py-5 text-left w-48">Name</th>
+                  <th className="px-4 py-5 text-left w-32">Phone</th>
+                  <th className="px-4 py-5 text-left">Address</th>
+                  <th className="px-4 py-5 text-left w-40">Branch</th>
+                  <th className="px-4 py-5 text-left w-32">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {salesmen.map((salesman) => (
+                  <tr key={salesman.sal_id} className="hover:bg-gray-50 text-sm">
+                    <td className="px-4 py-4 whitespace-nowrap overflow-hidden text-ellipsis">{salesman.sal_name}</td>
+                    <td className="px-4 py-4 whitespace-nowrap">{salesman.sal_phone}</td>
+                    <td className="px-4 py-4 whitespace-nowrap overflow-hidden text-ellipsis">{salesman.sal_address || '-'}</td>
+                    <td className="px-4 py-4 whitespace-nowrap">{salesman.branch || '-'}</td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleEdit(salesman)}
+                          className="text-blue-600 hover:text-blue-800"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(salesman.sal_id)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-6">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            baseUrl="/salesman"
+            onPageChange={handlePageChange}
+          />
+        </div>
+      )}
+
+      {/* Salesman Report Modal */}
+      <ReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        title="Salesman Details"
+        reportUrl="/api/salesman/report"
+      />
     </div>
   );
 };

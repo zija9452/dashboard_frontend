@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
+import PageHeader from '@/components/ui/PageHeader';
 
 // Define TypeScript interface for admin user
 interface AdminUser {
@@ -467,9 +468,8 @@ const AdministrationPage: React.FC = () => {
   };
 
   return (
-    <div className="p-0">
-      {/* Heading */}
-      <h1 className="text-2xl font-medium text-center mb-6">View User</h1>
+    <div className="p-4">
+      <PageHeader title="View User" />
 
       {/* Controls Section - Single row with Add New and Search */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
@@ -511,7 +511,7 @@ const AdministrationPage: React.FC = () => {
               document.getElementById('searchInput')?.focus();
             }}
           >
-            Search
+            Clear
           </button>
         </div>
       </div>

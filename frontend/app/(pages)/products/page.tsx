@@ -6,6 +6,7 @@ import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import { productsApi, Product } from '@/lib/api/products';
+import PageHeader from '@/components/ui/PageHeader';
 
 interface Category {
   id: string;
@@ -370,9 +371,8 @@ const ProductsPage: React.FC = () => {
   };
 
   return (
-    <div className="p-0">
-      {/* Heading */}
-      <h1 className="text-2xl font-medium text-center mb-6">View Product</h1>
+    <div className="p-4">
+      <PageHeader title="View Product" />
 
       {/* Controls Section */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
@@ -469,7 +469,7 @@ const ProductsPage: React.FC = () => {
               document.getElementById('searchInput')?.focus();
             }}
           >
-            Search
+            Clear
           </button>
         </div>
       </div>

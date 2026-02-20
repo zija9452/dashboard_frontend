@@ -5,6 +5,8 @@ import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
+import ReportModal from '@/components/ui/ReportModal';
+import PageHeader from '@/components/ui/PageHeader';
 
 interface Customer {
   cus_id: string;
@@ -33,6 +35,7 @@ const CustomersPage: React.FC = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showReportModal, setShowReportModal] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -121,18 +124,10 @@ const CustomersPage: React.FC = () => {
     }
   };
 
-  // Debounced fetch for customers - only fetch after user stops typing for 300ms
+  // Fetch customers on page change or initial load
   useEffect(() => {
-    console.log('useEffect triggered - currentPage:', currentPage, 'searchTerm:', searchTerm);
-    const timer = setTimeout(() => {
-      console.log('Calling fetchCustomers...');
-      fetchCustomers();
-    }, 300);
-
-    return () => {
-      console.log('Clearing timer');
-      clearTimeout(timer);
-    };
+    console.log('useEffect triggered - currentPage:', currentPage);
+    fetchCustomers();
   }, [currentPage, pageSize, searchTerm]);
 
   // Fetch salesmans on mount
@@ -321,11 +316,9 @@ const CustomersPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6">
-      <div className="mb-6">
-      <h1 className="text-2xl font-medium text-center mb-6">View Customer</h1>
-      </div>
-      
+    <div className="p-4">
+      <PageHeader title="View Customer" />
+
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
         {/* Left side - Add New and Back button */}
         <div className="flex flex-wrap gap-2">
@@ -346,6 +339,12 @@ const CustomersPage: React.FC = () => {
             Customer Payment
           </button>
 
+          <button
+            onClick={() => setShowReportModal(true)}
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+          >
+            Customer Details
+          </button>
         </div>
 
         {/* Right side - Search */}
@@ -357,8 +356,7 @@ const CustomersPage: React.FC = () => {
               placeholder="Search customers..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              disabled={loading}
-              className="regal-input w-full pl-10 pr-4 py-2 disabled:opacity-50"
+              className="regal-input w-full pl-10 pr-4 py-2"
             />
             <svg
               className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400"
@@ -370,14 +368,13 @@ const CustomersPage: React.FC = () => {
             </svg>
           </div>
           <button
-            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap disabled:opacity-50"
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
             onClick={() => {
               setSearchTerm('');
               document.getElementById('customerSearchInput')?.focus();
             }}
-            disabled={loading}
           >
-            Search
+            Clear
           </button>
         </div>
       </div>
@@ -509,32 +506,32 @@ const CustomersPage: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full table-fixed">
               <thead className="bg-gray-100 border-b">
                 <tr className='text-xs text-gray-900 uppercase tracking-wider font-semibol'>
-                  <th className="px-4 py-5 text-left">Name</th>
-                  <th className="px-4 py-5 text-left">Phone</th>
-                  <th className="px-4 py-5 text-left">CNIC</th>
+                  <th className="px-4 py-5 text-left w-48">Name</th>
+                  <th className="px-4 py-5 text-left w-32">Phone</th>
+                  <th className="px-4 py-5 text-left w-32">CNIC</th>
                   <th className="px-4 py-5 text-left">Address</th>
-                  <th className="px-4 py-5 text-left">Balance</th>
-                  <th className="px-4 py-5 text-left">Salesman</th>
-                  <th className="px-4 py-5 text-left">Branch</th>
-                  <th className="px-4 py-5 text-left">Actions</th>
+                  <th className="px-4 py-5 text-left w-24">Balance</th>
+                  <th className="px-4 py-5 text-left w-40">Salesman</th>
+                  <th className="px-4 py-5 text-left w-40">Branch</th>
+                  <th className="px-4 py-5 text-left w-32">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {customers.map((customer) => (
-                  <tr key={customer.cus_id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 whitespace-nowrap">{customer.cus_name}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">{customer.cus_phone}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">{customer.cus_cnic || '-'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">{customer.cus_address || '-'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">{customer.cus_balance?.toFixed(2) || '0.00'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
+                  <tr key={customer.cus_id} className="hover:bg-gray-50 text-sm">
+                    <td className="px-4 py-4 whitespace-nowrap overflow-hidden text-ellipsis">{customer.cus_name}</td>
+                    <td className="px-4 py-4 whitespace-nowrap">{customer.cus_phone}</td>
+                    <td className="px-4 py-4 whitespace-nowrap">{customer.cus_cnic || '-'}</td>
+                    <td className="px-4 py-4">{customer.cus_address || '-'}</td>
+                    <td className="px-4 py-4 whitespace-nowrap">{customer.cus_balance?.toFixed(2) || '0.00'}</td>
+                    <td className="px-4 py-4">
                       {salesmans.find(s => s.sal_id === customer.cus_sal_id_fk)?.sal_name || '-'}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">{customer.branch || '-'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td className="px-4 py-4">{customer.branch || '-'}</td>
+                    <td className="px-4 py-4 whitespace-nowrap">
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleEdit(customer)}
@@ -571,6 +568,14 @@ const CustomersPage: React.FC = () => {
           />
         </div>
       )}
+
+      {/* Customer Report Modal */}
+      <ReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        title="Customer Details"
+        reportUrl="/api/customers/report"
+      />
     </div>
   );
 };

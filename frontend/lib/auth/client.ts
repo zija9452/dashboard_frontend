@@ -99,11 +99,17 @@ export const getSession = async (): Promise<SessionData | null> => {
     });
 
     if (!response.ok) {
-      if (response.status === 401 || response.status === 404) {
-        cachedSession = null;
-        sessionTimestamp = null;
+      // Clear session on any error (401, 404, 500, etc.)
+      cachedSession = null;
+      sessionTimestamp = null;
+      
+      // Don't throw error for 401/404/500 - just return null
+      // This prevents the error from breaking the UI
+      if (response.status === 401 || response.status === 404 || response.status === 500) {
+        console.log(`Session invalid or backend error (${response.status}) - clearing session`);
         return null;
       }
+      
       throw new Error(`Session check failed: ${response.status}`);
     }
 

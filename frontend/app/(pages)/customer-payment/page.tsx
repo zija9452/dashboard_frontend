@@ -63,29 +63,25 @@ const CustomerPaymentPage: React.FC = () => {
   const fetchCustomers = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/customerinvoice/viewcustomerorder', {
+      // Fetch all customers from customers API
+      const response = await fetch('/api/customers/viewcustomer', {
         method: 'GET',
         credentials: 'include',
       });
 
       if (response.ok) {
         const data = await response.json();
-        // Extract unique customers from orders
-        const uniqueCustomers: Customer[] = [];
-        const customerIds = new Set();
+        // Backend returns: { data: [...], page, limit, total, totalPages }
+        const customersList = Array.isArray(data.data) ? data.data : [];
         
-        data.forEach((order: any) => {
-          if (!customerIds.has(order.customer_id)) {
-            customerIds.add(order.customer_id);
-            uniqueCustomers.push({
-              cus_id: order.customer_id,
-              cus_name: order.customer_name,
-              cus_phone: order.customer_phone || '',
-              cus_balance: order.balance_due || 0
-            });
-          }
-        });
-        
+        // Map to Customer interface
+        const uniqueCustomers: Customer[] = customersList.map((c: any) => ({
+          cus_id: c.cus_id,
+          cus_name: c.cus_name,
+          cus_phone: c.cus_phone,
+          cus_balance: c.cus_balance || 0
+        }));
+
         setCustomers(uniqueCustomers);
       }
     } catch (error) {

@@ -102,21 +102,43 @@ const BarcodePreview: React.FC<BarcodePreviewProps> = ({
 
   // Helper function to draw barcode placeholder
   const drawBarcodePlaceholder = (ctx: CanvasRenderingContext2D, data: string, x: number, y: number) => {
-    // Draw alternating bars
+    // Draw alternating bars (barcode lines)
     const barWidth = 2;
-    const barHeight = 30;
+    const barHeight = 80;
 
-    for (let i = 0; i < data.length; i++) {
+    for (let i = 0; i < Math.min(data.length, 30); i++) {
       const barX = x + (i * barWidth * 2);
       // Alternate between thick and thin bars
-      ctx.fillStyle = i % 2 === 0 ? '#000000' : '#cccccc';
-      ctx.fillRect(barX, y, barWidth, barHeight);
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(barX, y, barWidth + (i % 3), barHeight);
     }
+  };
 
-    // Draw data text below
+  // Helper function to draw complete label with all elements
+  const drawCompleteLabel = (
+    ctx: CanvasRenderingContext2D,
+    barcode: string,
+    productName: string,
+    price: number,
+    startX: number,
+    startY: number
+  ) => {
+    // 1. Draw barcode lines
+    drawBarcodePlaceholder(ctx, barcode, startX + 50, startY + 50);
+
+    // 2. Draw barcode number (below barcode)
     ctx.fillStyle = '#000000';
-    ctx.font = '10px Arial';
-    ctx.fillText(data, x, y + barHeight + 15);
+    ctx.font = 'bold 16px Arial';
+    ctx.fillText(barcode, startX + 60, startY + 145);
+
+    // 3. Draw product name (below barcode number)
+    ctx.font = '14px Arial';
+    const truncatedName = productName.length > 35 ? productName.substring(0, 35) + '...' : productName;
+    ctx.fillText(truncatedName, startX + 60, startY + 170);
+
+    // 4. Draw price (at the bottom, larger and bold)
+    ctx.font = 'bold 20px Arial';
+    ctx.fillText(`Price: Rs. ${price.toFixed(2)}`, startX + 60, startY + 200);
   };
 
   return (

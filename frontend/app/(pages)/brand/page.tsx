@@ -27,6 +27,11 @@ const BrandPage: React.FC = () => {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(8);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
+
+  // Calculate totalPages - limit to max 5 pages
+  const totalPages = Math.min(totalPagesFromApi, 5);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -37,7 +42,11 @@ const BrandPage: React.FC = () => {
   const fetchBrands = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/brand/', {
+      const params = new URLSearchParams();
+      params.append('page', currentPage.toString());
+      params.append('limit', pageSize.toString());
+
+      const response = await fetch(`/api/brand/?${params.toString()}`, {
         method: 'GET',
         credentials: 'include',
       });
@@ -47,13 +56,13 @@ const BrandPage: React.FC = () => {
       }
 
       const data = await response.json();
-      
-      // Filter by search term
-      const filtered = data.filter((brand: Brand) =>
-        brand.name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      
-      setBrands(filtered);
+      const brandsList = data.data || [];
+      const total = data.total || brandsList.length;
+      const totalPages = data.totalPages || Math.ceil(total / pageSize);
+
+      setBrands(brandsList);
+      setTotalItems(total);
+      setTotalPagesFromApi(totalPages);
     } catch (error) {
       console.error('Error fetching brands:', error);
       showToast('Failed to fetch brands', 'error');
@@ -64,7 +73,7 @@ const BrandPage: React.FC = () => {
 
   useEffect(() => {
     fetchBrands();
-  }, [searchTerm]);
+  }, [currentPage, pageSize]);
 
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -208,8 +217,10 @@ const BrandPage: React.FC = () => {
     }
   };
 
-  // Pagination
-  const totalPages = Math.ceil(brands.length / pageSize);
+  // Handle page change
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
 
   return (
     <div className="p-4">
@@ -371,10 +382,10 @@ const BrandPage: React.FC = () => {
         <Pagination
           currentPage={currentPage}
           totalPages={totalPages}
-          totalItems={brands.length}
+          totalItems={totalItems}
           pageSize={pageSize}
           baseUrl="/brand"
-          onPageChange={setCurrentPage}
+          onPageChange={handlePageChange}
         />
       )}
     </div>

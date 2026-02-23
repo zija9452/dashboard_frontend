@@ -60,7 +60,7 @@ const VendorsPage: React.FC = () => {
 
       // Build query params for search
       const params = new URLSearchParams();
-      params.append('skip', ((currentPage - 1) * pageSize).toString());
+      params.append('page', currentPage.toString());
       params.append('limit', pageSize.toString());
       if (searchTerm) {
         params.append('search_string', searchTerm);
@@ -79,9 +79,9 @@ const VendorsPage: React.FC = () => {
       const data = await response.json();
       console.log('API Response:', data);
 
-      const vendorsList = Array.isArray(data) ? data : [];
-      const total = vendorsList.length;
-      const totalPages = Math.ceil(total / pageSize);
+      const vendorsList = data.data || [];
+      const total = data.total || vendorsList.length;
+      const totalPages = data.totalPages || Math.ceil(total / pageSize);
 
       setVendors(vendorsList);
       setTotalItems(total);

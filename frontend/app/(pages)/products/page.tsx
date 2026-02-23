@@ -693,10 +693,10 @@ const ProductsPage: React.FC = () => {
                   <th className="px-2 py-5 text-left w-32">Name</th>
                   <th className="px-2 py-5 text-left w-20">Price</th>
                   <th className="px-2 py-5 text-left w-20">Cost</th>
-                  <th className="px-2 py-5 text-left w-32">Barcode</th>
-                  <th className="px-2 py-5 text-left w-24">Discount</th>
-                  <th className="px-2 py-5 text-left w-20">Stock</th>
-                  <th className="px-2 py-5 text-left w-28">Limited Qty</th>
+                  <th className="px-2 py-5 text-left w-28">Barcode</th>
+                  <th className="px-2 py-5 text-left w-20">Discount</th>
+                  <th className="px-2 py-5 w-20">Stock</th>
+                  <th className="px-2 py-5 text-left w-24">Limited Qty</th>
                   <th className="px-2 py-5 text-left w-28">Category</th>
                   <th className="px-2 py-5 text-left w-32">Branch</th>
                   <th className="px-2 py-5 text-left">Brand</th>
@@ -720,9 +720,9 @@ const ProductsPage: React.FC = () => {
                     <td className="px-2 py-4">{product.pro_price.toFixed(2)}</td>
                     <td className="px-2 py-4">{product.pro_cost.toFixed(2)}</td>
                     <td className="px-2 py-4">{product.pro_barcode || 'N/A'}</td>
-                    <td className="px-2 py-4">{product.pro_dis}%</td>
-                    <td className="px-2 py-4">{product.stock || 0}</td>
-                    <td className="px-5 py-4">{product.limitedquan || 0}</td>
+                    <td className="px-2 py-4 text-center">{product.pro_dis}%</td>
+                    <td className="px-2 py-4 text-center">{product.stock || 0}</td>
+                    <td className="px-5 py-4 text-center">{product.limitedquan || 0}</td>
                     <td className="px-2 py-4">{product.cat_id_fk || 'N/A'}</td>
                     <td className="px-2 py-4">{product.branch || 'N/A'}</td>
                     <td className="px-2 py-4">{product.brand || 'N/A'}</td>

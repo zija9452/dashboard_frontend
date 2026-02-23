@@ -56,7 +56,7 @@ const SalesmanPage: React.FC = () => {
       setLoading(true);
 
       const params = new URLSearchParams();
-      params.append('skip', ((currentPage - 1) * pageSize).toString());
+      params.append('page', currentPage.toString());
       params.append('limit', pageSize.toString());
       if (searchTerm) {
         params.append('search_string', searchTerm);
@@ -69,9 +69,9 @@ const SalesmanPage: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        const salesmenList = Array.isArray(data) ? data : [];
-        const total = salesmenList.length;
-        const totalPages = Math.ceil(total / pageSize);
+        const salesmenList = data.data || [];
+        const total = data.total || salesmenList.length;
+        const totalPages = data.totalPages || Math.ceil(total / pageSize);
 
         setSalesmen(salesmenList);
         setTotalItems(total);
@@ -404,9 +404,9 @@ const SalesmanPage: React.FC = () => {
             <table className="w-full table-fixed">
               <thead className="bg-gray-100 border-b">
                 <tr className='text-xs text-gray-900 uppercase tracking-wider font-semibold'>
-                  <th className="px-4 py-5 text-left w-48">Name</th>
+                  <th className="px-4 py-5 text-left w-40">Name</th>
                   <th className="px-4 py-5 text-left w-32">Phone</th>
-                  <th className="px-4 py-5 text-left">Address</th>
+                  <th className="px-4 py-5 text-left w-40">Address</th>
                   <th className="px-4 py-5 text-left w-40">Branch</th>
                   <th className="px-4 py-5 text-left w-32">Actions</th>
                 </tr>
@@ -414,10 +414,10 @@ const SalesmanPage: React.FC = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {salesmen.map((salesman) => (
                   <tr key={salesman.sal_id} className="hover:bg-gray-50 text-sm">
-                    <td className="px-4 py-4 whitespace-nowrap overflow-hidden text-ellipsis">{salesman.sal_name}</td>
+                    <td className="px-4 py-4">{salesman.sal_name}</td>
                     <td className="px-4 py-4 whitespace-nowrap">{salesman.sal_phone}</td>
-                    <td className="px-4 py-4 whitespace-nowrap overflow-hidden text-ellipsis">{salesman.sal_address || '-'}</td>
-                    <td className="px-4 py-4 whitespace-nowrap">{salesman.branch || '-'}</td>
+                    <td className="px-4 py-4">{salesman.sal_address || '-'}</td>
+                    <td className="px-4 py-4">{salesman.branch || '-'}</td>
                     <td className="px-4 py-4 whitespace-nowrap">
                       <div className="flex gap-2">
                         <button

@@ -6,9 +6,8 @@ export interface Salesman {
   id: string;
   name: string;
   phone: string;
-  email?: string;
   address?: string;
-  commission_rate: number;
+  branch?: string;
   created_at: string;
   updated_at: string;
 }

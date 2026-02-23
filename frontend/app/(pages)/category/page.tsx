@@ -28,6 +28,11 @@ const CategoryPage: React.FC = () => {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(8);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
+
+  // Calculate totalPages - limit to max 5 pages
+  const totalPages = Math.min(totalPagesFromApi, 5);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -39,7 +44,14 @@ const CategoryPage: React.FC = () => {
   const fetchCategories = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/category/', {
+      const params = new URLSearchParams();
+      params.append('page', currentPage.toString());
+      params.append('limit', pageSize.toString());
+      if (searchTerm) {
+        params.append('branch', searchTerm);
+      }
+
+      const response = await fetch(`/api/category/?${params.toString()}`, {
         method: 'GET',
         credentials: 'include',
       });
@@ -49,14 +61,13 @@ const CategoryPage: React.FC = () => {
       }
 
       const data = await response.json();
+      const categoriesList = data.data || [];
+      const total = data.total || categoriesList.length;
+      const totalPages = data.totalPages || Math.ceil(total / pageSize);
 
-      // Filter by search term
-      const filtered = data.filter((cat: Category) =>
-        cat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        cat.branch.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-
-      setCategories(filtered);
+      setCategories(categoriesList);
+      setTotalItems(total);
+      setTotalPagesFromApi(totalPages);
     } catch (error) {
       console.error('Error fetching categories:', error);
       showToast('Failed to fetch categories', 'error');
@@ -67,7 +78,7 @@ const CategoryPage: React.FC = () => {
 
   useEffect(() => {
     fetchCategories();
-  }, [searchTerm]);
+  }, [currentPage, pageSize, searchTerm]);
 
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -213,8 +224,10 @@ const CategoryPage: React.FC = () => {
     }
   };
 
-  // Pagination
-  const totalPages = Math.ceil(categories.length / pageSize);
+  // Handle page change
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
 
   return (
     <div className="p-4">
@@ -391,10 +404,10 @@ const CategoryPage: React.FC = () => {
         <Pagination
           currentPage={currentPage}
           totalPages={totalPages}
-          totalItems={categories.length}
+          totalItems={totalItems}
           pageSize={pageSize}
           baseUrl="/category"
-          onPageChange={setCurrentPage}
+          onPageChange={handlePageChange}
         />
       )}
     </div>

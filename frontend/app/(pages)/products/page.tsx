@@ -138,7 +138,9 @@ const ProductsPage: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        setCategories(data);
+        // Handle both array response and object with categories property
+        const categoryList = Array.isArray(data) ? data : (data.categories || []);
+        setCategories(categoryList);
       }
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -155,7 +157,9 @@ const ProductsPage: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        setBrands(data);
+        // Handle both array response and object with brands property
+        const brandList = Array.isArray(data) ? data : (data.brands || []);
+        setBrands(brandList);
       }
     } catch (error) {
       console.error('Error fetching brands:', error);

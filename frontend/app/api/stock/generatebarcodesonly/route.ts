@@ -1,15 +1,13 @@
 import { NextRequest } from 'next/server';
 
-// POST /api/products/deleteproduct/[id] - Delete a product
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+// POST /api/stock/generatebarcodesonly - Generate barcodes without stock-in
+export async function POST(request: NextRequest) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
-    const { id } = await params;
+    
+    const body = await request.json();
 
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/products/deleteproduct/${id}`;
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/stock/generatebarcodesonly`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -23,7 +21,8 @@ export async function POST(
       method: 'POST',
       headers,
       cache: 'no-store',
-      signal: AbortSignal.timeout(120000), // 2 minute timeout
+      signal: AbortSignal.timeout(120000),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -46,17 +45,7 @@ export async function POST(
       status: response.status,
     });
   } catch (error) {
-    console.error('Error deleting product:', error);
-    
-    // Handle timeout errors
-    if (error instanceof Error && error.name === 'TimeoutError') {
-      return Response.json(
-        { error: 'Request timeout. Please try again.', type: 'TIMEOUT' },
-        { status: 504 }
-      );
-    }
-    
-    // Handle other errors
+    console.error('Error generating barcodes:', error);
     return Response.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }

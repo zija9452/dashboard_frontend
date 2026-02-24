@@ -3,8 +3,10 @@ import { NextRequest } from 'next/server';
 export async function GET(request: NextRequest) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
+    const searchParams = request.nextUrl.searchParams.toString();
+    const queryString = searchParams ? `?${searchParams}` : '';
 
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/category/`;
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/category/${queryString}`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',

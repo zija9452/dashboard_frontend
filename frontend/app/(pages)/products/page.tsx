@@ -128,38 +128,42 @@ const ProductsPage: React.FC = () => {
     }
   };
 
-  // Fetch categories
+  // Fetch categories - get ALL categories (no pagination for dropdown)
   const fetchCategories = async () => {
     try {
-      const response = await fetch('/api/category/', {
+      // Fetch with large limit to get all categories for dropdown
+      const response = await fetch('/api/category/?page=1&limit=1000', {
         method: 'GET',
         credentials: 'include',
       });
 
       if (response.ok) {
         const data = await response.json();
-        // Handle both array response and object with categories property
-        const categoryList = Array.isArray(data) ? data : (data.categories || []);
+        // Handle paginated response format: { data: [...], page, limit, total, totalPages }
+        const categoryList = data?.data || data?.categories || (Array.isArray(data) ? data : []);
         setCategories(categoryList);
+        console.log('Categories fetched:', categoryList.length);
       }
     } catch (error) {
       console.error('Error fetching categories:', error);
     }
   };
 
-  // Fetch brands
+  // Fetch brands - get ALL brands (no pagination for dropdown)
   const fetchBrands = async () => {
     try {
-      const response = await fetch('/api/brand/', {
+      // Fetch with large limit to get all brands for dropdown
+      const response = await fetch('/api/brand/?page=1&limit=1000', {
         method: 'GET',
         credentials: 'include',
       });
 
       if (response.ok) {
         const data = await response.json();
-        // Handle both array response and object with brands property
-        const brandList = Array.isArray(data) ? data : (data.brands || []);
+        // Handle paginated response format: { data: [...], page, limit, total, totalPages }
+        const brandList = data?.data || data?.brands || (Array.isArray(data) ? data : []);
         setBrands(brandList);
+        console.log('Brands fetched:', brandList.length);
       }
     } catch (error) {
       console.error('Error fetching brands:', error);
@@ -255,15 +259,13 @@ const ProductsPage: React.FC = () => {
         imageUrl = imagePreview;
       }
 
+      // Only send fields that exist in ProductCreate model
       const payload = {
-        sku: formData.sku || generateSKU(formData.name),
+        sku: formData.sku || `SKU-${Date.now()}`, // Generate SKU if not provided
         name: formData.name,
-        desc: formData.desc,
         unit_price: Number(formData.unit_price),
         cost_price: Number(formData.cost_price),
-        tax_rate: 0,
-        vendor_id: null,
-        stock_level: 0,
+        stock_level: 0, // Default stock level for new products
         attributes: imageUrl,
         barcode: formData.barcode,
         discount: Number(formData.discount),
@@ -329,6 +331,9 @@ const ProductsPage: React.FC = () => {
       setImagePreview(product.pro_image);
     }
     setShowAddForm(true);
+    
+    // Auto-scroll to top smoothly to show the edit form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Delete product

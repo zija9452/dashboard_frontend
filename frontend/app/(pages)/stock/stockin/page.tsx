@@ -269,6 +269,52 @@ const StockInPage: React.FC = () => {
     setStockInItems(newItems);
   };
 
+  // Print barcodes only (without stock-in)
+  const handlePrintBarcodesOnly = async () => {
+    if (stockInItems.length === 0) {
+      showToast('Please add at least one item', 'error');
+      return;
+    }
+
+    if (submitting) return;
+    setSubmitting(true);
+
+    try {
+      const payload = stockInItems.map(item => ({
+        product_id: item.product_id,
+        quantity: item.quantity,
+        barcode: item.barcode,
+        price: item.selling_price,
+      }));
+
+      const response = await fetch('/api/stock/generatebarcodesonly', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        const apiResult = await response.json();
+
+        // Print barcodes
+        if (apiResult.zpl_commands && apiResult.zpl_commands.length > 0) {
+          printBarcodes(apiResult.zpl_commands);
+        }
+      } else {
+        const errorData = await response.json();
+        showToast(errorData.error || 'Failed to generate barcodes', 'error');
+      }
+    } catch (error) {
+      console.error('Error generating barcodes:', error);
+      showToast('Error generating barcodes', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // Handle stock in
   const handleStockIn = async () => {
     if (stockInItems.length === 0) {
@@ -866,11 +912,11 @@ const StockInPage: React.FC = () => {
 
           <div className="mt-4 flex gap-2">
             <button
-              onClick={handleStockIn}
+              onClick={handlePrintBarcodesOnly}
               disabled={submitting || stockInItems.length === 0}
-              className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed"
+              className="regal-btn bg-orange text-black disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {submitting ? 'Processing...' : 'Stock In'}
+              {submitting ? 'Processing...' : 'Print Barcodes'}
             </button>
             <button
               onClick={handleStockInWithBarcode}

@@ -148,7 +148,9 @@ export class ProductsApi {
    * @returns Promise<Product>
    */
   async updateProduct(id: string, product: Partial<ProductCreateRequest>): Promise<Product> {
-    const response = await this.apiClient.put(`/products/${id}`, product);
+    const response = await this.apiClient.put(`/products/${id}`, product, {
+      timeout: 120000, // 2 minute timeout
+    });
     // Clear cache after updating product
     this.clearCache();
     return response.data;

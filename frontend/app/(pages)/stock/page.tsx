@@ -119,13 +119,6 @@ const StockPage: React.FC = () => {
           </button>
 
           <button
-            onClick={() => router.push('/stock/adjust')}
-            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
-          >
-            Adjust Stock
-          </button>
-
-          <button
             onClick={() => setShowReportModal(true)}
             className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
           >
@@ -137,6 +130,13 @@ const StockPage: React.FC = () => {
             className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
           >
             Stock In Report
+          </button>
+
+          <button
+            onClick={() => router.push('/stock/adjust')}
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+          >
+            Adjust Stock
           </button>
         </div>
 

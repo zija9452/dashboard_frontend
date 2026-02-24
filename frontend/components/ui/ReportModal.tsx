@@ -34,7 +34,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
 
       if (response.ok) {
         const data = await response.json();
-        setReportData(data);
+        setReportData(data.pdf || data);
       } else {
         console.error('Failed to fetch report');
       }

@@ -28,8 +28,6 @@ const VendorsPage: React.FC = () => {
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showReportModal, setShowReportModal] = useState(false);
-  const [reportData, setReportData] = useState<string>('');
-  const [reportLoading, setReportLoading] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -263,31 +261,6 @@ const VendorsPage: React.FC = () => {
     setCurrentPage(page);
   };
 
-  // Fetch vendor report
-  const fetchVendorReport = async () => {
-    try {
-      setReportLoading(true);
-      const response = await fetch('/api/vendors/vendorviewreport', {
-        method: 'POST',
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setReportData(data);
-        setShowReportModal(true);
-      } else {
-        const errorData = await response.json();
-        showToast(errorData.error || 'Failed to fetch report', 'error');
-      }
-    } catch (error: any) {
-      console.error('Error fetching report:', error);
-      showToast(error.message || 'Failed to fetch report', 'error');
-    } finally {
-      setReportLoading(false);
-    }
-  };
-
   return (
     <div className="p-4">
       <PageHeader title="View Vendor" />
@@ -313,7 +286,7 @@ const VendorsPage: React.FC = () => {
           </button>
 
           <button
-            onClick={fetchVendorReport}
+            onClick={() => setShowReportModal(true)}
             className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
           >
             Vendor Details
@@ -507,48 +480,12 @@ const VendorsPage: React.FC = () => {
       )}
 
       {/* Vendor Report Modal */}
-      {showReportModal && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm"
-          onClick={() => setShowReportModal(false)}
-        >
-          <div 
-            className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">Vendor Details</h2>
-              <button
-                onClick={() => setShowReportModal(false)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            {reportLoading ? (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-regal-yellow mx-auto"></div>
-                <p className="mt-4 text-gray-600">Loading report...</p>
-              </div>
-            ) : reportData ? (
-              <div>
-                <iframe
-                  src={`data:application/pdf;base64,${reportData}`}
-                  className="w-full h-[70vh] border rounded"
-                  title="Vendor Details"
-                />
-              </div>
-            ) : (
-              <div className="text-center py-12 text-gray-500">
-                No report available
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <ReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        title="Vendor Details"
+        reportUrl="/api/vendors/vendorviewreport"
+      />
     </div>
   );
 };

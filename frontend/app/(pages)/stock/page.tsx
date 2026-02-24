@@ -6,6 +6,7 @@ import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import ReportModal from '@/components/ui/ReportModal';
+import DateRangeModal from '@/components/ui/DateRangeModal';
 import PageHeader from '@/components/ui/PageHeader';
 
 interface StockItem {
@@ -30,6 +31,8 @@ const StockPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showStockInReportModal, setShowStockInReportModal] = useState(false);
+  const [stockInReportUrl, setStockInReportUrl] = useState<string>('');
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -93,6 +96,14 @@ const StockPage: React.FC = () => {
     setCurrentPage(page);
   };
 
+  // Handle stock-in report generation
+  const handleStockInReport = async (dateFrom: string, dateTo: string) => {
+    // Build URL with date params
+    const reportUrl = `/api/stock/stockinreport?date_from=${dateFrom}&date_to=${dateTo}`;
+    setStockInReportUrl(reportUrl);
+    setShowStockInReportModal(false);
+  };
+
   return (
     <div className="p-6">
       <PageHeader title="View Stock" />
@@ -118,7 +129,14 @@ const StockPage: React.FC = () => {
             onClick={() => setShowReportModal(true)}
             className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
           >
-            Stock Report
+            Stock Details
+          </button>
+
+          <button
+            onClick={() => setShowStockInReportModal(true)}
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+          >
+            Stock In Report
           </button>
         </div>
 
@@ -230,12 +248,31 @@ const StockPage: React.FC = () => {
         </div>
       )}
 
-      {/* Stock Report Modal */}
+      {/* Stock Details Modal */}
       <ReportModal
         isOpen={showReportModal}
         onClose={() => setShowReportModal(false)}
-        title="Stock Report"
+        title="Stock Details"
         reportUrl="/api/stock/stockreport"
+      />
+
+      {/* Stock In Report Date Range Modal */}
+      <DateRangeModal
+        isOpen={showStockInReportModal}
+        onClose={() => setShowStockInReportModal(false)}
+        onSubmit={handleStockInReport}
+        title="Stock In Report"
+      />
+
+      {/* Stock In Report PDF Display Modal */}
+      <ReportModal
+        isOpen={!!stockInReportUrl}
+        onClose={() => {
+          setStockInReportUrl('');
+          setShowStockInReportModal(true);
+        }}
+        title="Stock In Report"
+        reportUrl={stockInReportUrl}
       />
     </div>
   );

@@ -449,15 +449,15 @@ const StockInPage: React.FC = () => {
       let printer;
       try {
         printer = await qz.printers.find('ZDesigner GX420d');
-        
+
         // If specific printer not found, try to get any available printer
         if (!printer) {
           const allPrinters = await qz.printers.find();
-          
+
           if (allPrinters.length === 0) {
             throw new Error('No printers found');
           }
-          
+
           // Show printer selection dialog
           const { value: selectedPrinter } = await Swal.fire({
             title: 'Select Printer',
@@ -480,7 +480,7 @@ const StockInPage: React.FC = () => {
           if (selectedPrinter) {
             printer = selectedPrinter;
           } else {
-            return; // User cancelled
+            return; // User cancelled - don't retry
           }
         }
       } catch (printerError) {
@@ -499,13 +499,39 @@ const StockInPage: React.FC = () => {
           icon: 'error',
           confirmButtonText: 'OK',
         });
+        return; // Don't retry on printer error
+      }
+
+      // Step 5: Filter and validate ZPL commands BEFORE printing
+      // Remove any empty or invalid ZPL commands to prevent empty labels
+      const validZplData = zplData.filter((zpl: string) => {
+        if (!zpl || zpl.trim().length === 0) {
+          console.warn('⚠️ Skipping empty ZPL command');
+          return false;
+        }
+        if (!zpl.includes('^XA') || !zpl.includes('^XZ')) {
+          console.warn('⚠️ Skipping invalid ZPL command (missing ^XA or ^XZ)');
+          return false;
+        }
+        return true;
+      });
+
+      console.log('📊 Valid ZPL commands:', validZplData.length, 'out of', zplData.length);
+
+      if (validZplData.length === 0) {
+        Swal.fire({
+          title: 'No Valid Barcodes',
+          html: `<p>All ZPL commands were empty or invalid.</p><p class="mt-2 text-sm text-gray-600">Check browser console for details.</p>`,
+          icon: 'warning',
+          confirmButtonText: 'OK',
+        });
         return;
       }
 
-      // Step 5: Print ZPL commands
+      // Step 6: Print ZPL commands
       try {
         console.log('🖨️ Starting print job to:', printer);
-        console.log('📄 ZPL data count:', zplData.length);
+        console.log('📄 Valid ZPL data count:', validZplData.length);
 
         // Create print config for raw ZPL printing
         const config = qz.configs.create(printer, {
@@ -516,15 +542,19 @@ const StockInPage: React.FC = () => {
         console.log('⚙️ Print config created:', config);
 
         // Print each ZPL command individually
-        for (let i = 0; i < zplData.length; i++) {
-          const zpl = zplData[i];
-          console.log(`📄 Printing barcode ${i + 1}/${zplData.length}`);
+        for (let i = 0; i < validZplData.length; i++) {
+          const zpl = validZplData[i];
+          console.log(`📄 Printing barcode ${i + 1}/${validZplData.length}`);
           console.log(`📝 ZPL length: ${zpl.length} chars`);
-          
+          console.log(`📝 ZPL preview: ${zpl.substring(0, 50)}...`);
+
           // QZ Tray print API - pass config and data array
           await qz.print(config, [zpl]);
-          
+
           console.log(`✓ Barcode ${i + 1} sent to printer`);
+          
+          // Add small delay between prints to ensure printer processes each label
+          await new Promise(resolve => setTimeout(resolve, 200));
         }
 
         showToast('✓ Barcodes printed successfully!', 'success');
@@ -551,12 +581,13 @@ const StockInPage: React.FC = () => {
             cancelButtonText: 'Cancel',
           }).then((result) => {
             if (result.isConfirmed) {
+              // Pass original zplCommands, not filtered - will be filtered again in retry
               printBarcodes(zplCommands);
             }
           });
           return;
         }
-        
+
         throw printError;
       }
 

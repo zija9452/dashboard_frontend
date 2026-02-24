@@ -1,11 +1,23 @@
 import { NextRequest } from 'next/server';
 
-// POST /api/stock/stockreport - Generate stock report (PDF base64)
+// POST /api/stock/stockinreport - Generate date-wise stock-in report (PDF base64)
 export async function POST(request: NextRequest) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
+    
+    // Extract date_from and date_to from query params
+    const searchParams = request.nextUrl.searchParams;
+    const dateFrom = searchParams.get('date_from');
+    const dateTo = searchParams.get('date_to');
 
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/stock/stockreport`;
+    if (!dateFrom || !dateTo) {
+      return Response.json(
+        { error: 'date_from and date_to are required' },
+        { status: 400 }
+      );
+    }
+
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/stock/stockinreport?date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -40,7 +52,7 @@ export async function POST(request: NextRequest) {
     const data = await response.json();
     return Response.json({ pdf: data });
   } catch (error) {
-    console.error('Error generating stock report:', error);
+    console.error('Error generating stock-in report:', error);
     return Response.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }

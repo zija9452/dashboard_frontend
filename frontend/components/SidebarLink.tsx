@@ -8,16 +8,20 @@ interface SidebarLinkProps {
   href: string;
   children: React.ReactNode;
   className?: string;
+  target?: string;
+  rel?: string;
 }
 
-export default function SidebarLink({ href, children, className }: SidebarLinkProps) {
+export default function SidebarLink({ href, children, className, target, rel }: SidebarLinkProps) {
   const pathname = usePathname();
-  
+
   const isActive = pathname === href || pathname.startsWith(href) && href !== '/';
-  
+
   return (
     <Link
       href={href}
+      target={target}
+      rel={rel}
       className={clsx(
         'flex items-center px-4 text-base font-medium rounded-lg transition-all duration-200',
         isActive

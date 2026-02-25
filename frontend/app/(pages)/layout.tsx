@@ -63,7 +63,7 @@ export default function PagesLayout({
                   <SidebarLink href="/expenses" className="text-base py-3 border-b border-gray-200">
                     Expenses
                   </SidebarLink>
-                  <SidebarLink href="/customer-invoice" className="text-base py-3 border-b border-gray-200">
+                  <SidebarLink href="/customer-invoice" className="text-base py-3 border-b border-gray-200" target="_blank" rel="noopener noreferrer">
                     Customer Invoice
                   </SidebarLink>
                   <SidebarLink href="/view-customer-order" className="text-base py-3 border-b border-gray-200">

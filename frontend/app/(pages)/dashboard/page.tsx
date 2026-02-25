@@ -1,105 +1,282 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from 'chart.js';
+import PageHeader from '@/components/ui/PageHeader';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+);
+
+interface DashboardData {
+  totalSales: number;
+  totalExpense: number;
+  totalPurchase: number;
+  outOfStock: number;
+  shortStock: number;
+  adminUser: string;
+  openingBalance: number;
+  chartData: {
+    dates: string[];
+    sales: number[];
+    expenses: number[];
+  };
+}
 
 const DashboardPage: React.FC = () => {
-  // Mock data for dashboard
-  const kpiData = [
-    { title: 'Total Sales', value: '$12,480.00', change: '+12.5%', icon: '💰' },
-    { title: 'Products', value: '1,248', change: '+3.2%', icon: '📦' },
-    { title: 'Customers', value: '562', change: '+5.7%', icon: '👥' },
-    { title: 'Pending Orders', value: '12', change: '-2.1%', icon: '📝' },
-  ];
+  const [loading, setLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState<DashboardData>({
+    totalSales: 0,
+    totalExpense: 0,
+    totalPurchase: 0,
+    outOfStock: 0,
+    shortStock: 0,
+    adminUser: 'Admin',
+    openingBalance: 0,
+    chartData: {
+      dates: [],
+      sales: [],
+      expenses: [],
+    },
+  });
 
-  const recentActivity = [
-    { id: 1, action: 'New order created', details: 'Order #CIV-001 by John Doe', time: '2 mins ago' },
-    { id: 2, action: 'Product stock updated', details: 'T-Shirt stock increased to 45', time: '15 mins ago' },
-    { id: 3, action: 'New customer added', details: 'Jane Smith registered', time: '1 hour ago' },
-    { id: 4, action: 'Refund processed', details: 'Refund for order #WIV-002', time: '3 hours ago' },
-    { id: 5, action: 'Expense recorded', details: 'Office supplies $150.00', time: '5 hours ago' },
-  ];
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch sales data (you may need to create this API endpoint)
+      const salesResponse = await fetch('/api/dashboard/stats', {
+        credentials: 'include',
+      });
+
+      if (salesResponse.ok) {
+        const data = await salesResponse.json();
+        setDashboardData(data);
+      } else {
+        // Mock data for now
+        setDashboardData({
+          totalSales: 11950.00,
+          totalExpense: 0,
+          totalPurchase: 0,
+          outOfStock: 542,
+          shortStock: 1626,
+          adminUser: 'Admin',
+          openingBalance: 5000,
+          chartData: {
+            dates: ['01', '05', '10', '15', '20', '25'],
+            sales: [2000, 3500, 2800, 4200, 3100, 4500],
+            expenses: [500, 800, 600, 1200, 700, 900],
+          },
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const chartData = {
+    labels: dashboardData.chartData.dates,
+    datasets: [
+      {
+        label: 'Sales',
+        data: dashboardData.chartData.sales,
+        borderColor: 'rgb(75, 192, 192)',
+        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+        fill: true,
+        tension: 0.4,
+      },
+      {
+        label: 'Expenses',
+        data: dashboardData.chartData.expenses,
+        borderColor: 'rgb(255, 99, 132)',
+        backgroundColor: 'rgba(255, 99, 132, 0.2)',
+        fill: true,
+        tension: 0.4,
+      },
+    ],
+  };
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+      },
+      tooltip: {
+        mode: 'index' as const,
+        intersect: false,
+        callbacks: {
+          label: function (context: any) {
+            return `${context.dataset.label}: ${context.parsed.y.toFixed(2)}`;
+          },
+        },
+      },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+      },
+    },
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
+          <div className="grid grid-cols-4 gap-6 mb-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-32 bg-gray-200 rounded"></div>
+            ))}
+          </div>
+          <div className="grid grid-cols-3 gap-6 mb-6">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-32 bg-gray-200 rounded"></div>
+            ))}
+          </div>
+          <div className="h-96 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-6 flex items-center justify-center">J&S Dashboard</h1>
+    <div className="p-4">
+      <PageHeader title="Dashboard" />
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {kpiData.map((kpi, index) => (
-          <div key={index} className="regal-card">
-            <div className="flex items-center">
-              <div className="text-3xl mr-4">{kpi.icon}</div>
+      {/* Main Content - 85% width, centered */}
+      <div className="max-w-[85%] mx-auto">
+        {/* Top Row - 4 KPI Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+          {/* Sale */}
+          <div className="regal-card">
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">{kpi.title}</p>
-                <p className="text-2xl font-bold">{kpi.value}</p>
-                <p className={`text-sm ${kpi.change.startsWith('+') ? 'text-green-600' : 'text-red-600'}`}>
-                  {kpi.change} from last week
+                <p className="text-sm font-medium text-gray-600 mb-1">Sale</p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {Math.round(dashboardData.totalSales)}
                 </p>
               </div>
+              <div className="text-4xl">💰</div>
             </div>
           </div>
-        ))}
-      </div>
 
-      {/* Charts and Quick Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        {/* Sales Chart */}
-        <div className="lg:col-span-2 regal-card">
-          <h2 className="text-xl font-semibold mb-4">Sales Overview</h2>
-          <div className="h-64 bg-gray-100 rounded flex items-center justify-center">
-            <p className="text-gray-500">Sales chart visualization</p>
+          {/* Expense */}
+          <div className="regal-card">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 mb-1">Expense</p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {Math.round(dashboardData.totalExpense)}
+                </p>
+              </div>
+              <div className="text-4xl">💸</div>
+            </div>
+          </div>
+
+          {/* Purchase */}
+          <div className="regal-card">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 mb-1">Purchase</p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {Math.round(dashboardData.totalPurchase)}
+                </p>
+              </div>
+              <div className="text-4xl">🛒</div>
+            </div>
+          </div>
+
+          {/* Out Of Stock */}
+          <div className="regal-card">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 mb-1">Out Of Stock</p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {dashboardData.outOfStock}
+                </p>
+              </div>
+              <div className="text-4xl">📦</div>
+            </div>
           </div>
         </div>
 
-        {/* Quick Actions */}
+        {/* Middle Row - 3 Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          {/* Short Stock */}
+          <div className="regal-card">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 mb-1">Short Stock</p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {dashboardData.shortStock}
+                </p>
+              </div>
+              <div className="text-4xl">⚠️</div>
+            </div>
+          </div>
+
+          {/* User */}
+          <div className="regal-card">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 mb-1">User</p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {dashboardData.adminUser}
+                </p>
+              </div>
+              <div className="text-4xl">👤</div>
+            </div>
+          </div>
+
+          {/* Opening Balance */}
+          <div className="regal-card">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 mb-1">Opening</p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {Math.round(dashboardData.openingBalance)}
+                </p>
+              </div>
+              <div className="text-4xl">💵</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Chart - Sales & Expenses */}
         <div className="regal-card">
-          <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
-          <div className="space-y-3">
-            <button className="regal-btn w-full bg-regal-yellow text-regal-black flex items-center justify-center">
-              <span className="mr-2">+</span> Add Product
-            </button>
-            <button className="regal-btn w-full bg-regal-yellow text-regal-black flex items-center justify-center">
-              <span className="mr-2">+</span> Create Invoice
-            </button>
-            <button className="regal-btn w-full bg-regal-yellow text-regal-black flex items-center justify-center">
-              <span className="mr-2">+</span> Add Customer
-            </button>
-            <button className="regal-btn w-full bg-regal-yellow text-regal-black flex items-center justify-center">
-              <span className="mr-2">🖨️</span> Print Labels
-            </button>
-            <button className="regal-btn w-full bg-regal-yellow text-regal-black flex items-center justify-center">
-              <span className="mr-2">📊</span> View Reports
-            </button>
+          <h2 className="text-xl font-semibold mb-4">Monthly Sales & Expenses</h2>
+          <div className="h-96">
+            <Line data={chartData} options={chartOptions} />
           </div>
-        </div>
-      </div>
-
-      {/* Recent Activity */}
-      <div className="regal-card">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">Recent Activity</h2>
-          <a href="/admin/activity-log" className="text-blue-600 hover:underline text-sm">View All</a>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="regal-table">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activity</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {recentActivity.map((activity) => (
-                <tr key={activity.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{activity.action}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{activity.details}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{activity.time}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <p className="text-sm text-gray-500 mt-4 text-center">
+            Hover over the chart to see detailed values for each date
+          </p>
         </div>
       </div>
     </div>

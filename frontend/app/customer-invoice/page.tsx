@@ -376,16 +376,41 @@ const CustomerInvoicePage: React.FC = () => {
     setSubmitting(true);
 
     try {
-      // Prepare items for backend
+      // Prepare items for backend with all category-specific fields
       const items = cart.map(item => ({
         pro_name: item.category,
         cat_name: item.category,
         unit_price: item.unitPrice,
         pro_quantity: item.quantity,
         total_price: item.totalPrice,
-        imgfile: item.image1,
-        imgfile2: item.image2,
-        imgfile3: item.image3,
+        imgfile: item.image1 || '',
+        imgfile2: item.image2 || '',
+        imgfile3: item.image3 || '',
+        // Category-specific fields
+        cricktshirt_Neckstyle: item.tshirt_neckstyle || '',
+        cricktshirt_sleeve: item.tshirt_sleeve || '',
+        cricktshirt_bottom: item.tshirt_bottom || '',
+        cricktshirt_fabric: item.tshirt_fabric || '',
+        cricktrouser_style: item.trouser_style1 || '',
+        cricktrouser_style2: item.trouser_style2 || '',
+        cricktrouser_bottom: item.trouser_bottom || '',
+        cricktrouser_pocket: item.trouser_pocket || '',
+        cricktrouser_fabric: item.trouser_fabric || '',
+        foottshirt_neckstyle: item.football_neckstyle || '',
+        foottshirt_sleeves: item.football_sleeve || '',
+        football_fabric: item.football_fabric || '',
+        footshorts_style: item.football_style || '',
+        footshorts_pocket: item.football_pocket || '',
+        footballshort_fabric: item.footballshort_fabric || '',
+        trackjack_style: item.tracktshirt_style || '',
+        trackjack_waist: item.tracktshirt_waist || '',
+        trackjack_pocket: item.tracktshirt_pocket || '',
+        trackjack_bottom: item.tracktshirt_bottom || '',
+        trackjack_fabric: item.tracktshirt_fabric || '',
+        tracktrous_style: item.tracktrouser_style || '',
+        tracktrous_bottom: item.tracktrouser_bottom || '',
+        tracktrous_pocket: item.tracktrouser_pocket || '',
+        tracktrous_fabric: item.tracktrouser_fabric || '',
       }));
 
       // Get customer details
@@ -401,7 +426,7 @@ const CustomerInvoicePage: React.FC = () => {
         remarks: '',
         salesman_id: null,
         timezone: 'Asia/Karachi',
-        date: new Date().toISOString(),
+        date: new Date().toISOString().split('T')[0],
       };
 
       const response = await fetch('/api/customerinvoice/', {

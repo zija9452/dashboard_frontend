@@ -6,37 +6,89 @@ interface ReportModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
-  reportUrl: string;
+  reportUrl?: string;  // Optional - for fetching PDF from API
+  pdfData?: string;    // Optional - for direct PDF data
 }
 
 const ReportModal: React.FC<ReportModalProps> = ({
   isOpen,
   onClose,
   title,
-  reportUrl
+  reportUrl,
+  pdfData
 }) => {
   const [reportData, setReportData] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    console.log('ReportModal useEffect triggered');
+    console.log('isOpen:', isOpen);
+    console.log('reportUrl:', reportUrl);
+    console.log('pdfData:', pdfData);
+    
     if (isOpen) {
-      fetchReport();
+      // If pdfData is provided directly, use it immediately
+      if (pdfData) {
+        console.log('Using pdfData directly');
+        setReportData(pdfData);
+        setLoading(false);
+      } else if (reportUrl) {
+        console.log('Fetching from reportUrl:', reportUrl);
+        fetchReport();
+      } else {
+        // No data source, clear reportData
+        console.log('No data source');
+        setReportData('');
+      }
+    } else {
+      // Modal closed, clear data
+      console.log('Modal closed, clearing data');
+      setReportData('');
+      setLoading(false);
     }
-  }, [isOpen]);
+  }, [isOpen, pdfData, reportUrl]);
 
   const fetchReport = async () => {
+    console.log('fetchReport called with URL:', reportUrl);
     try {
       setLoading(true);
-      const response = await fetch(reportUrl, {
+      const response = await fetch(reportUrl!, {
         method: 'POST',
         credentials: 'include',
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers.get('content-type'));
+
+      const text = await response.text();
+      console.log('Response text length:', text.length);
+      console.log('Response text first 100 chars:', text.substring(0, 100));
+
       if (response.ok) {
-        const data = await response.json();
-        setReportData(data.pdf || data);
+        let data;
+        try {
+          data = JSON.parse(text);
+          console.log('Parsed JSON data:', data);
+          console.log('Data type:', typeof data);
+          console.log('Is data a string?', typeof data === 'string');
+          
+          // Backend returns raw string (base64), not JSON object
+          if (typeof data === 'string') {
+            setReportData(data);
+            console.log('Setting reportData as string, length:', data.length);
+          } else {
+            setReportData(data.pdf || data);
+            console.log('Setting reportData from object');
+          }
+        } catch (parseError) {
+          console.error('JSON parse error:', parseError);
+          // If response is already a string (not JSON), use it directly
+          setReportData(text);
+          console.log('Setting reportData as raw text');
+        }
       } else {
-        console.error('Failed to fetch report');
+        console.error('Failed to fetch report, status:', response.status);
+        console.error('Error text:', text);
       }
     } catch (error) {
       console.error('Error fetching report:', error);

@@ -1,311 +1,356 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { format } from 'date-fns';
+import { useToast } from '@/components/ui/Toast';
+import Swal from 'sweetalert2';
+import PageHeader from '@/components/ui/PageHeader';
+import Pagination from '@/components/ui/Pagination';
 
-// Define interfaces
-interface OrderItem {
-  id: string;
-  product_name: string;
+interface CustomerOrder {
+  orderid: string;
+  invoice_no?: string;
+  status: 'PENDING' | 'DELIVERED' | 'COMPLETED' | 'CANCEL';
+  customer: string;
+  teamname: string;
   quantity: number;
-  unit_price: number;
-  discount: number;
-  category: string;
-}
-
-interface Order {
-  id: string;
-  order_no: string;
-  customer_name: string;
-  items: OrderItem[];
   total_amount: number;
-  amount_paid: number;
-  balance_due: number;
-  payment_status: 'issued' | 'paid' | 'partial' | 'cancelled';
-  payment_method: string;
-  created_at: string;
-  updated_at: string;
-  remarks?: string;
+  date: string;
 }
 
-const ViewCustomOrderPage: React.FC = () => {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+const ViewCustomerOrderPage: React.FC = () => {
+  const { showToast } = useToast();
+  const [orders, setOrders] = useState<CustomerOrder[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
+  const pageSize = 8;
+  const [showSearch, setShowSearch] = useState(false);
 
-  // Simulated data fetch
-  useEffect(() => {
-    const fetchOrders = async () => {
-      try {
-        setLoading(true);
+  // Calculate totalPages - limit to max 5 pages (same as products page)
+  const totalPages = Math.min(totalPagesFromApi, 5);
 
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 500));
+  // Status colors mapping
+  const statusColors = {
+    PENDING: 'bg-lime-200 text-lime-800',
+    DELIVERED: 'bg-blue-100 text-blue-800',
+    COMPLETED: 'bg-green-100 text-green-800',
+    CANCEL: 'bg-red-100 text-red-800',
+  };
 
-        // Mock data
-        const mockOrders: Order[] = [
-          { id: '1', order_no: 'CIV-001', customer_name: 'John Doe', items: [{ id: '1', product_name: 'T-Shirt', quantity: 2, unit_price: 25.00, discount: 0, category: 'Clothing' }], total_amount: 50.00, amount_paid: 50.00, balance_due: 0.00, payment_status: 'paid', payment_method: 'cash', created_at: '2026-02-01T10:30:00.000Z', updated_at: '2026-02-01T10:30:00.000Z', remarks: 'Regular order' },
-          { id: '2', order_no: 'CIV-002', customer_name: 'Jane Smith', items: [{ id: '1', product_name: 'Jeans', quantity: 1, unit_price: 75.00, discount: 5.00, category: 'Clothing' }], total_amount: 70.00, amount_paid: 50.00, balance_due: 20.00, payment_status: 'partial', payment_method: 'card', created_at: '2026-02-02T14:20:00.000Z', updated_at: '2026-02-02T14:20:00.000Z', remarks: 'Partial payment' },
-          { id: '3', order_no: 'CIV-003', customer_name: 'Bob Johnson', items: [{ id: '1', product_name: 'Sneakers', quantity: 1, unit_price: 120.00, discount: 0, category: 'Footwear' }], total_amount: 120.00, amount_paid: 0.00, balance_due: 120.00, payment_status: 'issued', payment_method: 'cash', created_at: '2026-02-03T09:15:00.000Z', updated_at: '2026-02-03T09:15:00.000Z', remarks: 'Pending payment' },
-          { id: '4', order_no: 'CIV-004', customer_name: 'Alice Williams', items: [{ id: '1', product_name: 'Watch', quantity: 1, unit_price: 200.00, discount: 10.00, category: 'Accessories' }], total_amount: 190.00, amount_paid: 190.00, balance_due: 0.00, payment_status: 'paid', payment_method: 'card', created_at: '2026-02-03T16:45:00.000Z', updated_at: '2026-02-03T16:45:00.000Z', remarks: 'Full payment received' },
-          { id: '5', order_no: 'CIV-005', customer_name: 'Charlie Brown', items: [{ id: '1', product_name: 'Backpack', quantity: 1, unit_price: 60.00, discount: 0, category: 'Accessories' }], total_amount: 60.00, amount_paid: 30.00, balance_due: 30.00, payment_status: 'partial', payment_method: 'cash', created_at: '2026-02-04T11:30:00.000Z', updated_at: '2026-02-04T11:30:00.000Z', remarks: 'Partial payment' },
-          { id: '6', order_no: 'CIV-006', customer_name: 'Diana Miller', items: [{ id: '1', product_name: 'Sunglasses', quantity: 1, unit_price: 45.00, discount: 0, category: 'Accessories' }], total_amount: 45.00, amount_paid: 45.00, balance_due: 0.00, payment_status: 'paid', payment_method: 'cash', created_at: '2026-02-04T13:20:00.000Z', updated_at: '2026-02-04T13:20:00.000Z', remarks: 'Cash payment' },
-          { id: '7', order_no: 'CIV-007', customer_name: 'Edward Davis', items: [{ id: '1', product_name: 'Hat', quantity: 2, unit_price: 25.00, discount: 2.00, category: 'Clothing' }], total_amount: 48.00, amount_paid: 0.00, balance_due: 48.00, payment_status: 'issued', payment_method: 'cash', created_at: '2026-02-05T10:10:00.000Z', updated_at: '2026-02-05T10:10:00.000Z', remarks: 'New order' },
-          { id: '8', order_no: 'CIV-008', customer_name: 'Fiona Garcia', items: [{ id: '1', product_name: 'Belt', quantity: 1, unit_price: 35.00, discount: 0, category: 'Accessories' }], total_amount: 35.00, amount_paid: 35.00, balance_due: 0.00, payment_status: 'paid', payment_method: 'card', created_at: '2026-02-05T15:45:00.000Z', updated_at: '2026-02-05T15:45:00.000Z', remarks: 'Card payment' },
-        ];
+  // Row background colors based on status
+  const rowColors = {
+    PENDING: 'bg-lime-100 hover:bg-lime-100',
+    DELIVERED: 'bg-blue-50 hover:bg-blue-100',
+    COMPLETED: 'bg-green-50 hover:bg-green-100',
+    CANCEL: 'bg-red-50 hover:bg-red-100',
+  };
 
-        setOrders(mockOrders);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch orders');
-      } finally {
-        setLoading(false);
+  const fetchOrders = async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      params.append('skip', ((currentPage - 1) * pageSize).toString());
+      params.append('limit', pageSize.toString());
+      if (searchTerm) params.append('searchString', searchTerm);
+      if (statusFilter) params.append('status', statusFilter);
+
+      const response = await fetch(`/api/customerinvoice/viewcustomerorder?${params.toString()}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        // Handle paginated response format: { data: [...], page, limit, total, totalPages, has_more }
+        const data = result.data || [];
+        const total = result.total || 0;
+        const totalPagesApi = result.total_pages || Math.ceil(total / pageSize);
+        
+        console.log('Orders fetched:', data.length);
+        console.log('Total items:', total);
+        console.log('Total pages:', totalPagesApi);
+        console.log('Current page:', currentPage);
+        
+        setOrders(data);
+        setTotalItems(total);
+        setTotalPagesFromApi(totalPagesApi);
+      } else {
+        const errorData = await response.json();
+        showToast(errorData.error || 'Failed to fetch orders', 'error');
       }
-    };
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      showToast('Error fetching orders: ' + (error instanceof Error ? error.message : String(error)), 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchOrders();
-  }, []);
+  }, [currentPage, searchTerm, statusFilter]);
 
-  // Filter orders based on search term and status
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = !searchTerm ||
-                         order.order_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         order.customer_name.toLowerCase().includes(searchTerm.toLowerCase());
+  const handleDelete = async (orderId: string) => {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: "You won't be able to revert this!",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel'
+    });
 
-    const matchesStatus = statusFilter === 'all' || order.payment_status === statusFilter;
+    if (result.isConfirmed) {
+      try {
+        const response = await fetch(`/api/customerinvoice/${orderId}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
 
-    return matchesSearch && matchesStatus;
-  });
+        if (response.ok) {
+          Swal.fire({
+            title: 'Deleted!',
+            text: 'Order has been deleted successfully.',
+            icon: 'success',
+            timer: 2000,
+            timerProgressBar: true,
+            showConfirmButton: false,
+          });
+          fetchOrders();
+        } else {
+          const errorData = await response.json();
+          showToast(errorData.error || 'Failed to delete order', 'error');
+        }
+      } catch (error) {
+        console.error('Error deleting order:', error);
+        showToast('Error deleting order', 'error');
+      }
+    }
+  };
 
-  if (loading) {
-    return (
-      <div className="regal-card m-6">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/3 mb-6"></div>
-          <div className="space-y-4">
-            {[...Array(8)].map((_, i) => (
-              <div key={i} className="h-16 bg-gray-200 rounded"></div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleEditStatus = async (orderId: string, currentStatus: string) => {
+    const { value: newStatus } = await Swal.fire({
+      title: 'Update Order Status',
+      input: 'select',
+      inputOptions: {
+        draft: 'Draft',
+        issued: 'Issued',
+        paid: 'Paid',
+        cancelled: 'Cancelled',
+      },
+      inputValue: currentStatus,
+      showCancelButton: true,
+      confirmButtonText: 'Update',
+      cancelButtonText: 'Cancel',
+    });
 
-  if (error) {
-    return (
-      <div className="regal-card m-6">
-        <div className="text-red-600 p-4">Error: {error}</div>
-      </div>
-    );
-  }
+    if (newStatus) {
+      try {
+        const response = await fetch(`/api/customerinvoice/${orderId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ status: newStatus }),
+        });
+
+        if (response.ok) {
+          Swal.fire({
+            title: 'Updated!',
+            text: 'Order status has been updated successfully.',
+            icon: 'success',
+            timer: 2000,
+            timerProgressBar: true,
+            showConfirmButton: false,
+          });
+          fetchOrders();
+        } else {
+          const errorData = await response.json();
+          showToast(errorData.error || 'Failed to update status', 'error');
+        }
+      } catch (error) {
+        console.error('Error updating status:', error);
+        showToast('Error updating status', 'error');
+      }
+    }
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
 
   return (
-    <div className="regal-card m-6">
-      <h1 className="text-2xl font-bold mb-6">View Customer Orders</h1>
+    <div className="p-4 bg-white">
+      <PageHeader title="View Customer Orders" />
 
-      {/* Filters */}
-      <div className="regal-card mb-6">
-        <div className="flex flex-col md:flex-row md:items-center gap-4">
-          <div className="flex-1">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search orders (ID, customer)..."
-              className="regal-input w-full"
-            />
-          </div>
-
-          <div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="regal-input"
+      {/* Search Button & Filters - Left Side */}
+      <div className="flex items-start gap-4 mb-4">
+        <div>
+          <button
+            onClick={() => setShowSearch(!showSearch)}
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap px-4 py-2 flex items-center gap-2"
+          >
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              <option value="all">All Statuses</option>
-              <option value="issued">Issued</option>
-              <option value="paid">Paid</option>
-              <option value="partial">Partial</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            Search
+          </button>
+          
+          {/* Search Bar & Status Filter - Show on button click */}
+          {showSearch && (
+            <div className="flex gap-2 mt-2">
+              <div className="relative w-72">
+                <input
+                  id="searchInput"
+                  type="text"
+                  placeholder="Search by invoice, customer or team..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      setCurrentPage(1);
+                    }
+                  }}
+                  className="regal-input w-full pl-10 pr-4 py-4"
+                  autoFocus
+                />
+                <svg
+                  className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="regal-input w-40"
+              >
+                <option value="">All Statuses</option>
+                <option value="draft">Draft</option>
+                <option value="issued">Issued</option>
+                <option value="paid">Paid</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Orders Table */}
-      <div className="overflow-x-auto">
-        <table className="regal-table">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order #</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {filteredOrders.map((order) => (
-              <tr key={order.id}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{order.order_no}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{order.customer_name}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${order.total_amount.toFixed(2)}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${order.amount_paid.toFixed(2)}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${order.balance_due.toFixed(2)}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                    order.payment_status === 'paid'
-                      ? 'bg-green-100 text-green-800'
-                      : order.payment_status === 'partial'
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : order.payment_status === 'cancelled'
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-blue-100 text-blue-800'
-                  }`}>
-                    {order.payment_status.charAt(0).toUpperCase() + order.payment_status.slice(1)}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {format(new Date(order.created_at), 'MMM dd, yyyy')}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button
-                    onClick={() => setSelectedOrder(order)}
-                    className="text-indigo-600 hover:text-indigo-900 mr-3"
-                  >
-                    View
-                  </button>
-                  <button className="text-green-600 hover:text-green-900 mr-3">Print</button>
-                  <button className="text-red-600 hover:text-red-900">Refund</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Order Details Modal */}
-      {selectedOrder && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <div className="flex justify-between items-center pb-3 border-b">
-                <h3 className="text-lg font-semibold">Order Details: {selectedOrder.order_no}</h3>
-                <button
-                  onClick={() => setSelectedOrder(null)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="mt-4">
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <p className="text-sm text-gray-600">Customer</p>
-                    <p className="font-medium">{selectedOrder.customer_name}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Date</p>
-                    <p className="font-medium">{format(new Date(selectedOrder.created_at), 'MMM dd, yyyy HH:mm')}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Status</p>
-                    <p className="font-medium capitalize">{selectedOrder.payment_status}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Payment Method</p>
-                    <p className="font-medium">{selectedOrder.payment_method}</p>
-                  </div>
-                </div>
-
-                <div className="mb-4">
-                  <h4 className="font-medium mb-2">Items:</h4>
-                  <table className="regal-table">
-                    <thead>
-                      <tr>
-                        <th>Product</th>
-                        <th>Qty</th>
-                        <th>Price</th>
-                        <th>Discount</th>
-                        <th>Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedOrder.items.map((item) => {
-                        const itemTotal = (item.quantity * item.unit_price) - item.discount;
-                        return (
-                          <tr key={item.id}>
-                            <td>{item.product_name}</td>
-                            <td>{item.quantity}</td>
-                            <td>${item.unit_price.toFixed(2)}</td>
-                            <td>${item.discount.toFixed(2)}</td>
-                            <td>${itemTotal.toFixed(2)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="border-t pt-4">
-                  <div className="flex justify-between mb-1">
-                    <span>Subtotal:</span>
-                    <span>${selectedOrder.total_amount.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between mb-1">
-                    <span>Paid:</span>
-                    <span>${selectedOrder.amount_paid.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-lg">
-                    <span>Balance Due:</span>
-                    <span>${selectedOrder.balance_due.toFixed(2)}</span>
-                  </div>
-                </div>
-
-                {selectedOrder.remarks && (
-                  <div className="mt-4">
-                    <p className="text-sm text-gray-600">Remarks:</p>
-                    <p>{selectedOrder.remarks}</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end mt-6 space-x-3">
-                <button
-                  onClick={() => setSelectedOrder(null)}
-                  className="regal-btn bg-gray-500 hover:bg-gray-600"
-                >
-                  Close
-                </button>
-                <button className="regal-btn bg-green-600 hover:bg-green-700">Print Invoice</button>
-                <button className="regal-btn bg-red-600 hover:bg-red-700">Process Refund</button>
-              </div>
-            </div>
+      {loading ? (
+        <div className="text-center py-4">
+          <div className="animate-pulse">
+            <div className="h-12 bg-gray-200 rounded mb-4"></div>
+            <div className="h-64 bg-gray-200 rounded"></div>
           </div>
         </div>
-      )}
+      ) : (
+        <div className="border-0 p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full table-fixed">
+              <thead className="bg-gray-100">
+                <tr className="text-xs text-gray-900 uppercase tracking-wider font-semibold">
+                  <th className="px-3 py-5 text-left w-32">Invoice No</th>
+                  <th className="px-3 py-5 text-left w-28">Status</th>
+                  <th className="px-3 py-5 text-left w-40">Customer</th>
+                  <th className="px-3 py-5 text-left w-32">Team Name</th>
+                  <th className="px-3 py-5 text-left w-20">Qty</th>
+                  <th className="px-3 py-5 text-left w-28">Total Amount</th>
+                  <th className="px-3 py-5 text-left w-28">Date</th>
+                  <th className="px-3 py-5 text-left w-32">Action</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {orders.map((order, index) => (
+                  <tr
+                    key={order.orderid}
+                    className={`text-sm text-gray-900 transition-colors ${
+                      rowColors[order.status] || 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <td className="px-3 py-4 text-sm">
+                      <span className="font-medium text-gray-900">
+                        {order.invoice_no || order.orderid.substring(0, 8) + '...'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-4">
+                      <span
+                        className={`px-3 py-1 rounded-full text-sm font-medium ${
+                          statusColors[order.status]
+                        }`}
+                      >
+                        {order.status.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-3 py-4">{order.customer}</td>
+                    <td className="px-3 py-4">{order.teamname || '-'}</td>
+                    <td className="px-3 py-4">{order.quantity}</td>
+                    <td className="px-3 py-4">{order.total_amount.toFixed(0)}</td>
+                    <td className="px-3 py-4">
+                      {order.date ? new Date(order.date).toLocaleDateString('en-GB', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric'
+                      }) : '-'}
+                    </td>
+                    <td className="px-3 py-4 text-center">
+                      <div className="flex justify-center items-center gap-3">
+                        <button
+                          onClick={() => handleEditStatus(order.orderid, order.status)}
+                          className="text-blue-600 hover:text-blue-900"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(order.orderid)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
 
-      {/* Empty State */}
-      {filteredOrders.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-gray-500">No orders found matching your criteria.</p>
-          {(searchTerm || statusFilter !== 'all') && (
-            <button
-              onClick={() => {
-                setSearchTerm('');
-                setStatusFilter('all');
-              }}
-              className="regal-btn mt-4"
-            >
-              Clear Filters
-            </button>
+            {orders.length === 0 && (
+              <div className="text-center py-12 text-gray-500">
+                No orders found
+              </div>
+            )}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-4">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                pageSize={pageSize}
+                baseUrl="/view-customer-order"
+                onPageChange={handlePageChange}
+              />
+            </div>
           )}
         </div>
       )}
@@ -313,4 +358,4 @@ const ViewCustomOrderPage: React.FC = () => {
   );
 };
 
-export default ViewCustomOrderPage;
+export default ViewCustomerOrderPage;

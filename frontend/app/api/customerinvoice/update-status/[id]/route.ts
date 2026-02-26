@@ -1,27 +1,16 @@
 import { NextRequest } from 'next/server';
 
-// GET /api/customerinvoice/customerorders/[id] - Get customer orders by customer ID
-export async function GET(
+// PUT /api/customerinvoice/update-status/[id] - Update order status
+export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const url = new URL(request.url);
     const cookieHeader = request.headers.get('cookie') || '';
     const { id } = await params;
+    const body = await request.json();
 
-    // Get query parameters
-    const skip = url.searchParams.get('skip') || '0';
-    const limit = url.searchParams.get('limit') || '10';
-    const searchString = url.searchParams.get('searchString') || '';
-
-    // Build query string
-    const queryParams = new URLSearchParams();
-    queryParams.append('skip', skip);
-    queryParams.append('limit', limit);
-    if (searchString) queryParams.append('searchString', searchString);
-
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/customerinvoice/customerorders/${id}?${queryParams.toString()}`;
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/customerinvoice/update-status/${id}`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -32,10 +21,10 @@ export async function GET(
     }
 
     const response = await fetch(backendUrl, {
-      method: 'GET',
+      method: 'PUT',
       headers,
       cache: 'no-store',
-      signal: AbortSignal.timeout(120000), // 2 minute timeout
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -58,17 +47,7 @@ export async function GET(
       status: response.status,
     });
   } catch (error) {
-    console.error('Error fetching customer orders:', error);
-
-    // Handle timeout errors
-    if (error instanceof Error && error.name === 'TimeoutError') {
-      return Response.json(
-        { error: 'Request timeout. Please try again.', type: 'TIMEOUT' },
-        { status: 504 }
-      );
-    }
-
-    // Handle other errors
+    console.error('Error updating order status:', error);
     return Response.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }

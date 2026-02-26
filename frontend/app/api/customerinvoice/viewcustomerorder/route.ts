@@ -1,27 +1,26 @@
 import { NextRequest } from 'next/server';
 
-// GET /api/customerinvoice/customerorders/[id] - Get customer orders by customer ID
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+// GET /api/customerinvoice/viewcustomerorder - View customer orders
+export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
     const cookieHeader = request.headers.get('cookie') || '';
-    const { id } = await params;
-
+    
     // Get query parameters
     const skip = url.searchParams.get('skip') || '0';
     const limit = url.searchParams.get('limit') || '10';
     const searchString = url.searchParams.get('searchString') || '';
+    const status = url.searchParams.get('status') || '';
 
     // Build query string
-    const queryParams = new URLSearchParams();
-    queryParams.append('skip', skip);
-    queryParams.append('limit', limit);
-    if (searchString) queryParams.append('searchString', searchString);
+    const params = new URLSearchParams();
+    params.append('skip', skip);
+    params.append('limit', limit);
+    if (searchString) params.append('searchString', searchString);
+    if (status) params.append('status', status);
 
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/customerinvoice/customerorders/${id}?${queryParams.toString()}`;
+    const queryString = params.toString();
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/customerinvoice/viewcustomerorder${queryString ? '?' + queryString : ''}`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',

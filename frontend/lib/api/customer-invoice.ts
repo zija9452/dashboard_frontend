@@ -68,10 +68,10 @@ export class CustomerInvoiceApi {
     params.append('limit', limit.toString());
 
     if (search) {
-      params.append('search_string', search);
+      params.append('searchString', search);
     }
 
-    const response = await fetch(`${this.baseUrl}/customer-invoice/Viewcustomerorder?${params.toString()}`, {
+    const response = await fetch(`${this.baseUrl}/customerinvoice/viewcustomerorder?${params.toString()}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -89,10 +89,13 @@ export class CustomerInvoiceApi {
       throw new Error(`Failed to fetch customer invoices: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const result = await response.json();
+    
+    // Handle both array and object response formats
+    const data = Array.isArray(result) ? result : (result.data || []);
+    const total = result.total || data.length;
 
     // Calculate total pages
-    const total = data.length; // This is a simplification; real API might have total in response
     const totalPages = Math.ceil(total / limit);
 
     return {
@@ -110,7 +113,7 @@ export class CustomerInvoiceApi {
    * @returns Promise<CustomerInvoice>
    */
   async getCustomerInvoiceById(id: string): Promise<CustomerInvoice> {
-    const response = await fetch(`${this.baseUrl}/customer-invoice/Viewcustomerorder/${id}`, {
+    const response = await fetch(`${this.baseUrl}/customerinvoice/viewcustomerorder/${id}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -137,7 +140,7 @@ export class CustomerInvoiceApi {
    * @returns Promise<CustomerInvoice>
    */
   async createCustomerInvoice(invoice: CustomerInvoiceCreateRequest): Promise<CustomerInvoice> {
-    const response = await fetch(`${this.baseUrl}/customer-invoice/SaveCustomerOrders`, {
+    const response = await fetch(`${this.baseUrl}/customerinvoice/SaveCustomerOrders`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -166,7 +169,7 @@ export class CustomerInvoiceApi {
    * @returns Promise<CustomerInvoice>
    */
   async processPayment(orderId: string, paymentData: { amount: number; method: string }): Promise<CustomerInvoice> {
-    const response = await fetch(`${this.baseUrl}/customer-invoice/process-payment/${orderId}`, {
+    const response = await fetch(`${this.baseUrl}/customerinvoice/process-payment/${orderId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -195,7 +198,7 @@ export class CustomerInvoiceApi {
    * @returns Promise<CustomerInvoice>
    */
   async updateCustomerInvoice(id: string, invoice: Partial<CustomerInvoice>): Promise<CustomerInvoice> {
-    const response = await fetch(`${this.baseUrl}/customer-invoice/Viewcustomerorder/${id}`, {
+    const response = await fetch(`${this.baseUrl}/customerinvoice/viewcustomerorder/${id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -223,7 +226,7 @@ export class CustomerInvoiceApi {
    * @returns Promise<void>
    */
   async deleteCustomerInvoice(id: string): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/customer-invoice/Viewcustomerorder/${id}`, {
+    const response = await fetch(`${this.baseUrl}/customerinvoice/viewcustomerorder/${id}`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',

@@ -5,6 +5,7 @@ import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/ui/PageHeader';
+import ReportModal from '@/components/ui/ReportModal';
 
 interface Customer {
   cus_id: string;
@@ -71,7 +72,7 @@ const CustomerInvoicePage: React.FC = () => {
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [teamName, setTeamName] = useState('');
   const [totalAmount, setTotalAmount] = useState<number>(0);
-  const [amountPaid, setAmountPaid] = useState<number>(0);
+  const [amountPaid, setAmountPaid] = useState<string>('');
   const [balance, setBalance] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState('Credit');
   const [submitting, setSubmitting] = useState(false);
@@ -87,6 +88,10 @@ const CustomerInvoicePage: React.FC = () => {
     branch: 'European Sports Light House'
   });
   const [addingCustomer, setAddingCustomer] = useState(false);
+
+  // Receipt modal state - using ReportModal component
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [invoiceIdForReceipt, setInvoiceIdForReceipt] = useState('');
 
   // Category-specific fields state
   const [tshirt_neckstyle, setTshirt_neckstyle] = useState('');
@@ -169,7 +174,8 @@ const CustomerInvoicePage: React.FC = () => {
   useEffect(() => {
     const total = cart.reduce((sum, item) => sum + item.totalPrice, 0);
     setTotalAmount(total);
-    setBalance(total - amountPaid);
+    const paidAmount = amountPaid === '' ? 0 : Number(amountPaid);
+    setBalance(total - paidAmount);
   }, [cart, amountPaid]);
 
   // Convert file to base64
@@ -422,7 +428,7 @@ const CustomerInvoicePage: React.FC = () => {
         customer_name: customer?.cus_name || '',
         team_name: teamName,
         payment_method: paymentMethod.toLowerCase(),
-        initial_paid_amount: amountPaid,
+        initial_paid_amount: amountPaid === '' ? 0 : Number(amountPaid),
         remarks: '',
         salesman_id: null,
         timezone: 'Asia/Karachi',
@@ -439,21 +445,33 @@ const CustomerInvoicePage: React.FC = () => {
       });
 
       if (response.ok) {
-        Swal.fire({
-          title: 'Success!',
-          text: 'Customer invoice created successfully!',
-          icon: 'success',
-          timer: 2000,
-          timerProgressBar: true,
-          showConfirmButton: false,
-        });
+        const result = await response.json();
+        console.log('Invoice created:', result);
+        console.log('Invoice ID:', result.invoice_id);
 
         // Reset form
         setCart([]);
         setSelectedCustomer('');
         setTeamName('');
-        setAmountPaid(0);
+        setAmountPaid('');
         setPaymentMethod('Credit');
+
+        // Show receipt modal using report URL (consistent with customer details)
+        if (result.invoice_id) {
+          console.log('Setting invoice ID for receipt:', result.invoice_id);
+          setInvoiceIdForReceipt(result.invoice_id);
+          console.log('Opening modal...');
+          setShowReceiptModal(true);
+        } else {
+          Swal.fire({
+            title: 'Success!',
+            text: 'Customer invoice created successfully!',
+            icon: 'success',
+            timer: 2000,
+            timerProgressBar: true,
+            showConfirmButton: false,
+          });
+        }
       } else {
         const errorData = await response.json();
         showToast(errorData.error || 'Failed to create invoice', 'error');
@@ -981,10 +999,10 @@ const CustomerInvoicePage: React.FC = () => {
                   <label className="block text-sm font-medium mb-1">Amount Paid</label>
                   <input
                     type="number"
-                    value={amountPaid || ''}
-                    onChange={(e) => setAmountPaid(Number(e.target.value))}
+                    value={amountPaid}
+                    onChange={(e) => setAmountPaid(e.target.value)}
                     className="regal-input w-full"
-                    placeholder="Amount Paid"
+                    placeholder="Enter amount (0 for credit)"
                     min="0"
                     step="0.01"
                   />
@@ -1142,6 +1160,17 @@ const CustomerInvoicePage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Receipt Modal - Using shared ReportModal component with report URL (consistent with customer details) */}
+      <ReportModal
+        isOpen={showReceiptModal}
+        onClose={() => {
+          setShowReceiptModal(false);
+          setInvoiceIdForReceipt('');
+        }}
+        title="Invoice Receipt"
+        reportUrl={`/api/customerinvoice/receipt/${invoiceIdForReceipt}`}
+      />
     </div>
   );
 };

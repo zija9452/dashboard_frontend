@@ -151,7 +151,7 @@ const ViewCustomerOrderPage: React.FC = () => {
 
     if (newStatus) {
       try {
-        const response = await fetch(`/api/customerinvoice/${orderId}`, {
+        const response = await fetch(`/api/customerinvoice/update-status/${orderId}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',

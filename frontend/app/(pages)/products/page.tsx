@@ -699,7 +699,7 @@ const ProductsPage: React.FC = () => {
                 <tr className='text-black font-semibold text-xs uppercase'>
                   <th className="px-3 py-5 text-left w-12">S.No</th>
                   <th className="px-2 py-5 text-left w-24">Image</th>
-                  <th className="px-2 py-5 text-left w-32">Name</th>
+                  <th className="px-2 py-5 text-left w-40">Name</th>
                   <th className="px-2 py-5 text-left w-20">Price</th>
                   <th className="px-2 py-5 text-left w-20">Cost</th>
                   <th className="px-2 py-5 text-left w-28">Barcode</th>

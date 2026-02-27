@@ -877,13 +877,13 @@ const CustomerInvoicePage: React.FC = () => {
 
           {/* Right Side - Items Table (Top) + Customer Details (Bottom) */}
           <div className="lg:col-span-2 space-y-6">
-            
+
             {/* Items Table (Right Top) */}
-            <div className="regal-card">
+            <div className="regal-card" style={{ minHeight: '320px' }}>
               <h2 className="text-xl font-semibold mb-4">Items ({cart.length})</h2>
-              <div className="overflow-x-auto">
+              <div className="overflow-hidden" style={{ maxHeight: '280px', overflowY: 'auto' }}>
                 <table className="w-full">
-                  <thead className="bg-gray-100">
+                  <thead className="bg-gray-100 sticky top-0 z-10">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
@@ -903,10 +903,16 @@ const CustomerInvoicePage: React.FC = () => {
                         <td className="px-4 py-4 text-sm text-gray-900">{item.quantity}</td>
                         <td className="px-4 py-4 text-sm font-semibold text-gray-900">{item.totalPrice.toFixed(2)}</td>
                         <td className="px-4 py-4 text-sm">
-                          <div className="flex gap-1">
-                            {item.image1 && <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">1</span>}
-                            {item.image2 && <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">2</span>}
-                            {item.image3 && <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">3</span>}
+                          <div className="flex gap-1 flex-wrap">
+                            {item.image1 || item.image2 || item.image3 ? (
+                              <>
+                                {item.image1 && <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">1</span>}
+                                {item.image2 && <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">2</span>}
+                                {item.image3 && <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">3</span>}
+                              </>
+                            ) : (
+                              <span className="px-2 py-1 bg-gray-100 text-gray-500 text-xs rounded">No Img</span>
+                            )}
                           </div>
                         </td>
                         <td className="px-4 py-4 text-sm">
@@ -938,7 +944,7 @@ const CustomerInvoicePage: React.FC = () => {
             </div>
 
             {/* Customer Details (Right Bottom) */}
-            <div className="regal-card">
+            <div className="regal-card sticky top-4">
               <h2 className="text-xl font-semibold mb-4">Customer Details</h2>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">

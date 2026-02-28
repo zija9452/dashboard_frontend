@@ -45,7 +45,6 @@ interface CartItem {
 }
 
 const WalkInInvoicePage: React.FC = () => {
-  const router = useRouter();
   const { showToast } = useToast();
 
   // Customer and Salesman state
@@ -86,6 +85,20 @@ const WalkInInvoicePage: React.FC = () => {
   // Today sales state
   const [todaySales, setTodaySales] = useState<any[]>([]);
   const [showTodaySalesModal, setShowTodaySalesModal] = useState(false);
+
+  // Opening/Closing state
+  const [showOpeningModal, setShowOpeningModal] = useState(false);
+  const [showClosingModal, setShowClosingModal] = useState(false);
+  const [openingAmount, setOpeningAmount] = useState<string>('');
+  const [closingAmount, setClosingAmount] = useState<string>('');
+  const [openingNote, setOpeningNote] = useState<string>('');
+  const [closingNote, setClosingNote] = useState<string>('');
+  const [todayTotalSales, setTodayTotalSales] = useState<number>(0);
+  const [todayCashSales, setTodayCashSales] = useState<number>(0);
+  const [isOpeningDone, setIsOpeningDone] = useState(false);
+  const [isClosingDone, setIsClosingDone] = useState(false);
+  const [openingData, setOpeningData] = useState<any>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Calculate totals
   const totalAmount = selectedItems.reduce((sum, item) => sum + item.price, 0); // Sum of prices before discount
@@ -136,7 +149,63 @@ const WalkInInvoicePage: React.FC = () => {
     fetchDefaultProducts();
     fetchCustomers();
     fetchSalesmans();
+    checkOpeningStatus();
+    checkClosingStatus();
   }, []);
+
+  // Check if opening is done for today (from database)
+  const checkOpeningStatus = async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const response = await fetch(`/api/walkin-invoices/daily-cash/${today}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.found && data.cash_opening > 0) {
+          setIsOpeningDone(true);
+          setOpeningData(data);
+        } else {
+          setIsOpeningDone(false);
+          setOpeningData(null);
+        }
+      } else {
+        setIsOpeningDone(false);
+        setOpeningData(null);
+      }
+    } catch (error) {
+      console.error('Error checking opening status:', error);
+      setIsOpeningDone(false);
+      setOpeningData(null);
+    }
+  };
+
+  // Check if closing is done for today (from database)
+  const checkClosingStatus = async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const response = await fetch(`/api/walkin-invoices/daily-cash/${today}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.found && data.cash_closing !== null && data.cash_closing !== undefined) {
+          setIsClosingDone(true);
+        } else {
+          setIsClosingDone(false);
+        }
+      } else {
+        setIsClosingDone(false);
+      }
+    } catch (error) {
+      console.error('Error checking closing status:', error);
+      setIsClosingDone(false);
+    }
+  };
 
   // Fetch default 100 products from stock API
   const fetchDefaultProducts = async () => {
@@ -394,11 +463,155 @@ const WalkInInvoicePage: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         setTodaySales(data.invoices || []);
+        setTodayTotalSales(data.total_amount || 0);
         setShowTodaySalesModal(true);
       }
     } catch (error) {
       console.error('Error fetching today sales:', error);
       showToast('Failed to fetch today sales', 'error');
+    }
+  };
+
+  // Handle Opening
+  const handleOpening = () => {
+    setShowOpeningModal(true);
+  };
+
+  // Submit Opening
+  const submitOpening = async () => {
+    const amount = Number(openingAmount);
+    if (amount < 0) {
+      showToast('Please enter a valid amount', 'error');
+      return;
+    }
+
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const response = await fetch('/api/walkin-invoices/opening', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          date: today,
+          amount: amount,
+          notes: openingNote
+        }),
+      });
+
+      if (response.ok) {
+        setIsOpeningDone(true);
+        Swal.fire({
+          title: 'Opening Saved!',
+          text: 'Opening balance has been recorded.',
+          icon: 'success',
+          timer: 2000,
+          showConfirmButton: false
+        });
+        setShowOpeningModal(false);
+        setOpeningAmount('');
+        setOpeningNote('');
+        checkOpeningStatus();
+        checkClosingStatus();
+      } else {
+        const errorData = await response.json();
+        showToast(errorData.detail || 'Failed to save opening', 'error');
+      }
+    } catch (error: any) {
+      showToast(error.message || 'Failed to save opening', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle Closing
+  const handleClosing = async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const response = await fetch(`/api/walkin-invoices/today?date=${today}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Calculate total sales and cash sales
+        const totalAmount = data.total_amount || 0;
+        const cashAmount = data.cash_amount || 0;
+        
+        setTodayTotalSales(totalAmount);
+        setTodayCashSales(cashAmount);
+        setShowClosingModal(true);
+      } else {
+        setTodayTotalSales(0);
+        setTodayCashSales(0);
+        setShowClosingModal(true);
+      }
+    } catch (error) {
+      console.error('Error fetching today sales:', error);
+      setTodayTotalSales(0);
+      setTodayCashSales(0);
+      setShowClosingModal(true);
+    }
+  };
+
+  // Submit Closing
+  const submitClosing = async () => {
+    const amount = Number(closingAmount);
+    if (amount < 0) {
+      showToast('Please enter a valid amount', 'error');
+      return;
+    }
+
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const response = await fetch('/api/walkin-invoices/closing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          date: today,
+          amount: amount,
+          notes: closingNote
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        
+        let message = `Closing balance recorded.\nOpening: Rs. ${result.opening}\nCash Sales: Rs. ${result.sales}\nExpected: Rs. ${result.expected}\nClosing: Rs. ${result.closing}`;
+        if (result.difference !== 0) {
+          message += `\nDifference: Rs. ${Math.abs(result.difference)} ${result.difference > 0 ? '(Extra)' : '(Short)'}`;
+        } else {
+          message += `\n✓ Balanced!`;
+        }
+
+        setIsClosingDone(true);
+        Swal.fire({
+          title: 'Closing Saved!',
+          text: message,
+          icon: 'success',
+          timer: 5000,
+          showConfirmButton: false
+        });
+        setShowClosingModal(false);
+        setClosingAmount('');
+        setClosingNote('');
+        checkOpeningStatus();
+        checkClosingStatus();
+      } else {
+        const errorData = await response.json();
+        showToast(errorData.detail || 'Failed to save closing', 'error');
+      }
+    } catch (error: any) {
+      showToast(error.message || 'Failed to save closing', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -434,14 +647,26 @@ const WalkInInvoicePage: React.FC = () => {
         </div>
         <div className="flex gap-3">
           <button
-            className="bg-regal-black text-regal-yellow px-4 py-2 rounded-md text-sm font-semibold hover:bg-gray-800 transition shadow-sm"
+            onClick={() => setShowOpeningModal(true)}
+            disabled={isOpeningDone || isSubmitting}
+            className={`px-4 py-2 rounded-md text-sm font-semibold transition shadow-sm ${
+              isOpeningDone
+                ? 'bg-green-500 text-white cursor-not-allowed'
+                : 'bg-regal-black text-regal-yellow hover:bg-gray-800'
+            }`}
           >
-            Opening
+            {isSubmitting ? 'Processing...' : isOpeningDone ? '✓ Opening Done' : 'Opening'}
           </button>
           <button
-            className="bg-regal-black text-regal-yellow px-4 py-2 rounded-md text-sm font-semibold hover:bg-gray-800 transition shadow-sm"
+            onClick={handleClosing}
+            disabled={isClosingDone || isSubmitting}
+            className={`px-4 py-2 rounded-md text-sm font-semibold transition shadow-sm ${
+              isClosingDone
+                ? 'bg-green-500 text-white cursor-not-allowed'
+                : 'bg-regal-black text-regal-yellow hover:bg-gray-800'
+            }`}
           >
-            Closing
+            {isSubmitting ? 'Processing...' : isClosingDone ? '✓ Closing Done' : 'Closing'}
           </button>
           <button
             onClick={() => fetchStock()}
@@ -867,6 +1092,161 @@ const WalkInInvoicePage: React.FC = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Opening Modal */}
+      {showOpeningModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Opening Balance</h2>
+              <button
+                onClick={() => setShowOpeningModal(false)}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Date</label>
+              <input
+                type="date"
+                value={new Date().toISOString().split('T')[0]}
+                className="regal-input w-full bg-gray-100"
+                readOnly
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Amount *</label>
+              <input
+                type="number"
+                value={openingAmount}
+                onChange={(e) => setOpeningAmount(e.target.value)}
+                className="regal-input w-full"
+                placeholder="Enter amount"
+                autoFocus
+              />
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium mb-1">Notes (Optional)</label>
+              <textarea
+                value={openingNote}
+                onChange={(e) => setOpeningNote(e.target.value)}
+                className="regal-input w-full"
+                placeholder="Any notes..."
+                rows={2}
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={submitOpening}
+                disabled={isSubmitting}
+                className="regal-btn bg-regal-yellow text-regal-black flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? 'Saving...' : 'Save Opening'}
+              </button>
+              <button
+                onClick={() => setShowOpeningModal(false)}
+                disabled={isSubmitting}
+                className="regal-btn bg-gray-300 text-black flex-1 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Closing Modal */}
+      {showClosingModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Closing Balance</h2>
+              <button
+                onClick={() => setShowClosingModal(false)}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Date</label>
+              <input
+                type="date"
+                value={new Date().toISOString().split('T')[0]}
+                className="regal-input w-full bg-gray-100"
+                readOnly
+              />
+            </div>
+
+            <div className="mb-4 p-3 bg-blue-50 rounded border border-blue-200 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Total Sales:</span>
+                <span className="font-semibold">Rs. {todayTotalSales.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Cash Sales:</span>
+                <span className="font-semibold">Rs. {todayCashSales.toFixed(2)}</span>
+              </div>
+              {openingData && (
+                <div className="flex justify-between text-sm border-t pt-2">
+                  <span className="text-gray-600">Opening:</span>
+                  <span className="font-semibold">Rs. {openingData.cash_opening.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm font-bold border-t pt-2">
+                <span className="text-gray-800">Cash Expected:</span>
+                <span className="font-bold text-regal-black">Rs. {(todayCashSales + (openingData?.cash_opening || 0)).toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Cash Closing Amount *</label>
+              <input
+                type="number"
+                value={closingAmount}
+                onChange={(e) => setClosingAmount(e.target.value)}
+                className="regal-input w-full"
+                placeholder="Enter physical cash count"
+                autoFocus
+              />
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium mb-1">Notes (Optional)</label>
+              <textarea
+                value={closingNote}
+                onChange={(e) => setClosingNote(e.target.value)}
+                className="regal-input w-full"
+                placeholder="Any notes..."
+                rows={2}
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={submitClosing}
+                disabled={isSubmitting}
+                className="regal-btn bg-regal-yellow text-regal-black flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? 'Saving...' : 'Save Closing'}
+              </button>
+              <button
+                onClick={() => setShowClosingModal(false)}
+                disabled={isSubmitting}
+                className="regal-btn bg-gray-300 text-black flex-1 disabled:opacity-50"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

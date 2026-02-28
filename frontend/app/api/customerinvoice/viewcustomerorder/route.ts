@@ -11,13 +11,14 @@ export async function GET(request: NextRequest) {
     const limit = url.searchParams.get('limit') || '10';
     const searchString = url.searchParams.get('searchString') || '';
     const status = url.searchParams.get('status') || '';
+    const orderStatus = url.searchParams.get('order_status') || status;
 
     // Build query string
     const params = new URLSearchParams();
     params.append('skip', skip);
     params.append('limit', limit);
     if (searchString) params.append('searchString', searchString);
-    if (status) params.append('status', status);
+    if (orderStatus) params.append('order_status', orderStatus);
 
     const queryString = params.toString();
     const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/customerinvoice/viewcustomerorder${queryString ? '?' + queryString : ''}`;

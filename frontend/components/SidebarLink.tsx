@@ -10,9 +10,10 @@ interface SidebarLinkProps {
   className?: string;
   target?: string;
   rel?: string;
+  onClick?: () => void;
 }
 
-export default function SidebarLink({ href, children, className, target, rel }: SidebarLinkProps) {
+export default function SidebarLink({ href, children, className, target, rel, onClick }: SidebarLinkProps) {
   const pathname = usePathname();
 
   const isActive = pathname === href || pathname.startsWith(href) && href !== '/';
@@ -22,6 +23,7 @@ export default function SidebarLink({ href, children, className, target, rel }: 
       href={href}
       target={target}
       rel={rel}
+      onClick={onClick}
       className={clsx(
         'flex items-center px-4 text-base font-medium rounded-lg transition-all duration-200',
         isActive

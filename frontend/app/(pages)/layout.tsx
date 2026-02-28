@@ -30,11 +30,11 @@ export default function PagesLayout({
           <SidebarClientWrapper />
 
           {/* Desktop Sidebar */}
-          <div id="desktop-sidebar" className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 z-30 border-r border-gray-200 border-b bg-white shadow-lg transition-all duration-300">
+          <div id="desktop-sidebar" className="flex w-64 flex-col fixed inset-y-0 z-30 border-r border-gray-200 border-b bg-white shadow-lg">
             <div className="flex flex-col flex-grow pt-8 pb-3">
-              <div className="flex-shrink-0 px-4 flex items-center justify-start pb-4">
-                <Image width={180} height={180} src="/jns_logo.svg" alt="J&S Dashboard Logo" className="h-20 w-auto" />
-                <span className="text-regal-black text-2xl font-semibold">J&S Dashboard</span>
+              <div className="flex-shrink-0 px-4 flex items-center justify-start pb-2">
+                <Image width={180} height={180} src="/jns_logo.svg" alt="J&S Dashboard Logo" className="h-24 w-auto" />
+                <span className="text-regal-black text-xl font-semibold font-serif leading-none">J&S Sportswear</span>
               </div>
 
               <div className="mt-5 flex-1 flex flex-col overflow-hidden">
@@ -69,7 +69,7 @@ export default function PagesLayout({
                   <SidebarLink href="/view-customer-order" className="text-base py-3 border-b border-gray-200">
                     View Customer Order
                   </SidebarLink>
-                  <SidebarLink href="/walkin-invoice" className="text-base py-3 border-b border-gray-200">
+                  <SidebarLink href="/walkin-invoice" className="text-base py-3 border-b border-gray-200" target="_blank" rel="noopener noreferrer">
                     Walk-in Invoice
                   </SidebarLink>
                   <SidebarLink href="/sales-view" className="text-base py-3 border-b border-gray-200">

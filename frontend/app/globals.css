@@ -47,7 +47,24 @@ body {
   .regal-btn-secondary {
     @apply px-4 py-2 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500;
   }
+}
 
+@layer utilities {
+  .animate-slide-in-left {
+    animation: slideInLeft 0.3s ease-out;
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@layer components {
   .regal-btn-danger {
     @apply px-4 py-2 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500;
   }

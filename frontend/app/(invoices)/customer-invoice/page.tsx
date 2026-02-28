@@ -793,7 +793,7 @@ const CustomerInvoicePage: React.FC = () => {
                     type="number"
                     value={unitPrice}
                     onChange={(e) => setUnitPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="regal-input w-full"
+                    className="regal-input w-full h-9"
                     placeholder="Unit Price"
                     min="0"
                     step="0.01"
@@ -807,7 +807,7 @@ const CustomerInvoicePage: React.FC = () => {
                     type="number"
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="regal-input w-full"
+                    className="regal-input w-full h-9"
                     placeholder="Quantity"
                     min="1"
                   />
@@ -819,7 +819,7 @@ const CustomerInvoicePage: React.FC = () => {
                   <input
                     type="number"
                     value={price || ''}
-                    className="regal-input w-full bg-gray-100"
+                    className="regal-input w-full h-9 bg-gray-100"
                     readOnly
                     placeholder="Price"
                   />

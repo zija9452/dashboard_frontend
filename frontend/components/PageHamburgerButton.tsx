@@ -8,20 +8,18 @@ export default function PageHamburgerButton() {
   useEffect(() => {
     const sidebar = document.getElementById('desktop-sidebar');
     const mainContent = document.getElementById('main-content');
-    
+
     if (sidebar && mainContent) {
       if (sidebarCollapsed) {
-        sidebar.classList.remove('md:w-64');
-        sidebar.classList.add('md:w-0');
-        sidebar.classList.add('md:overflow-hidden');
-        
+        // Collapse: sidebar chhupa do, content pura screen
+        sidebar.classList.add('hidden');
+        sidebar.classList.remove('flex');
         mainContent.classList.remove('md:ml-64');
         mainContent.classList.add('md:ml-0');
       } else {
-        sidebar.classList.add('md:w-64');
-        sidebar.classList.remove('md:w-0');
-        sidebar.classList.remove('md:overflow-hidden');
-        
+        // Expand: sidebar dikhao, content margin ke sath
+        sidebar.classList.remove('hidden');
+        sidebar.classList.add('flex');
         mainContent.classList.add('md:ml-64');
         mainContent.classList.remove('md:ml-0');
       }
@@ -32,7 +30,7 @@ export default function PageHamburgerButton() {
     <button
       id="page-hamburger-button"
       onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-      className={`fixed top-4 z-50 md:top-4 flex items-center justify-center p-2 rounded-full text-regal-black border border-regal-yellow bg-regal-yellow hover:bg-yellow-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-regal-yellow w-10 h-10 ${
+      className={`fixed top-4 z-50 flex items-center justify-center p-2 rounded-full text-regal-black border border-regal-yellow bg-regal-yellow hover:bg-yellow-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-regal-yellow w-10 h-10 ${
         sidebarCollapsed ? 'left-4' : 'left-[234px]'
       }`}
     >

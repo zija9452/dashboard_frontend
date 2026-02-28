@@ -55,7 +55,7 @@ const ViewCustomerOrderPage: React.FC = () => {
       params.append('skip', ((currentPage - 1) * pageSize).toString());
       params.append('limit', pageSize.toString());
       if (searchTerm) params.append('searchString', searchTerm);
-      if (statusFilter) params.append('status', statusFilter);
+      if (statusFilter) params.append('order_status', statusFilter);
 
       const response = await fetch(`/api/customerinvoice/viewcustomerorder?${params.toString()}`, {
         method: 'GET',
@@ -244,10 +244,10 @@ const ViewCustomerOrderPage: React.FC = () => {
                 className="regal-input w-40"
               >
                 <option value="">All Statuses</option>
-                <option value="draft">Draft</option>
-                <option value="issued">Issued</option>
-                <option value="paid">Paid</option>
-                <option value="cancelled">Cancelled</option>
+                <option value="PENDING">PENDING</option>
+                <option value="COMPLETED">COMPLETED</option>
+                <option value="DELIVERED">DELIVERED</option>
+                <option value="CANCEL">CANCEL</option>
               </select>
             </div>
           )}
@@ -268,7 +268,7 @@ const ViewCustomerOrderPage: React.FC = () => {
             <table className="w-full table-fixed">
               <thead className="bg-gray-100">
                 <tr className="text-xs text-gray-900 uppercase tracking-wider font-semibold">
-                  <th className="px-3 py-5 text-left w-32">Invoice No</th>
+                  <th className="px-3 py-5 text-left w-32">Order ID</th> {/* Invoice No */}
                   <th className="px-3 py-5 text-left w-28">Status</th>
                   <th className="px-3 py-5 text-left w-40">Customer</th>
                   <th className="px-3 py-5 text-left w-32">Team Name</th>
@@ -333,9 +333,9 @@ const ViewCustomerOrderPage: React.FC = () => {
             </table>
 
             {orders.length === 0 && (
-              <div className="text-center py-12 text-gray-500">
+              <p className="text-center py-12 text-gray-500">
                 No orders found
-              </div>
+              </p>
             )}
           </div>
 

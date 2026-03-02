@@ -262,7 +262,7 @@ const SalesViewPage: React.FC = () => {
           {/* Left Side - Walk-in Invoices */}
           <div>
             <h2 className="text-lg font-semibold mb-4 text-gray-800">Walk-in Invoices</h2>
-            <div className="overflow-x-auto" style={{ minHeight: '280px' }}>
+            <div className="overflow-x-auto overflow-y-auto" style={{ height: '400px' }}>
               <table className="w-full table-fixed">
                 <thead className="bg-gray-100">
                   <tr className="text-gray-700 font-semibold text-xs uppercase tracking-wider">

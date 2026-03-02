@@ -1,14 +1,15 @@
 import { NextRequest } from 'next/server';
 
-// GET /api/walkin-invoices/today - Get today's sales report with opening, sales, expenses, cash in hand
+// GET /api/sales-view/walkin-invoices - Get walk-in invoices
 export async function GET(request: NextRequest) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
     const searchParams = request.nextUrl.searchParams;
-    const date = searchParams.get('date') || new Date().toISOString().split('T')[0];
+    const from_date = searchParams.get('from_date') || '';
+    const to_date = searchParams.get('to_date') || '';
+    const branch = searchParams.get('branch') || 'European Sports Light House';
 
-    // Use the backend's today sales report endpoint
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/walkin-invoice/today?date=${date}`;
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/sales-view/walkin-invoices?from_date=${from_date}&to_date=${to_date}&branch=${branch}`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -33,11 +34,9 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
-
-    // Return the data from backend
     return Response.json(data);
   } catch (error) {
-    console.error('Error fetching today sales report:', error);
+    console.error('Error fetching walk-in invoices:', error);
     return Response.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }

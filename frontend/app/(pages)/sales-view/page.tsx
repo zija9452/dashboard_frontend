@@ -1,10 +1,31 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { format } from 'date-fns';
+import { useToast } from '@/components/ui/Toast';
+import Swal from 'sweetalert2';
+import { useRouter } from 'next/navigation';
+import PageHeader from '@/components/ui/PageHeader';
+import Pagination from '@/components/ui/Pagination';
 
-// Define interfaces
-interface Invoice {
+// Walk-in Invoice interface
+interface WalkInInvoice {
+  id: string;
+  invoice_no: string;
+  product_name: string;
+  total_amount: number;
+  amount_paid: number;
+  balance_due: number;
+  payment_status: 'paid' | 'partial' | 'unpaid';
+  payment_method: string;
+  quantity: number;
+  discount: number;
+  total_discount: number;
+  cost: number;
+  created_at: string;
+}
+
+// Customized Invoice interface
+interface CustomizedInvoice {
   id: string;
   invoice_no: string;
   customer_name: string;
@@ -13,243 +34,499 @@ interface Invoice {
   balance_due: number;
   payment_status: 'paid' | 'partial' | 'unpaid';
   payment_method: string;
+  quantity: number;
+  discount: number;
   created_at: string;
-  type: 'customer' | 'walkin';
+  partial_payments: Array<{
+    date: string;
+    amount: number;
+    method: string;
+  }>;
+}
+
+// Summary interface
+interface SalesSummary {
+  opening: number;
+  totalSale: number;
+  grossProfit: number;
+  totalExpense: number;
+  totalRecovery: number;
+  vendorPayments: number;
+  netCash: number;
+  totalPurchase: number;
+  totalRefund: number;
+  netProfit: number;
 }
 
 const SalesViewPage: React.FC = () => {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
-  const [filterType, setFilterType] = useState<'all' | 'customer' | 'walkin'>('all');
-  const [searchTerm, setSearchTerm] = useState<string>('');
+  const router = useRouter();
+  const { showToast } = useToast();
 
-  // Function to fetch sales data
-  const fetchSales = async () => {
+  // Filter states
+  const [fromDate, setFromDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [toDate, setToDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedBranch, setSelectedBranch] = useState<string>('European Sports Light House');
+  const [reportType, setReportType] = useState<string>('daily');
+
+  // Data states
+  const [walkInInvoices, setWalkInInvoices] = useState<WalkInInvoice[]>([]);
+  const [customizedInvoices, setCustomizedInvoices] = useState<CustomizedInvoice[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+
+  // Summary states
+  const [summary, setSummary] = useState<SalesSummary>({
+    opening: 0,
+    totalSale: 0,
+    grossProfit: 0,
+    totalExpense: 0,
+    totalRecovery: 0,
+    vendorPayments: 0,
+    netCash: 0,
+    totalPurchase: 0,
+    totalRefund: 0,
+    netProfit: 0,
+  });
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(10);
+
+  // Branch options
+  const branchOptions = [
+    'European Sports Light House',
+    'Branch 2',
+    'Branch 3',
+  ];
+
+  // Report type options
+  const reportOptions = [
+    { value: 'daily', label: 'Daily Report' },
+    { value: 'weekly', label: 'Weekly Report' },
+    { value: 'monthly', label: 'Monthly Report' },
+    { value: 'yearly', label: 'Yearly Report' },
+    { value: 'custom', label: 'Custom Range' },
+  ];
+
+  // Fetch sales data
+  const fetchSalesData = async () => {
     try {
       setLoading(true);
 
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Fetch walk-in invoices
+      const walkinResponse = await fetch(
+        `/api/sales-view/walkin-invoices?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
+        { credentials: 'include' }
+      );
 
-      // Mock data
-      const mockInvoices: Invoice[] = [
-        { id: '1', invoice_no: 'CIV-001', customer_name: 'John Doe', total_amount: 125.50, amount_paid: 125.50, balance_due: 0.00, payment_status: 'paid', payment_method: 'cash', created_at: '2026-02-01T10:30:00.000Z', type: 'customer' },
-        { id: '2', invoice_no: 'WIV-001', customer_name: 'Walk-in Customer', total_amount: 89.99, amount_paid: 89.99, balance_due: 0.00, payment_status: 'paid', payment_method: 'card', created_at: '2026-02-01T11:15:00.000Z', type: 'walkin' },
-        { id: '3', invoice_no: 'CIV-002', customer_name: 'Jane Smith', total_amount: 245.75, amount_paid: 100.00, balance_due: 145.75, payment_status: 'partial', payment_method: 'cash', created_at: '2026-02-02T09:45:00.000Z', type: 'customer' },
-        { id: '4', invoice_no: 'WIV-002', customer_name: 'Walk-in Customer', total_amount: 56.25, amount_paid: 56.25, balance_due: 0.00, payment_status: 'paid', payment_method: 'cash', created_at: '2026-02-02T14:20:00.000Z', type: 'walkin' },
-        { id: '5', invoice_no: 'CIV-003', customer_name: 'Bob Johnson', total_amount: 320.00, amount_paid: 320.00, balance_due: 0.00, payment_status: 'paid', payment_method: 'card', created_at: '2026-02-03T16:30:00.000Z', type: 'customer' },
-        { id: '6', invoice_no: 'WIV-003', customer_name: 'Walk-in Customer', total_amount: 187.50, amount_paid: 150.00, balance_due: 37.50, payment_status: 'partial', payment_method: 'card', created_at: '2026-02-03T17:45:00.000Z', type: 'walkin' },
-        { id: '7', invoice_no: 'CIV-004', customer_name: 'Alice Williams', total_amount: 98.25, amount_paid: 98.25, balance_due: 0.00, payment_status: 'paid', payment_method: 'cash', created_at: '2026-02-04T10:15:00.000Z', type: 'customer' },
-        { id: '8', invoice_no: 'WIV-004', customer_name: 'Walk-in Customer', total_amount: 210.75, amount_paid: 210.75, balance_due: 0.00, payment_status: 'paid', payment_method: 'card', created_at: '2026-02-04T13:30:00.000Z', type: 'walkin' },
-      ];
+      // Fetch summary
+      const summaryResponse = await fetch(
+        `/api/sales-view/summary?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
+        { credentials: 'include' }
+      );
 
-      setInvoices(mockInvoices);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch sales data');
+      const walkinData = await walkinResponse.json();
+      const summaryData = await summaryResponse.json();
+
+      console.log('Walk-in invoices data:', walkinData);
+      setWalkInInvoices(walkinData.invoices || []);
+      setSummary(summaryData);
+
+      showToast('Sales data fetched successfully', 'success');
+    } catch (error) {
+      console.error('Error fetching sales data:', error);
+      showToast('Failed to fetch sales data', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  // Initial data fetch
+  // Export to Excel
+  const exportToExcel = () => {
+    // TODO: Implement Excel export
+    showToast('Excel export feature coming soon', 'info');
+  };
+
+  // View report
+  const viewReport = () => {
+    // TODO: Implement report view
+    showToast(`Viewing ${reportType} report for ${selectedBranch}`, 'info');
+  };
+
+  // Initial fetch
   useEffect(() => {
-    fetchSales();
+    // Auto-fetch on mount with today's date
+    const today = new Date().toISOString().split('T')[0];
+    setFromDate(today);
+    setToDate(today);
+    fetchSalesData();
   }, []);
 
-  // Filter invoices based on criteria
-  const filteredInvoices = invoices.filter(invoice => {
-    const matchesDate = (!startDate || new Date(invoice.created_at) >= new Date(startDate)) &&
-                        (!endDate || new Date(invoice.created_at) <= new Date(endDate));
-    const matchesType = filterType === 'all' || invoice.type === filterType;
-    const matchesSearch = !searchTerm ||
-                         invoice.invoice_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         invoice.customer_name.toLowerCase().includes(searchTerm.toLowerCase());
-
-    return matchesDate && matchesType && matchesSearch;
-  });
-
-  // Calculate totals
-  const totalSales = filteredInvoices.reduce((sum, invoice) => sum + invoice.total_amount, 0);
-  const totalReceived = filteredInvoices.reduce((sum, invoice) => sum + invoice.amount_paid, 0);
-  const totalOutstanding = filteredInvoices.reduce((sum, invoice) => sum + invoice.balance_due, 0);
-
-  if (loading) {
-    return (
-      <div className="regal-card m-6">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/3 mb-6"></div>
-          <div className="space-y-4">
-            {[...Array(8)].map((_, i) => (
-              <div key={i} className="h-16 bg-gray-200 rounded"></div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="regal-card m-6">
-        <div className="text-red-600 p-4">Error: {error}</div>
-      </div>
-    );
-  }
-
   return (
-    <div className="regal-card m-6">
-      <h1 className="text-2xl font-bold mb-6">Sales View</h1>
+    <div className="bg-white min-h-screen">
+      <PageHeader title="Sales View" />
 
-      {/* Filters */}
-      <div className="regal-card mb-6">
-        <h2 className="text-lg font-semibold mb-4">Filters</h2>
+      <div className="p-4">
+        {/* Filters Section */}
+        <div className="mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4">
+            {/* From Date */}
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="regal-input w-full"
+              />
+            </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* To Date */}
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="regal-input w-full"
+              />
+            </div>
+
+            {/* Fetch Button */}
+            <div className="md:col-span-2 flex items-end">
+              <button
+                onClick={fetchSalesData}
+                disabled={loading}
+                className="bg-regal-black text-regal-yellow px-6 py-3 rounded-md text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-50"
+              >
+                {loading ? 'Fetching...' : 'Fetch'}
+              </button>
+            </div>
+
+            {/* Branch Selector */}
+            <div className="md:col-span-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
+              <select
+                value={selectedBranch}
+                onChange={(e) => setSelectedBranch(e.target.value)}
+                className="regal-input w-full"
+              >
+                {branchOptions.map((branch) => (
+                  <option key={branch} value={branch}>
+                    {branch}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Report Type and Action Buttons */}
+          <div className="flex items-end gap-4">
+            <div className="w-80">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Report Type</label>
+              <select
+                value={reportType}
+                onChange={(e) => setReportType(e.target.value)}
+                className="regal-input w-full"
+              >
+                {reportOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={viewReport}
+                className="bg-regal-yellow text-regal-black px-3 py-3 rounded-md text-sm font-semibold hover:bg-yellow-400 transition"
+              >
+                View Report
+              </button>
+              <button
+                onClick={exportToExcel}
+                className="bg-green-600 text-white px-3 py-3 rounded-md text-sm font-semibold hover:bg-green-700 transition"
+              >
+                Excel Report
+              </button>
+            </div>
+          </div>
+        </div>
+
+          
+
+          
+        </div>
+
+        {/* Tables Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* Left Side - Walk-in Invoices */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="regal-input w-full"
-            />
+            <h2 className="text-lg font-semibold mb-4 text-gray-800">Walk-in Invoices</h2>
+            <div className="overflow-x-auto" style={{ minHeight: '280px' }}>
+              <table className="w-full table-fixed">
+                <thead className="bg-gray-100">
+                  <tr className="text-gray-700 font-semibold text-xs uppercase tracking-wider">
+                    <th className="px-3 py-5 text-left w-20">Order ID</th>
+                    <th className="px-3 py-5 text-left w-40">Product</th>
+                    <th className="px-3 py-5 text-left w-20">Price</th>
+                    <th className="px-3 py-5 text-left w-20">Amount Paid</th>
+                    <th className="px-3 py-5 text-left w-20">Qty</th>
+                    <th className="px-3 py-5 text-left w-20">Discount</th>
+                    <th className="px-3 py-5 text-right w-20">Total Discount</th>
+                    <th className="px-3 py-5 text-left w-20">Cost</th>
+                    <th className="px-3 py-5 text-left w-28">Time</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={9} className="px-3 py-8 text-center">
+                        <div className="animate-pulse">
+                          <div className="h-4 bg-gray-200 rounded w-3/4 mx-auto"></div>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : walkInInvoices.length === 0 ? (
+                    <>
+                      <tr style={{ height: '70px' }}>
+                        <td className="px-3 py-4"></td>
+                        <td className="px-3 py-4"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-3 py-4 text-right"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-3 py-4"></td>
+                      </tr>
+                      <tr style={{ height: '70px' }}>
+                        <td className="px-3 py-4"></td>
+                        <td className="px-3 py-4"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-3 py-4 text-right"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-3 py-4"></td>
+                      </tr>
+                      <tr style={{ height: '70px' }}>
+                        <td className="px-3 py-4"></td>
+                        <td className="px-3 py-4"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-3 py-4 text-right"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-3 py-4"></td>
+                      </tr>
+                      <tr>
+                        <td colSpan={9} className="px-3 py-8 text-center text-gray-500">
+                          No walk-in invoices found
+                        </td>
+                      </tr>
+                    </>
+                  ) : (
+                    <>
+                      {walkInInvoices.map((invoice, idx) => (
+                        <tr key={`${invoice.id}-${idx}`} className="text-sm text-gray-900 border-b border-gray-200" style={{ height: '70px' }}>
+                          <td className="px-3 py-4 font-mono text-xs truncate">{invoice.invoice_no}</td>
+                          <td className="px-3 py-4 font-medium">{invoice.product_name}</td>
+                          <td className="px-2 py-4 text-right">{invoice.total_amount}</td>
+                          <td className="px-2 py-4 text-right text-green-700">{invoice.amount_paid}</td>
+                          <td className="px-3 py-4 text-right">{invoice.quantity}</td>
+                          <td className="px-2 py-4 text-right">{invoice.discount}</td>
+                          <td className="px-2 py-4 text-right text-red-700">{invoice.total_discount}</td>
+                          <td className="px-2 py-4 text-right text-gray-600">{invoice.cost}</td>
+                          <td className="px-3 py-4 text-xs">
+                            {new Date(invoice.created_at).toLocaleTimeString()}
+                          </td>
+                        </tr>
+                      ))}
+                      {/* Add empty rows if less than 4 invoices */}
+                      {walkInInvoices.length < 4 && Array.from({ length: 4 - walkInInvoices.length }).map((_, idx) => (
+                        <tr key={`empty-${idx}`} style={{ height: '70px' }}>
+                          <td className="px-3 py-4"></td>
+                          <td className="px-3 py-4"></td>
+                          <td className="px-2 py-4 text-right"></td>
+                          <td className="px-2 py-4 text-right"></td>
+                          <td className="px-3 py-4 text-right"></td>
+                          <td className="px-2 py-4 text-right"></td>
+                          <td className="px-2 py-4 text-right"></td>
+                          <td className="px-2 py-4 text-right"></td>
+                          <td className="px-3 py-4"></td>
+                        </tr>
+                      ))}
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
+          {/* Right Side - Customized Invoices */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="regal-input w-full"
-            />
+            <h2 className="text-lg font-semibold mb-4 text-gray-800">Customized Invoices</h2>
+            <div className="overflow-x-auto" style={{ minHeight: '280px' }}>
+              <table className="w-full table-fixed">
+                <thead className="bg-gray-100">
+                  <tr className="text-gray-700 font-semibold text-xs uppercase tracking-wider">
+                    <th className="px-3 py-5 text-left w-20">Order ID</th>
+                    <th className="px-3 py-5 text-left w-[154px]">Customer</th>
+                    <th className="px-3 py-5 text-left w-20">Total</th>
+                    <th className="px-3 py-5 text-right w-20">Paid</th>
+                    <th className="px-3 py-5 text-right w-20">Balance</th>
+                    <th className="px-3 py-5 text-left w-20">Status</th>
+                    <th className="px-3 py-5 text-left w-20">Payment</th>
+                    <th className="px-3 py-5 w-20">Qty</th>
+                    <th className="px-3 py-5 text-left w-28">Time</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={9} className="px-3 py-8 text-center">
+                        <div className="animate-pulse">
+                          <div className="h-4 bg-gray-200 rounded w-3/4 mx-auto"></div>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : customizedInvoices.length === 0 ? (
+                    <>
+                      <tr style={{ height: '70px' }}>
+                        <td className="px-3 py-4"></td>
+                        <td className="px-3 py-4"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-3 py-4"></td>
+                        <td className="px-3 py-4"></td>
+                        <td className="px-3 py-4 text-right"></td>
+                        <td className="px-3 py-4"></td>
+                      </tr>
+                      <tr style={{ height: '70px' }}>
+                        <td className="px-3 py-4"></td>
+                        <td className="px-3 py-4"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-3 py-4"></td>
+                        <td className="px-3 py-4"></td>
+                        <td className="px-3 py-4 text-right"></td>
+                        <td className="px-3 py-4"></td>
+                      </tr>
+                      <tr style={{ height: '70px' }}>
+                        <td className="px-3 py-4"></td>
+                        <td className="px-3 py-4"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-2 py-4 text-right"></td>
+                        <td className="px-3 py-4"></td>
+                        <td className="px-3 py-4"></td>
+                        <td className="px-3 py-4 text-right"></td>
+                        <td className="px-3 py-4"></td>
+                      </tr>
+                      <tr>
+                        <td colSpan={9} className="px-3 py-8 text-center text-gray-500">
+                          No customized invoices found
+                        </td>
+                      </tr>
+                    </>
+                  ) : (
+                    <>
+                      {customizedInvoices.map((invoice) => (
+                        <tr key={invoice.id} className="text-sm text-gray-900 border-b border-gray-200" style={{ height: '70px' }}>
+                          <td className="px-3 py-4 font-mono text-xs truncate">{invoice.invoice_no}</td>
+                          <td className="px-3 py-4 font-medium">{invoice.product_name}</td>
+                          <td className="px-2 py-4 text-left">{invoice.total_amount}</td>
+                          <td className="px-2 py-4 text-right">{invoice.amount_paid}</td>
+                          <td className="px-2 py-4 text-right">{invoice.balance_due}</td>
+                          <td className="px-3 py-4">
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                              invoice.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+                              invoice.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {invoice.payment_status}
+                            </span>
+                          </td>
+                          <td className="px-3 py-4 capitalize">{invoice.payment_method}</td>
+                          <td className="px-3 py-4 text-center">{invoice.quantity}</td>
+                          <td className="px-3 py-4">
+                            {new Date(invoice.created_at).toLocaleTimeString()}
+                          </td>
+                        </tr>
+                      ))}
+                      {/* Add empty rows if less than 4 invoices */}
+                      {customizedInvoices.length < 4 && Array.from({ length: 4 - customizedInvoices.length }).map((_, idx) => (
+                        <tr key={`empty-${idx}`} style={{ height: '70px' }}>
+                          <td className="px-3 py-4"></td>
+                          <td className="px-3 py-4"></td>
+                          <td className="px-2 py-4 text-right"></td>
+                          <td className="px-2 py-4 text-right"></td>
+                          <td className="px-2 py-4 text-right"></td>
+                          <td className="px-3 py-4"></td>
+                          <td className="px-3 py-4"></td>
+                          <td className="px-3 py-4 text-right"></td>
+                          <td className="px-3 py-4"></td>
+                        </tr>
+                      ))}
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Type</label>
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value as 'all' | 'customer' | 'walkin')}
-              className="regal-select w-full"
-            >
-              <option value="all">All Types</option>
-              <option value="customer">Customer Invoice</option>
-              <option value="walkin">Walk-in Invoice</option>
-            </select>
+        {/* Summary Footer */}
+        <div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-gray-600 font-bold text-xl">
+            <div className="flex items-center gap-1">
+              <p>Opening:</p>
+              <p>{summary.opening}</p>
+            </div>
+            <div className="flex items-center gap-1">
+              <p>Total Sale:</p>
+              <p>{summary.totalSale}</p>
+            </div>
+            <div className="flex items-center gap-1">
+              <p>Gross Profit:</p>
+              <p>{summary.grossProfit}</p>
+            </div>
+            <div className="flex items-center gap-1">
+              <p>Total Expense:</p>
+              <p>{summary.totalExpense}</p>
+            </div>
+            <div className="flex items-center gap-1">
+              <p>Total Recovery:</p>
+              <p>{summary.totalRecovery}</p>
+            </div>
+            <div className="flex items-center gap-1">
+              <p>Vendor Payments:</p>
+              <p>{summary.vendorPayments}</p>
+            </div>
+            <div className="flex items-center gap-1">
+              <p>Net Cash:</p>
+              <p>{summary.netCash}</p>
+            </div>
+            <div className="flex items-center gap-1">
+              <p>Total Purchase:</p>
+              <p>{summary.totalPurchase}</p>
+            </div>
+            <div className="flex items-center gap-1">
+              <p>Total Refund:</p>
+              <p>{summary.totalRefund}</p>
+            </div>
+            <div className="flex items-center gap-1 col-span-2 md:col-span-2">
+              <p>Net Profit:</p>
+              <p>{summary.netProfit}</p>
+            </div>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by invoice or customer..."
-              className="regal-input w-full"
-            />
-          </div>
         </div>
+        
 
-        <div className="mt-4 flex justify-end">
-          <button 
-            onClick={fetchSales}
-            disabled={loading}
-            className="regal-btn-primary flex items-center"
-          >
-            {loading ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Fetching...
-              </>
-            ) : 'Fetch Data'}
-          </button>
-        </div>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div className="regal-card">
-          <h3 className="text-sm font-medium text-gray-500">Total Sales</h3>
-          <p className="text-2xl font-semibold">${totalSales.toFixed(2)}</p>
-        </div>
-
-        <div className="regal-card">
-          <h3 className="text-sm font-medium text-gray-500">Total Received</h3>
-          <p className="text-2xl font-semibold">${totalReceived.toFixed(2)}</p>
-        </div>
-
-        <div className="regal-card">
-          <h3 className="text-sm font-medium text-gray-500">Outstanding</h3>
-          <p className="text-2xl font-semibold">${totalOutstanding.toFixed(2)}</p>
-        </div>
-      </div>
-
-      {/* Invoices Table */}
-      <div className="regal-card">
-        <div className="overflow-x-auto">
-          <table className="regal-table">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice #</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredInvoices.map((invoice) => (
-                <tr key={invoice.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{invoice.invoice_no}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{invoice.customer_name}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${invoice.total_amount.toFixed(2)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${invoice.amount_paid.toFixed(2)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${invoice.balance_due.toFixed(2)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      invoice.payment_status === 'paid'
-                        ? 'bg-green-100 text-green-800'
-                        : invoice.payment_status === 'partial'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-red-100 text-red-800'
-                    }`}>
-                      {invoice.payment_status.charAt(0).toUpperCase() + invoice.payment_status.slice(1)}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {format(new Date(invoice.created_at), 'yyyy-MM-dd HH:mm')}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {invoice.type === 'customer' ? 'Customer' : 'Walk-in'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button className="text-indigo-600 hover:text-indigo-900 mr-3">View</button>
-                    <button className="text-green-600 hover:text-green-900 mr-3">Print</button>
-                    <button className="text-gray-600 hover:text-gray-900">Receipt</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Empty State */}
-        {filteredInvoices.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-500">No invoices found for the selected criteria.</p>
-          </div>
-        )}
-      </div>
     </div>
   );
 };

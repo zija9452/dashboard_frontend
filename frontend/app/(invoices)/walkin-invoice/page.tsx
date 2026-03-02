@@ -7,6 +7,52 @@ import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/ui/PageHeader';
 import ReportModal from '@/components/ui/ReportModal';
+import { Product as ProductAPI } from '@/lib/api/products';
+
+// Print styles - only print modal content
+const printStyles = `
+  @media print {
+    body {
+      visibility: hidden;
+    }
+    body * {
+      visibility: hidden;
+    }
+    /* Show the modal container and printable report */
+    .print-modal-container,
+    .print-modal-container * {
+      visibility: visible !important;
+    }
+    .print-modal-container {
+      position: absolute !important;
+      inset: 0 !important;
+      background: white !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+    /* Show only the printable report content */
+    #printable-report {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      padding: 0;
+      margin: 0;
+      background: white;
+    }
+    #printable-report * {
+      visibility: visible !important;
+    }
+    /* Hide only the sticky header bar (buttons) */
+    #printable-report .sticky {
+      display: none !important;
+    }
+    @page {
+      margin: 1cm;
+      size: A4;
+    }
+  }
+`;
 
 interface Customer {
   cus_id: string;
@@ -80,11 +126,13 @@ const WalkInInvoicePage: React.FC = () => {
   // Stock view modal
   const [showStockModal, setShowStockModal] = useState(false);
   const [stockSearchTerm, setStockSearchTerm] = useState('');
-  const [stockProducts, setStockProducts] = useState<Product[]>([]);
+  const [stockProducts, setStockProducts] = useState<ProductAPI[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
 
   // Today sales state
   const [todaySales, setTodaySales] = useState<any[]>([]);
   const [showTodaySalesModal, setShowTodaySalesModal] = useState(false);
+  const [todaySalesReport, setTodaySalesReport] = useState<any>(null);
 
   // Opening/Closing state
   const [showOpeningModal, setShowOpeningModal] = useState(false);
@@ -161,15 +209,18 @@ const WalkInInvoicePage: React.FC = () => {
         method: 'GET',
         credentials: 'include',
       });
-      
+
       if (response.ok) {
         const data = await response.json();
+        console.log('Opening status check:', data);
         if (data.found && data.cash_opening > 0) {
           setIsOpeningDone(true);
           setOpeningData(data);
+          console.log('Opening done set to true, cash_opening:', data.cash_opening);
         } else {
           setIsOpeningDone(false);
           setOpeningData(null);
+          console.log('Opening done set to false, found:', data.found, 'cash_opening:', data.cash_opening);
         }
       } else {
         setIsOpeningDone(false);
@@ -190,10 +241,10 @@ const WalkInInvoicePage: React.FC = () => {
         method: 'GET',
         credentials: 'include',
       });
-      
+
       if (response.ok) {
         const data = await response.json();
-        if (data.found && data.cash_closing !== null && data.cash_closing !== undefined) {
+        if (data.found && data.total_closing !== null && data.total_closing !== undefined) {
           setIsClosingDone(true);
         } else {
           setIsClosingDone(false);
@@ -439,6 +490,9 @@ const WalkInInvoicePage: React.FC = () => {
         setSelectedSalesman('');
         setPaymentDate(new Date().toISOString().split('T')[0]);
         setManualDiscount(0);
+        
+        // Refresh products to update stock
+        fetchDefaultProducts();
       } else {
         const errorData = await response.json();
         showToast(errorData.error || errorData.detail || 'Failed to create invoice', 'error');
@@ -451,7 +505,7 @@ const WalkInInvoicePage: React.FC = () => {
     }
   };
 
-  // Fetch today sales
+  // Fetch today sales report
   const fetchTodaySales = async () => {
     try {
       const today = new Date().toISOString().split('T')[0];
@@ -460,11 +514,19 @@ const WalkInInvoicePage: React.FC = () => {
         credentials: 'include',
       });
 
+      if (response.status === 401) {
+        // Session expired, redirect to login
+        showToast('Session expired. Please login again.', 'error');
+        router.push('/login');
+        return;
+      }
+
       if (response.ok) {
         const data = await response.json();
-        setTodaySales(data.invoices || []);
-        setTodayTotalSales(data.total_amount || 0);
+        setTodaySalesReport(data);
         setShowTodaySalesModal(true);
+      } else {
+        showToast('Failed to fetch today sales', 'error');
       }
     } catch (error) {
       console.error('Error fetching today sales:', error);
@@ -535,24 +597,25 @@ const WalkInInvoicePage: React.FC = () => {
         credentials: 'include',
       });
 
+      if (response.status === 401) {
+        // Session expired, redirect to login
+        showToast('Session expired. Please login again.', 'error');
+        router.push('/login');
+        return;
+      }
+
       if (response.ok) {
         const data = await response.json();
-        // Calculate total sales and cash sales
-        const totalAmount = data.total_amount || 0;
-        const cashAmount = data.cash_amount || 0;
-        
-        setTodayTotalSales(totalAmount);
-        setTodayCashSales(cashAmount);
+        // Use total_sales (actual amount paid) from backend
+        setTodayTotalSales(data.total_sales || 0);
         setShowClosingModal(true);
       } else {
         setTodayTotalSales(0);
-        setTodayCashSales(0);
         setShowClosingModal(true);
       }
     } catch (error) {
       console.error('Error fetching today sales:', error);
       setTodayTotalSales(0);
-      setTodayCashSales(0);
       setShowClosingModal(true);
     }
   };
@@ -583,8 +646,8 @@ const WalkInInvoicePage: React.FC = () => {
 
       if (response.ok) {
         const result = await response.json();
-        
-        let message = `Closing balance recorded.\nOpening: Rs. ${result.opening}\nCash Sales: Rs. ${result.sales}\nExpected: Rs. ${result.expected}\nClosing: Rs. ${result.closing}`;
+
+        let message = `Closing balance recorded.\nOpening: Rs. ${result.opening}\nTotal Sales: Rs. ${result.sales}\nExpected: Rs. ${result.expected}\nClosing: Rs. ${result.closing}`;
         if (result.difference !== 0) {
           message += `\nDifference: Rs. ${Math.abs(result.difference)} ${result.difference > 0 ? '(Extra)' : '(Short)'}`;
         } else {
@@ -604,6 +667,9 @@ const WalkInInvoicePage: React.FC = () => {
         setClosingNote('');
         checkOpeningStatus();
         checkClosingStatus();
+      } else if (response.status === 401) {
+        showToast('Session expired. Please login again.', 'error');
+        router.push('/login');
       } else {
         const errorData = await response.json();
         showToast(errorData.detail || 'Failed to save closing', 'error');
@@ -615,27 +681,43 @@ const WalkInInvoicePage: React.FC = () => {
     }
   };
 
-  // Fetch stock for view stock modal
+  // Fetch stock for view stock modal - use same API as product page
   const fetchStock = async () => {
+    // Open modal first
+    setShowStockModal(true);
+    setHasSearched(false);
+    setStockProducts([]);
+    
+    if (!stockSearchTerm.trim()) {
+      return; // Don't fetch if no search term, user will search manually
+    }
+    
     try {
-      const response = await fetch(`/api/stock/viewstock?search=${encodeURIComponent(stockSearchTerm)}`, {
+      setHasSearched(true);
+      // Use same API as product page - /api/products with search_string
+      const response = await fetch(`/api/products?page=1&limit=100&search_string=${encodeURIComponent(stockSearchTerm)}`, {
         method: 'GET',
         credentials: 'include',
       });
 
       if (response.ok) {
         const data = await response.json();
-        setStockProducts(data.products || []);
-        setShowStockModal(true);
+        // Show all products from search results, including zero stock
+        setStockProducts(data.data || data.products || []);
+      } else {
+        setStockProducts([]);
       }
     } catch (error) {
       console.error('Error fetching stock:', error);
       showToast('Failed to fetch stock', 'error');
+      setStockProducts([]);
     }
   };
 
   return (
-    <div className="bg-white min-h-screen">
+    <>
+      <style dangerouslySetInnerHTML={{ __html: printStyles }} />
+      <div className="bg-white min-h-screen">
       {/* Navbar Header */}
       <nav className="flex items-center justify-between mb-6 px-6 py-2 bg-regal-yellow shadow-lg relative">
         <div className="flex items-center">
@@ -1050,49 +1132,111 @@ const WalkInInvoicePage: React.FC = () => {
       {/* Stock View Modal */}
       {showStockModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-y-auto p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">View Stock</h2>
+          <div className="bg-white rounded-lg overflow-hidden flex flex-col shadow-2xl">
+            {/* Header */}
+            <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
+              <h2 className="text-2xl font-bold text-gray-800">Stock Inventory</h2>
               <button
                 onClick={() => setShowStockModal(false)}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
+                className="text-gray-500 hover:text-gray-700 text-3xl font-light transition"
               >
                 ×
               </button>
             </div>
 
-            <div className="mb-4">
-              <input
-                type="text"
-                value={stockSearchTerm}
-                onChange={(e) => setStockSearchTerm(e.target.value)}
-                placeholder="Search products..."
-                className="regal-input w-full"
-              />
+            {/* Search Bar */}
+            <div className="px-6 py-4 border-b border-gray-200 bg-white flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  value={stockSearchTerm}
+                  onChange={(e) => setStockSearchTerm(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && fetchStock()}
+                  placeholder="Search by product name or barcode..."
+                  className="regal-input w-full text-sm py-2"
+                  autoFocus
+                />
+                <button
+                  onClick={fetchStock}
+                  className="bg-regal-black text-regal-yellow px-6 py-2 rounded-md text-sm font-semibold hover:bg-gray-800 transition shadow-sm whitespace-nowrap flex-shrink-0"
+                >
+                  Search
+                </button>
+              </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
+            {/* Table */}
+            <div className="flex-1 overflow-auto bg-gray-50">
+              <table className="table-fixed min-w-0">
+                <thead className="bg-gray-100 sticky top-0 z-10">
+                  <tr className="text-gray-700 font-semibold text-xs uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left border-b border-gray-300">Product Name</th>
+                    <th className="px-6 py-4 text-left border-b border-gray-300">Stock</th>
+                    <th className="px-6 py-4 text-left border-b border-gray-300">Branch</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {stockProducts.map((product, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm">{product.name}</td>
-                      <td className="px-4 py-3 text-sm">{product.category}</td>
-                      <td className="px-4 py-3 text-sm">{product.stock_level}</td>
-                      <td className="px-4 py-3 text-sm">Rs. {product.unit_price}</td>
+                <tbody className="divide-y divide-gray-200">
+                  {!hasSearched ? (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-32 text-center">
+                        <div className="flex flex-col items-center justify-center">
+                          <svg className="w-24 h-24 mx-auto mb-6 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                          <p className="text-gray-500 text-lg font-medium">Enter a product name or barcode to search</p>
+                          <p className="text-gray-400 text-sm mt-2">Results will appear here</p>
+                        </div>
+                      </td>
                     </tr>
-                  ))}
+                  ) : stockProducts.length > 0 ? (
+                    stockProducts.map((product, index) => (
+                      <tr 
+                        key={product.pro_id || index} 
+                        className="hover:bg-blue-50 transition text-sm"
+                      >
+                        <td className="px-6 py-4 text-gray-900 font-medium truncate" title={product.pro_name}>
+                          {product.pro_name || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                            (product.stock || 0) > 0 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {product.stock || 0}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-gray-700 truncate" title={product.branch}>
+                          {product.branch || 'N/A'}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-32 text-center">
+                        <div className="flex flex-col items-center justify-center">
+                          <svg className="w-24 h-24 mx-auto mb-6 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <p className="text-gray-500 text-lg font-medium">No products found</p>
+                          <p className="text-gray-400 text-sm mt-2">Try searching with a different term</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
+
+            {/* Footer */}
+            {hasSearched && stockProducts.length > 0 && (
+              <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 text-sm text-gray-600 flex-shrink-0">
+                Total Products: <span className="font-semibold text-gray-900">{stockProducts.length}</span>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1191,32 +1335,28 @@ const WalkInInvoicePage: React.FC = () => {
             <div className="mb-4 p-3 bg-blue-50 rounded border border-blue-200 space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Total Sales:</span>
-                <span className="font-semibold">Rs. {todayTotalSales.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Cash Sales:</span>
-                <span className="font-semibold">Rs. {todayCashSales.toFixed(2)}</span>
+                <span className="font-semibold">Rs. {(todayTotalSales || 0).toFixed(2)}</span>
               </div>
               {openingData && (
                 <div className="flex justify-between text-sm border-t pt-2">
                   <span className="text-gray-600">Opening:</span>
-                  <span className="font-semibold">Rs. {openingData.cash_opening.toFixed(2)}</span>
+                  <span className="font-semibold">Rs. {(openingData.cash_opening || 0).toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between text-sm font-bold border-t pt-2">
-                <span className="text-gray-800">Cash Expected:</span>
-                <span className="font-bold text-regal-black">Rs. {(todayCashSales + (openingData?.cash_opening || 0)).toFixed(2)}</span>
+                <span className="text-gray-800">Expected:</span>
+                <span className="font-bold text-regal-black">Rs. {((todayTotalSales || 0) + (openingData?.cash_opening || 0)).toFixed(2)}</span>
               </div>
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium mb-1">Cash Closing Amount *</label>
+              <label className="block text-sm font-medium mb-1">Total Closing Amount *</label>
               <input
                 type="number"
                 value={closingAmount}
                 onChange={(e) => setClosingAmount(e.target.value)}
                 className="regal-input w-full"
-                placeholder="Enter physical cash count"
+                placeholder="Enter total closing amount (all payment methods)"
                 autoFocus
               />
             </div>
@@ -1252,47 +1392,186 @@ const WalkInInvoicePage: React.FC = () => {
         </div>
       )}
 
-      {/* Today Sales Modal */}
-      {showTodaySalesModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-y-auto p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Today Sales</h2>
-              <button
-                onClick={() => setShowTodaySalesModal(false)}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
-              >
-                ×
-              </button>
+      {/* Today Sales Report Modal */}
+      {showTodaySalesModal && todaySalesReport && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 print-modal-container">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Print Button */}
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center z-10">
+              <h2 className="text-2xl font-bold text-gray-800">Today's Sales Report</h2>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="bg-regal-black text-regal-yellow px-4 py-2 rounded-md text-sm font-semibold hover:bg-gray-800 transition flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  Print Report
+                </button>
+                <button
+                  onClick={() => setShowTodaySalesModal(false)}
+                  className="text-gray-500 hover:text-gray-700 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Invoice No</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {todaySales.map((sale, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm">{sale.invoice_no}</td>
-                      <td className="px-4 py-3 text-sm">Rs. {sale.total_amount}</td>
-                      <td className="px-4 py-3 text-sm">{sale.payment_method}</td>
-                      <td className="px-4 py-3 text-sm">{new Date(sale.created_at).toLocaleTimeString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* Report Content - Printable */}
+            <div id="printable-report" className="p-6">
+              {/* Header */}
+              <div className="text-center mb-6 pb-4 border-b-2 border-gray-300 print:border-b-0">
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">J&S Sportswear</h1>
+                <h2 className="text-xl font-semibold text-gray-700">Daily Sales Report</h2>
+                <p className="text-gray-600 mt-1">
+                  {todaySalesReport.date ? new Date(todaySalesReport.date + 'T00:00:00').toLocaleDateString('en-PK', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                  }) : new Date().toLocaleDateString('en-PK', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                  })}
+                </p>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                {/* Opening Balance */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-sm font-medium text-blue-800">Opening Balance</span>
+                  </div>
+                  <p className="text-2xl font-bold text-blue-900">Rs. {(todaySalesReport.opening || 0).toFixed(2)}</p>
+                </div>
+
+                {/* Total Sales */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    </svg>
+                    <span className="text-sm font-medium text-green-800">Total Sales</span>
+                  </div>
+                  <p className="text-2xl font-bold text-green-900">Rs. {(todaySalesReport.total_sales || 0).toFixed(2)}</p>
+                </div>
+
+                {/* Total Expenses */}
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+                    </svg>
+                    <span className="text-sm font-medium text-red-800">Total Expenses</span>
+                  </div>
+                  <p className="text-2xl font-bold text-red-900">Rs. {(todaySalesReport.total_expenses || 0).toFixed(2)}</p>
+                </div>
+
+                {/* Cash In Hand */}
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <span className="text-sm font-medium text-purple-800">Cash In Hand</span>
+                  </div>
+                  <p className="text-2xl font-bold text-purple-900">Rs. {(todaySalesReport.cash_in_hand || 0).toFixed(2)}</p>
+                </div>
+              </div>
+
+              {/* Payment Method Breakdown */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">Payment Method Breakdown</h3>
+                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Payment Method</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      <tr className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-900">Cash</td>
+                        <td className="px-4 py-3 text-right text-sm font-medium text-green-700">
+                          Rs. {(todaySalesReport.cash_sales || 0).toFixed(2)}
+                        </td>
+                      </tr>
+                      <tr className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-900">EasyPaisa Zohaib</td>
+                        <td className="px-4 py-3 text-right text-sm font-medium text-blue-700">
+                          Rs. {(todaySalesReport.easypaisa_zohaib_sales || 0).toFixed(2)}
+                        </td>
+                      </tr>
+                      <tr className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-900">EasyPaisa Yasir</td>
+                        <td className="px-4 py-3 text-right text-sm font-medium text-blue-700">
+                          Rs. {(todaySalesReport.easypaisa_yasir_sales || 0).toFixed(2)}
+                        </td>
+                      </tr>
+                      <tr className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-900">Faysal Bank</td>
+                        <td className="px-4 py-3 text-right text-sm font-medium text-blue-700">
+                          Rs. {(todaySalesReport.bank_sales || 0).toFixed(2)}
+                        </td>
+                      </tr>
+                      <tr className="bg-gray-50 font-semibold">
+                        <td className="px-4 py-3 text-sm text-gray-900">Total Sales</td>
+                        <td className="px-4 py-3 text-right text-sm text-green-700">
+                          Rs. {(todaySalesReport.total_sales || 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Calculation Summary */}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">Calculation Summary</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Opening Balance:</span>
+                    <span className="font-medium text-gray-900">Rs. {(todaySalesReport.opening || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Add: Cash Sales:</span>
+                    <span className="font-medium text-green-700">+ Rs. {(todaySalesReport.cash_sales || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-2">
+                    <span className="text-gray-600">Subtotal:</span>
+                    <span className="font-medium text-gray-900">Rs. {((todaySalesReport.opening || 0) + (todaySalesReport.cash_sales || 0)).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Less: Expenses:</span>
+                    <span className="font-medium text-red-700">- Rs. {(todaySalesReport.total_expenses || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between border-t-2 border-gray-300 pt-2 text-lg font-bold">
+                    <span className="text-gray-900">Cash In Hand:</span>
+                    <span className="text-purple-700">Rs. {(todaySalesReport.cash_in_hand || 0).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="mt-6 pt-4 border-t border-gray-300 text-center text-sm text-gray-600 print:block hidden">
+                <p>This is a computer-generated report.</p>
+                <p className="mt-1">Generated on {new Date().toLocaleString('en-PK')}</p>
+              </div>
             </div>
           </div>
         </div>
       )}
     </div>
     </div>
+    </>
   );
 };
 

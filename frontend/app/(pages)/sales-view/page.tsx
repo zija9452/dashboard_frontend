@@ -270,7 +270,7 @@ const SalesViewPage: React.FC = () => {
                     <th className="px-3 py-5 text-left w-40">Product</th>
                     <th className="px-3 py-5 text-left w-20">Price</th>
                     <th className="px-3 py-5 text-left w-20">Amount Paid</th>
-                    <th className="px-3 py-5 text-left w-20">Qty</th>
+                    <th className="px-3 py-5 text-left w-16">Qty</th>
                     <th className="px-3 py-5 text-left w-20">Discount</th>
                     <th className="px-3 py-5 text-right w-20">Total Discount</th>
                     <th className="px-3 py-5 text-left w-20">Cost</th>
@@ -332,14 +332,14 @@ const SalesViewPage: React.FC = () => {
                       {walkInInvoices.map((invoice, idx) => (
                         <tr key={`${invoice.id}-${idx}`} className="text-sm text-gray-900 border-b border-gray-200" style={{ height: '70px' }}>
                           <td className="px-3 py-4 font-mono text-xs truncate">{invoice.invoice_no}</td>
-                          <td className="px-3 py-4 font-medium">{invoice.product_name}</td>
-                          <td className="px-2 py-4 text-right">{invoice.total_amount}</td>
-                          <td className="px-2 py-4 text-right text-green-700">{invoice.amount_paid}</td>
-                          <td className="px-3 py-4 text-right">{invoice.quantity}</td>
-                          <td className="px-2 py-4 text-right">{invoice.discount}</td>
-                          <td className="px-2 py-4 text-right text-red-700">{invoice.total_discount}</td>
-                          <td className="px-2 py-4 text-right text-gray-600">{invoice.cost}</td>
-                          <td className="px-3 py-4 text-xs">
+                          <td className="px-3 py-4">{invoice.product_name}</td>
+                          <td className="px-2 py-4 text-left">{invoice.total_amount}</td>
+                          <td className="px-2 py-4 text-left">{invoice.amount_paid}</td>
+                          <td className="px-3 py-4 text-left">{invoice.quantity}</td>
+                          <td className="px-2 py-4 text-center">{invoice.discount}</td>
+                          <td className="px-2 py-4 text-center">{invoice.total_discount}</td>
+                          <td className="px-2 py-4 text-left">{invoice.cost}</td>
+                          <td className="px-3 py-4">
                             {new Date(invoice.created_at).toLocaleTimeString()}
                           </td>
                         </tr>

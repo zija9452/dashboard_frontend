@@ -182,14 +182,18 @@ const SalesViewPage: React.FC = () => {
     }
   };
 
+  // Report generation loading states (separate for each button)
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [generatingExcel, setGeneratingExcel] = useState(false);
+
   // Export to Excel
   const exportToExcel = async () => {
     try {
-      setLoading(true);
-      
+      setGeneratingExcel(true);
+
       let apiUrl = '';
       let reportName = '';
-      
+
       // Determine which report to generate based on reportType
       if (reportType === 'walkin-invoice') {
         apiUrl = `/api/sales-view/walkin-invoices/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
@@ -197,17 +201,23 @@ const SalesViewPage: React.FC = () => {
       } else if (reportType === 'customer-invoice') {
         apiUrl = `/api/sales-view/customized-invoices/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
         reportName = 'Customer Invoices';
+      } else if (reportType === 'expense') {
+        apiUrl = `/api/sales-view/expenses/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        reportName = 'Expenses';
+      } else if (reportType === 'stockadjustment') {
+        apiUrl = `/api/sales-view/stock-adjustments/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        reportName = 'Stock Adjustments';
       } else {
-        showToast('Please select Walk-in Invoice or Customer Invoice report type', 'info');
-        setLoading(false);
+        showToast('Please select Walk-in Invoice, Customer Invoice, Expense or Stock Adjustment report type', 'info');
+        setGeneratingExcel(false);
         return;
       }
-      
+
       const response = await fetch(apiUrl, { credentials: 'include' });
-      
+
       if (response.ok) {
         const data = await response.json();
-        
+
         if (data.excel) {
           // Decode base64 and trigger download
           const excelContent = atob(data.excel);
@@ -219,14 +229,14 @@ const SalesViewPage: React.FC = () => {
           const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
           const link = document.createElement('a');
           const url = URL.createObjectURL(blob);
-          
+
           link.setAttribute('href', url);
           link.setAttribute('download', data.filename || `${reportName.replace(/\s+/g, '_')}_${fromDate}_to_${toDate}.xlsx`);
           link.style.visibility = 'hidden';
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
-          
+
           showToast(`${reportName} Excel report downloaded successfully!`, 'success');
         } else {
           showToast('No data available for export', 'warning');
@@ -238,18 +248,18 @@ const SalesViewPage: React.FC = () => {
       console.error('Error exporting to Excel:', error);
       showToast('Error exporting to Excel', 'error');
     } finally {
-      setLoading(false);
+      setGeneratingExcel(false);
     }
   };
 
   // View report
   const viewReport = async () => {
     try {
-      setLoading(true);
-      
+      setGeneratingPdf(true);
+
       let apiUrl = '';
       let reportTitleText = '';
-      
+
       // Determine which report to generate based on reportType
       if (reportType === 'walkin-invoice') {
         apiUrl = `/api/sales-view/walkin-invoices/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
@@ -257,17 +267,23 @@ const SalesViewPage: React.FC = () => {
       } else if (reportType === 'customer-invoice') {
         apiUrl = `/api/sales-view/customized-invoices/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
         reportTitleText = 'Customer Invoice Payment Report';
+      } else if (reportType === 'expense') {
+        apiUrl = `/api/sales-view/expenses/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        reportTitleText = 'Expense Report';
+      } else if (reportType === 'stockadjustment') {
+        apiUrl = `/api/sales-view/stock-adjustments/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        reportTitleText = 'Stock Adjustment Report';
       } else {
-        showToast('Please select Walk-in Invoice or Customer Invoice report type', 'info');
-        setLoading(false);
+        showToast('Please select Walk-in Invoice, Customer Invoice, Expense or Stock Adjustment report type', 'info');
+        setGeneratingPdf(false);
         return;
       }
-      
+
       const response = await fetch(apiUrl, { credentials: 'include' });
-      
+
       if (response.ok) {
         const data = await response.json();
-        
+
         if (data.pdf) {
           setReportTitle(reportTitleText);
           setReportPdfData(data.pdf);
@@ -282,7 +298,7 @@ const SalesViewPage: React.FC = () => {
       console.error('Error generating report:', error);
       showToast('Error generating report', 'error');
     } finally {
-      setLoading(false);
+      setGeneratingPdf(false);
     }
   };
 
@@ -386,15 +402,17 @@ const SalesViewPage: React.FC = () => {
             <div className="flex gap-2">
               <button
                 onClick={viewReport}
-                className="bg-regal-yellow text-regal-black px-3 py-3 rounded-md text-sm font-semibold hover:bg-yellow-400 transition"
+                disabled={generatingPdf}
+                className="bg-regal-yellow text-regal-black px-3 py-3 rounded-md text-sm font-semibold hover:bg-yellow-400 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                View Report
+                {generatingPdf ? 'Generating...' : 'View Report'}
               </button>
               <button
                 onClick={exportToExcel}
-                className="bg-green-600 text-white px-3 py-3 rounded-md text-sm font-semibold hover:bg-green-700 transition"
+                disabled={generatingExcel}
+                className="bg-green-600 text-white px-3 py-3 rounded-md text-sm font-semibold hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Excel Report
+                {generatingExcel ? 'Generating...' : 'Excel Report'}
               </button>
             </div>
           </div>

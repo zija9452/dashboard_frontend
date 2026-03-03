@@ -49,12 +49,11 @@ const AdministrationPage: React.FC = () => {
     return 'unknown';
   };
 
-  // Function to map role names to UUIDs (hardcoded)
+  // Function to map role names to UUIDs - NOW RETURNS ROLE NAME DIRECTLY
+  // Backend will handle role name to UUID conversion
   const getRoleIdFromName = (roleName: string): string => {
-    if (roleName === 'admin') return '58e08ebd-c5ce-4005-96ed-31ddbe5ee204';
-    if (roleName === 'cashier') return '6c44d6cc-2287-49d9-8018-9013c3469627';
-    if (roleName === 'employee') return 'dd14c670-cba6-43c5-b863-b4f06dfb78d0';
-    return '6c44d6cc-2287-49d9-8018-9013c3469627'; // default to cashier
+    // Return the role name directly (backend expects role name, not UUID)
+    return roleName;
   };
 
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
@@ -70,7 +69,7 @@ const AdministrationPage: React.FC = () => {
   const [formData, setFormData] = useState<AdminUser>({
     id: '',
     full_name: '',
-    role_id: '',
+    role_id: 'cashier', // Default to cashier
     phone: '',
     address: '',
     cnic: '',
@@ -81,6 +80,13 @@ const AdministrationPage: React.FC = () => {
     is_biometric_enabled: false,
     original_password: ''
   });
+
+  // State for available roles
+  const [availableRoles, setAvailableRoles] = useState<Array<{value: string, label: string}>>([
+    {value: 'admin', label: 'Admin'},
+    {value: 'cashier', label: 'Cashier'},
+    {value: 'employee', label: 'Employee'}
+  ]);
 
   // Fetch all users (not just admins)
   const fetchAdminUsers = async () => {
@@ -93,6 +99,7 @@ const AdministrationPage: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
       });
 
       console.log('Response status:', response.status);
@@ -124,55 +131,16 @@ const AdministrationPage: React.FC = () => {
 
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
-        console.log('Fetched data:', data);
-
-        // Map the API response to the modern format
-        const mappedData = Array.isArray(data) ? data.map((user: any) => {
-          const mappedUser: AdminUser = {
-            id: user.id || '',
-            full_name: user.full_name || 'N/A',
-            role_id: user.role_id || 'N/A',
-            phone: user.phone,
-            address: user.address,
-            cnic: user.cnic,
-            branch: user.branch,
-            password_hash: user.password_hash,
-            is_active: user.is_active,
-            created_at: user.created_at,
-            updated_at: user.updated_at,
-            username: user.username,
-            company_id: user.company_id,
-            is_biometric_enabled: user.is_biometric_enabled,
-            original_password: user.original_password,
-            // Legacy fields for backward compatibility (empty since users endpoint doesn't return them)
-            ad_id: user.ad_id || user.id,
-            ad_name: user.ad_name || user.full_name,
-            ad_role: getRoleName(user.role_id), // Store role name for compatibility
-            ad_phone: user.ad_phone || user.phone,
-            ad_address: user.ad_address || user.address,
-            ad_cnic: user.ad_cnic || user.cnic,
-            ad_branch: user.ad_branch || user.branch,
-            ad_password: user.ad_password || user.password_hash
-          };
-          return mappedUser;
-        }) : [];
-
-        setAdminUsers(mappedData);
+        console.log('Fetched users:', data);
+        
+        // Backend now returns role_name directly, no need to convert
+        setAdminUsers(data);
       } else {
-        const text = await response.text();
-        console.error('Non-JSON response:', text);
-        throw new Error(`Expected JSON response but got: ${text.substring(0, 200)}...`);
+        showToast('Failed to fetch users', 'error');
       }
     } catch (error) {
-      console.error('Error fetching admin users:', error);
-      const errorMessage = (error as Error).message;
-
-      // Check if it's an authentication issue
-      if (errorMessage.includes('401') || errorMessage.toLowerCase().includes('unauthorized') || errorMessage.includes('session') || errorMessage.includes('auth')) {
-        showToast('Authentication required. Please log in again.', 'error');
-      } else {
-        showToast('Failed to fetch admin users: ' + errorMessage, 'error');
-      }
+      console.error('Error fetching users:', error);
+      showToast('Error fetching users', 'error');
     } finally {
       setLoading(false);
     }
@@ -234,7 +202,8 @@ const AdministrationPage: React.FC = () => {
           credentials: 'include',
           body: JSON.stringify({
             full_name: formData.full_name || '',
-            role_id: getRoleIdFromName(formData.role_id),
+            username: formData.username || '',
+            role_name: formData.role_id, // Send role name instead of UUID
             phone: formData.phone || '',
             address: formData.address || '',
             cnic: formData.cnic || '',
@@ -294,7 +263,7 @@ const AdministrationPage: React.FC = () => {
           body: JSON.stringify({
             full_name: formData.full_name || '',
             username: formData.username || '',
-            role_id: getRoleIdFromName(formData.role_id),
+            role_name: formData.role_id, // Send role name instead of UUID
             phone: formData.phone || '',
             address: formData.address || '',
             cnic: formData.cnic || '',
@@ -706,7 +675,7 @@ const AdministrationPage: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <span className={`px-2 inline-flex text-sm leading-5 font-medium `}>
-                        {getRoleName(user.role_id)}
+                        {user.role_name || 'unknown'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{user.phone || '-'}</td>

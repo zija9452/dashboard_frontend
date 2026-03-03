@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 
-// GET /api/sales-view/customized-summary - Get customer invoice payment summary
+// GET /api/salesview/customized-invoices - Get customer invoices with payments in date range
 export async function GET(request: NextRequest) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const to_date = searchParams.get('to_date') || '';
     const branch = searchParams.get('branch') || 'European Sports Light House';
 
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/sales-view/customized-summary?from_date=${from_date}&to_date=${to_date}&branch=${branch}`;
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/salesview/customized-invoices?from_date=${from_date}&to_date=${to_date}&branch=${branch}`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     const data = await response.json();
     return Response.json(data);
   } catch (error) {
-    console.error('Error fetching customized summary:', error);
+    console.error('Error fetching customized invoices:', error);
     return Response.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }

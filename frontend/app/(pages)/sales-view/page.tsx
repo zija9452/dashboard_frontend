@@ -124,6 +124,7 @@ const SalesViewPage: React.FC = () => {
 
   // Report type options
   const reportOptions = [
+    { value: 'select-report', label: 'Select Report' },
     { value: 'walkin-invoice', label: 'Walk-In Invoice' },
     { value: 'customer-invoice', label: 'Customer Invoice' },
     { value: 'expense', label: 'Expense' },
@@ -138,25 +139,25 @@ const SalesViewPage: React.FC = () => {
 
       // Fetch walk-in invoices
       const walkinResponse = await fetch(
-        `/api/sales-view/walkin-invoices?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
+        `/api/salesview/walkin-invoices?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
         { credentials: 'include' }
       );
 
       // Fetch customized invoices (customer invoices with payments in date range)
       const customizedResponse = await fetch(
-        `/api/sales-view/customized-invoices?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
+        `/api/salesview/customized-invoices?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
         { credentials: 'include' }
       );
 
       // Fetch combined summary
       const summaryResponse = await fetch(
-        `/api/sales-view/summary?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
+        `/api/salesview/summary?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
         { credentials: 'include' }
       );
 
       // Fetch customized summary (customer payments breakdown)
       const customizedSummaryResponse = await fetch(
-        `/api/sales-view/customized-summary?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
+        `/api/salesview/customized-summary?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
         { credentials: 'include' }
       );
 
@@ -196,16 +197,16 @@ const SalesViewPage: React.FC = () => {
 
       // Determine which report to generate based on reportType
       if (reportType === 'walkin-invoice') {
-        apiUrl = `/api/sales-view/walkin-invoices/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        apiUrl = `/api/salesview/walkin-invoices/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
         reportName = 'Walk-in Invoices';
       } else if (reportType === 'customer-invoice') {
-        apiUrl = `/api/sales-view/customized-invoices/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        apiUrl = `/api/salesview/customized-invoices/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
         reportName = 'Customer Invoices';
       } else if (reportType === 'expense') {
-        apiUrl = `/api/sales-view/expenses/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        apiUrl = `/api/salesview/expenses/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
         reportName = 'Expenses';
       } else if (reportType === 'stockadjustment') {
-        apiUrl = `/api/sales-view/stock-adjustments/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        apiUrl = `/api/salesview/stock-adjustments/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
         reportName = 'Stock Adjustments';
       } else {
         showToast('Please select Walk-in Invoice, Customer Invoice, Expense or Stock Adjustment report type', 'info');
@@ -262,16 +263,16 @@ const SalesViewPage: React.FC = () => {
 
       // Determine which report to generate based on reportType
       if (reportType === 'walkin-invoice') {
-        apiUrl = `/api/sales-view/walkin-invoices/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        apiUrl = `/api/salesview/walkin-invoices/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
         reportTitleText = 'Walk-in Invoice Report';
       } else if (reportType === 'customer-invoice') {
-        apiUrl = `/api/sales-view/customized-invoices/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        apiUrl = `/api/salesview/customized-invoices/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
         reportTitleText = 'Customer Invoice Payment Report';
       } else if (reportType === 'expense') {
-        apiUrl = `/api/sales-view/expenses/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        apiUrl = `/api/salesview/expenses/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
         reportTitleText = 'Expense Report';
       } else if (reportType === 'stockadjustment') {
-        apiUrl = `/api/sales-view/stock-adjustments/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        apiUrl = `/api/salesview/stock-adjustments/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
         reportTitleText = 'Stock Adjustment Report';
       } else {
         showToast('Please select Walk-in Invoice, Customer Invoice, Expense or Stock Adjustment report type', 'info');
@@ -360,7 +361,7 @@ const SalesViewPage: React.FC = () => {
               <button
                 onClick={fetchSalesData}
                 disabled={loading}
-                className="bg-regal-black text-regal-yellow px-6 py-3 rounded-md text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-50"
+                className="text-regal-black bg-regal-yellow px-4 py-3 rounded-md text-sm font-semibold transition disabled:opacity-50"
               >
                 {loading ? 'Fetching...' : 'Fetch'}
               </button>
@@ -419,11 +420,11 @@ const SalesViewPage: React.FC = () => {
         </div>
 
         {/* Tables Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-2">
           {/* Left Side - Walk-in Invoices */}
           <div>
-            <h2 className="text-lg font-semibold mb-4 text-gray-800">Walk-in Invoices</h2>
-            <div className="overflow-x-auto overflow-y-auto" style={{ height: '400px' }}>
+            <h2 className="text-lg font-semibold mb-2 text-gray-800">Walk-in Invoices</h2>
+            <div className="overflow-x-auto overflow-y-auto" style={{ height: '340px' }}>
               <table className="w-full table-fixed">
                 <thead className="bg-gray-100">
                   <tr className="text-gray-700 font-semibold text-xs uppercase tracking-wider">
@@ -450,7 +451,7 @@ const SalesViewPage: React.FC = () => {
                   ) : walkInInvoices.length === 0 ? (
                     <>
                       <tr>
-                        <td colSpan={9} className="p-40 text-gray-500">
+                        <td colSpan={9} className="py-28 px-44 text-gray-500">
                           No walk-in invoices found
                         </td>
                       </tr>
@@ -492,10 +493,10 @@ const SalesViewPage: React.FC = () => {
 
           {/* Right Side - Customized Invoices (Customer Orders with Payments) */}
           <div>
-            <h2 className="text-lg font-semibold mb-4 text-gray-800">
+            <h2 className="text-lg font-semibold mb-2 text-gray-800">
               Customer Invoices
             </h2>
-            <div className="overflow-x-auto overflow-y-auto" style={{ height: '400px' }}>
+            <div className="overflow-x-auto overflow-y-auto" style={{ height: '340px' }}>
               <table className="w-full table-fixed">
                 <thead className="bg-gray-100">
                   <tr className="text-gray-700 font-semibold text-xs uppercase tracking-wider">
@@ -522,7 +523,7 @@ const SalesViewPage: React.FC = () => {
                   ) : customizedInvoices.length === 0 ? (
                     <>
                       <tr>
-                        <td colSpan={9} className="p-40 text-gray-500">
+                        <td colSpan={9} className="py-28 px-44 text-gray-500">
                           No customer invoices found
                         </td>
                       </tr>

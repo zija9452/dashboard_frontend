@@ -5,8 +5,6 @@ import Image from 'next/image';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
-import PageHeader from '@/components/ui/PageHeader';
-import ReportModal from '@/components/ui/ReportModal';
 import { Product as ProductAPI } from '@/lib/api/products';
 
 // Print styles - only print modal content
@@ -91,6 +89,7 @@ interface CartItem {
 }
 
 const WalkInInvoicePage: React.FC = () => {
+  const router = useRouter();
   const { showToast } = useToast();
 
   // Customer and Salesman state

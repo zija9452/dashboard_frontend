@@ -533,7 +533,7 @@ const RefundPage: React.FC = () => {
             href="/refund-records"
             className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
           >
-            View Refunded
+            Refunds Record
           </a>
         </div>
       </div>

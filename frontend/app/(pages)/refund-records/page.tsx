@@ -228,7 +228,7 @@ const RefundRecordsPage: React.FC = () => {
                     <td className="px-3 py-4 text-sm text-gray-900">
                       <span className="font-medium">{record.product_name}</span>
                     </td>
-                    <td className="px-3 py-4 text-sm text-gray-900">
+                    <td className="px-3 py-4 text-center text-sm text-gray-900">
                       {record.quantity_returned}
                     </td>
                     <td className="px-3 py-4 text-sm text-gray-900">

@@ -897,7 +897,7 @@ const WalkInInvoicePage: React.FC = () => {
               />
             </div>
             
-            <div className="overflow-hidden" style={{ maxHeight: '280px', overflowY: 'auto' }}>
+            <div className="overflow-hidden" style={{ height: '200px', overflowY: 'auto' }}>
               <table className="w-full">
                 <thead className="bg-gray-100 sticky top-0 z-10">
                   <tr>

@@ -614,6 +614,10 @@ const SalesViewPage: React.FC = () => {
               <p>{summary.totalSale.toLocaleString()}</p>
             </div>
             <div className="flex items-center gap-1">
+              <p>Vendor Payments:</p>
+              <p>{summary.vendorPayments.toLocaleString()}</p>
+            </div>
+            <div className="flex items-center gap-1">
               <p>Total Expense:</p>
               <p>{summary.totalExpense.toLocaleString()}</p>
             </div>
@@ -628,10 +632,6 @@ const SalesViewPage: React.FC = () => {
             <div className="flex items-center gap-1">
               <p>Net Cash:</p>
               <p>{summary.netCash.toLocaleString()}</p>
-            </div>
-            <div className="flex items-center gap-1">
-              <p>Vendor Payments:</p>
-              <p>{summary.vendorPayments.toLocaleString()}</p>
             </div>
             <div className="flex items-center gap-1">
               <p>Net Profit:</p>

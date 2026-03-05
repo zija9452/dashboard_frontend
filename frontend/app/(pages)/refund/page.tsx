@@ -25,6 +25,7 @@ interface WalkinInvoice {
     discount?: number;
   }>;
   status: string;
+  payment_status?: string;
   created_at: string;
   updated_at?: string;
 }
@@ -138,19 +139,6 @@ const RefundPage: React.FC = () => {
       return;
     }
 
-    // Check if all items are already refunded (amount_paid is 0)
-    if (invoice.amount_paid === 0 && invoice.total_amount > 0) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Already Refunded',
-        text: 'This invoice has already been fully refunded.',
-        timer: 3000,
-        timerProgressBar: true,
-        showConfirmButton: false
-      });
-      return;
-    }
-
     setSelectedInvoice(invoice);
     setSelectedItem(item);
     setRefundQuantity('');
@@ -197,10 +185,28 @@ const RefundPage: React.FC = () => {
     }
   };
 
-  // Handle refund amount paid change
+  // Handle refund amount paid change with validation
   const handleRefundAmountPaidChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    setRefundAmountPaid(value);
+    const numValue = parseFloat(value) || 0;
+    const maxAmount = getRefundAmount();
+    
+    if (value === '') {
+      setRefundAmountPaid('');
+    } else if (numValue > maxAmount) {
+      // Don't allow amount greater than calculated refund amount
+      setRefundAmountPaid(maxAmount.toFixed(2));
+      Swal.fire({
+        icon: 'warning',
+        title: 'Amount Exceeds Limit',
+        text: `Maximum refund amount is Rs. ${maxAmount.toFixed(2)}`,
+        timer: 2000,
+        timerProgressBar: true,
+        showConfirmButton: false
+      });
+    } else {
+      setRefundAmountPaid(value);
+    }
   };
 
   // Submit refund
@@ -276,7 +282,47 @@ const RefundPage: React.FC = () => {
         fetchInvoices();
       } else {
         const errorData = await response.json();
-        showToast(errorData.detail || errorData.error || 'Failed to process refund', 'error');
+        console.error('Refund error response:', errorData);
+        
+        // Backend error format: { error: { message: "...", type: "...", ... } }
+        const errorMessage = 
+          errorData?.error?.message ||  // From error handler
+          errorData?.detail || 
+          errorData?.error || 
+          errorData?.message ||
+          (typeof errorData === 'string' ? errorData : 'Backend request failed');
+        
+        console.log('Extracted error message:', errorMessage);
+        
+        // Check if it's an already refunded error
+        if (errorMessage.includes('Already refunded') || errorMessage.includes('already been fully refunded')) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Already Refunded!',
+            html: `This product has already been fully refunded.<br/><br/><strong>${errorMessage}</strong>`,
+            timer: 5000,
+            timerProgressBar: true,
+            showConfirmButton: false
+          });
+        } else if (errorMessage.includes('Cannot refund')) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Invalid Quantity!',
+            html: `Cannot process refund.<br/><br/><strong>${errorMessage}</strong>`,
+            timer: 5000,
+            timerProgressBar: true,
+            showConfirmButton: false
+          });
+        } else {
+          Swal.fire({
+            icon: 'error',
+            title: 'Refund Failed!',
+            html: `<strong>${errorMessage}</strong>`,
+            timer: 5000,
+            timerProgressBar: true,
+            showConfirmButton: false
+          });
+        }
       }
     } catch (error) {
       console.error('Error processing refund:', error);
@@ -421,7 +467,7 @@ const RefundPage: React.FC = () => {
                           Rs. {balanceToShow.toFixed(2)}
                         </td>
                         <td className="px-3 py-4">
-                          {showPayment && (invoice.payment_status === 'refunded' || invoice.amount_paid === 0) ? (
+                          {showPayment && invoice.payment_status === 'refunded' ? (
                             <button
                               disabled
                               className="bg-gray-400 text-gray-200 px-4 py-2 rounded text-xs font-medium cursor-not-allowed"
@@ -550,7 +596,7 @@ const RefundPage: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      value={`Rs. ${getRefundAmount()}`}
+                      value={`Rs. ${getRefundAmount().toFixed(2)}`}
                       disabled
                       className="regal-input w-full bg-gray-100 cursor-not-allowed"
                     />

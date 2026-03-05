@@ -28,12 +28,13 @@ export async function POST(request: NextRequest) {
       let errorMessage = 'Backend request failed';
       try {
         const errorData = JSON.parse(errorText);
-        errorMessage = errorData.detail || errorData.message || errorMessage;
+        // Backend error format: { error: { message: "...", type: "...", ... } }
+        errorMessage = errorData?.error?.message || errorData?.detail || errorData?.message || errorMessage;
       } catch {
         errorMessage = errorText || errorMessage;
       }
       return Response.json(
-        { error: errorMessage, status: response.status },
+        { error: errorMessage, detail: errorMessage, status: response.status },
         { status: response.status }
       );
     }
@@ -56,7 +57,7 @@ export async function GET(request: NextRequest) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
     const searchParams = request.nextUrl.searchParams;
-    
+
     const limit = searchParams.get('limit') || '100';
     const skip = searchParams.get('skip') || '0';
     const invoice_id = searchParams.get('invoice_id') || '';
@@ -65,11 +66,11 @@ export async function GET(request: NextRequest) {
     const queryParams = new URLSearchParams();
     queryParams.append('limit', limit);
     queryParams.append('skip', skip);
-    
+
     if (invoice_id) {
       queryParams.append('invoice_id', invoice_id);
     }
-    
+
     if (date) {
       queryParams.append('date', date);
     }
@@ -95,12 +96,13 @@ export async function GET(request: NextRequest) {
       let errorMessage = 'Backend request failed';
       try {
         const errorData = JSON.parse(errorText);
-        errorMessage = errorData.detail || errorData.message || errorMessage;
+        // Backend error format: { error: { message: "...", type: "...", ... } }
+        errorMessage = errorData?.error?.message || errorData?.detail || errorData?.message || errorMessage;
       } catch {
         errorMessage = errorText || errorMessage;
       }
       return Response.json(
-        { error: errorMessage, status: response.status },
+        { error: errorMessage, detail: errorMessage, status: response.status },
         { status: response.status }
       );
     }

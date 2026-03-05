@@ -46,6 +46,18 @@ interface SelectedItem {
   total_price?: number;
 }
 
+interface RefundRecord {
+  refund_id: string;
+  invoice_id: string;
+  invoice_no: string;
+  product_name: string;
+  quantity_returned: number;
+  refund_amount: number;
+  reason: string;
+  created_at: string;
+  updated_at: string;
+}
+
 const RefundPage: React.FC = () => {
   const { showToast } = useToast();
 
@@ -53,6 +65,7 @@ const RefundPage: React.FC = () => {
   const [invoices, setInvoices] = useState<WalkinInvoice[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [viewMode, setViewMode] = useState<'invoices' | 'refunded'>('invoices');
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -78,6 +91,121 @@ const RefundPage: React.FC = () => {
   };
 
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDate());
+
+  // View Refunded modal state
+  const [showRefundedModal, setShowRefundedModal] = useState(false);
+  const [refundedRecords, setRefundedRecords] = useState<RefundRecord[]>([]);
+  const [loadingRefunded, setLoadingRefunded] = useState(false);
+  const [editingRefund, setEditingRefund] = useState<RefundRecord | null>(null);
+  const [editDate, setEditDate] = useState<string>('');
+
+  // Fetch today's refunded items
+  const fetchRefundedItems = async () => {
+    try {
+      setLoading(true);
+      const today = getTodayDate();
+      
+      const response = await fetch(`/api/refunds/walkin-invoice?date=${today}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Transform data to WalkinInvoice format for display
+        const refundInvoices: WalkinInvoice[] = await Promise.all(
+          data.map(async (refund: any) => {
+            try {
+              // Parse refund items
+              const refundItems = refund.refunded_items || [];
+              const productName = refundItems[0]?.product_name || 'N/A';
+              const quantityReturned = refundItems[0]?.quantity_returned || 0;
+              const unitPrice = refundItems[0]?.unit_price || 0;
+              
+              return {
+                invoice_id: refund.refund_id,
+                invoice_no: refund.invoice_id || 'N/A',
+                customer_name: 'Refunded',
+                quantity: quantityReturned,
+                total_amount: refund.refund_amount,
+                amount_paid: refund.refund_amount,
+                balance: 0,
+                date: refund.created_at.split('T')[0],
+                items: [{
+                  product_name: productName,
+                  quantity: quantityReturned,
+                  unit_price: unitPrice,
+                  total_price: quantityReturned * unitPrice
+                }],
+                status: 'refunded',
+                payment_status: 'refunded',
+                created_at: refund.created_at,
+                updated_at: refund.updated_at
+              };
+            } catch {
+              return null;
+            }
+          })
+        );
+        
+        setInvoices(refundInvoices.filter(i => i !== null) as WalkinInvoice[]);
+        setViewMode('refunded');
+        showToast(`Found ${refundInvoices.length} refunded items for today`, 'success');
+      } else {
+        showToast('Failed to fetch refunded items', 'error');
+      }
+    } catch (error) {
+      console.error('Error fetching refunded items:', error);
+      showToast('Error fetching refunded items', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Update refund date
+  const handleUpdateRefundDate = async () => {
+    if (!editingRefund || !editDate) {
+      showToast('Please select a date', 'error');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/refunds/walkin-invoice/${editingRefund.refund_id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          created_at: new Date(editDate).toISOString()
+        }),
+      });
+
+      if (response.ok) {
+        await Swal.fire({
+          icon: 'success',
+          title: 'Updated!',
+          text: 'Refund date updated successfully',
+          timer: 2000,
+          timerProgressBar: true,
+          showConfirmButton: false
+        });
+
+        setEditingRefund(null);
+        fetchRefundedItems(); // Refresh list
+      } else {
+        const errorData = await response.json();
+        showToast(errorData.detail || errorData.error || 'Failed to update refund date', 'error');
+      }
+    } catch (error) {
+      console.error('Error updating refund date:', error);
+      showToast('Error updating refund date', 'error');
+    }
+  };
 
   // Fetch walk-in invoices
   const fetchInvoices = async () => {
@@ -387,7 +515,7 @@ const RefundPage: React.FC = () => {
           </button>
         </div>
 
-        {/* Right side - Date filter */}
+        {/* Right side - Date filter and View Refunded button */}
         <div className="w-full sm:w-auto flex items-center gap-2">
           <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
             Date:
@@ -401,6 +529,12 @@ const RefundPage: React.FC = () => {
             }}
             className="regal-input w-40"
           />
+          <a
+            href="/refund-records"
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+          >
+            View Refunded
+          </a>
         </div>
       </div>
 
@@ -418,7 +552,18 @@ const RefundPage: React.FC = () => {
             <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <p className="mt-2 text-gray-500">No walk-in invoices found for {selectedDate}</p>
+            <p className="mt-2 text-gray-500">No {viewMode === 'refunded' ? 'refunded items' : 'walk-in invoices'} found for {selectedDate}</p>
+            {viewMode === 'refunded' && (
+              <button
+                onClick={() => {
+                  setViewMode('invoices');
+                  fetchInvoices();
+                }}
+                className="mt-4 regal-btn bg-regal-yellow text-regal-black"
+              >
+                Show Invoices
+              </button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -435,12 +580,10 @@ const RefundPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {invoices.flatMap((invoice, invoiceIndex) => 
+                {invoices.map((invoice, invoiceIndex) => 
                   invoice.items.map((item, itemIndex) => {
-                    // Show payment only in first row
                     const showPayment = itemIndex === 0;
                     const amountPaidToShow = showPayment ? invoice.amount_paid : 0;
-                    // Calculate balance: total_amount - amount_paid
                     const balanceToShow = showPayment ? (invoice.total_amount - invoice.amount_paid) : 0;
                     
                     return (
@@ -467,17 +610,24 @@ const RefundPage: React.FC = () => {
                           Rs. {balanceToShow.toFixed(2)}
                         </td>
                         <td className="px-3 py-4">
-                          {showPayment && invoice.payment_status === 'refunded' ? (
+                          {viewMode === 'refunded' ? (
+                            <button
+                              onClick={() => handleEditRefundDate(invoice)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-xs font-medium transition-colors mr-2"
+                            >
+                              Edit
+                            </button>
+                          ) : showPayment && invoice.payment_status === 'refunded' ? (
                             <button
                               disabled
-                              className="bg-gray-400 text-gray-200 px-4 py-2 rounded text-xs font-medium cursor-not-allowed"
+                              className="bg-gray-400 text-gray-200 px-4 py-2 rounded text-xs font-medium cursor-not-allowed mr-2"
                             >
                               Refunded
                             </button>
                           ) : (
                             <button
                               onClick={() => handleRefundClick(invoice, item)}
-                              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-xs font-medium transition-colors"
+                              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-xs font-medium transition-colors mr-2"
                             >
                               Refund
                             </button>

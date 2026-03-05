@@ -169,6 +169,8 @@ const SalesViewPage: React.FC = () => {
 
       console.log('Walk-in invoices data:', walkinData);
       console.log('Customized invoices data:', customizedData);
+      console.log('Summary data:', summaryData);
+      console.log('Total Refund:', summaryData?.totalRefund);
 
       setWalkInInvoices(walkinData.invoices || []);
       setCustomizedInvoices(customizedData.invoices || []);
@@ -206,6 +208,9 @@ const SalesViewPage: React.FC = () => {
       } else if (reportType === 'expense') {
         apiUrl = `/api/salesview/expenses/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
         reportName = 'Expenses';
+      } else if (reportType === 'refund') {
+        apiUrl = `/api/salesview/refunds/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        reportName = 'Refunds';
       } else if (reportType === 'stockadjustment') {
         apiUrl = `/api/salesview/stock-adjustments/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
         reportName = 'Stock Adjustments';
@@ -272,6 +277,9 @@ const SalesViewPage: React.FC = () => {
       } else if (reportType === 'expense') {
         apiUrl = `/api/salesview/expenses/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
         reportTitleText = 'Expense Report';
+      } else if (reportType === 'refund') {
+        apiUrl = `/api/salesview/refunds/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        reportTitleText = 'Refund Report';
       } else if (reportType === 'stockadjustment') {
         apiUrl = `/api/salesview/stock-adjustments/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
         reportTitleText = 'Stock Adjustment Report';
@@ -607,35 +615,35 @@ const SalesViewPage: React.FC = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-gray-600 font-bold text-xl">
             <div className="flex items-center gap-1">
               <p>Opening:</p>
-              <p>{summary.opening.toLocaleString()}</p>
+              <p>{summary?.opening?.toLocaleString() || 0}</p>
             </div>
             <div className="flex items-center gap-1">
               <p>Total Sale:</p>
-              <p>{summary.totalSale.toLocaleString()}</p>
+              <p>{summary?.totalSale?.toLocaleString() || 0}</p>
             </div>
             <div className="flex items-center gap-1">
               <p>Vendor Payments:</p>
-              <p>{summary.vendorPayments.toLocaleString()}</p>
+              <p>{summary?.vendorPayments?.toLocaleString() || 0}</p>
             </div>
             <div className="flex items-center gap-1">
               <p>Total Expense:</p>
-              <p>{summary.totalExpense.toLocaleString()}</p>
+              <p>{summary?.totalExpense?.toLocaleString() || 0}</p>
             </div>
             <div className="flex items-center gap-1">
               <p>Total Refund:</p>
-              <p>{summary.totalRefund.toLocaleString()}</p>
-            </div>
-            <div className="flex items-center gap-1">
-              <p>Total Purchase:</p>
-              <p>{summary.totalPurchase.toLocaleString()}</p>
+              <p>{summary?.totalRefund?.toLocaleString() || 0}</p>
             </div>
             <div className="flex items-center gap-1">
               <p>Net Cash:</p>
-              <p>{summary.netCash.toLocaleString()}</p>
+              <p>{summary?.netCash?.toLocaleString() || 0}</p>
+            </div>
+            <div className="flex items-center gap-1">
+              <p>Total Purchase:</p>
+              <p>{summary?.totalPurchase?.toLocaleString() || 0}</p>
             </div>
             <div className="flex items-center gap-1">
               <p>Net Profit:</p>
-              <p>{summary.netProfit.toLocaleString()}</p>
+              <p>{summary?.netProfit?.toLocaleString() || 0}</p>
             </div>
           </div>
         </div>

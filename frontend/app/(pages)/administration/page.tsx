@@ -10,6 +10,7 @@ interface AdminUser {
   id: string;
   full_name: string;
   role_id: string;
+  role_name?: string;
   phone?: string;
   address?: string;
   cnic?: string;

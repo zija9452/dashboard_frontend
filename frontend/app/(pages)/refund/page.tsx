@@ -1,303 +1,650 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useToast } from '@/components/ui/Toast';
+import Swal from 'sweetalert2';
+import PageHeader from '@/components/ui/PageHeader';
+import Pagination from '@/components/ui/Pagination';
 
-// Define interfaces
-interface Invoice {
-  id: string;
-  invoice_no: string;
-  customer_name: string;
-  total_amount: number;
-  amount_paid: number;
-  balance_due: number;
-  payment_status: 'paid' | 'partial' | 'unpaid';
-  created_at: string;
-  type: 'customer' | 'walkin';
-}
-
-interface Refund {
-  id: string;
+interface WalkinInvoice {
   invoice_id: string;
   invoice_no: string;
   customer_name: string;
-  refund_amount: number;
-  refund_items: Array<{
+  team_name?: string;
+  quantity: number;
+  total_amount: number;
+  amount_paid: number;
+  balance: number;
+  date: string;
+  items: Array<{
     product_name: string;
-    quantity_returned: number;
+    product_id?: string;
+    quantity: number;
+    unit_price: number;
+    total_price: number;
+    discount?: number;
   }>;
-  reason: string;
+  status: string;
   created_at: string;
+  updated_at?: string;
+}
+
+interface RefundItem {
+  product_name: string;
+  product_id?: string;
+  quantity_returned: number;
+  unit_price: number;
+  total_amount: number;
+}
+
+interface SelectedItem {
+  product_name: string;
+  product_id?: string;
+  quantity: number;
+  unit_price: number;
+  total_price?: number;
 }
 
 const RefundPage: React.FC = () => {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [refunds, setRefunds] = useState<Refund[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedInvoice, setSelectedInvoice] = useState<string>('');
-  const [refundReason, setRefundReason] = useState<string>('');
-  const [refundAmount, setRefundAmount] = useState<string>('');
-  const [showRefundForm, setShowRefundForm] = useState<boolean>(false);
-  const [searchTerm, setSearchTerm] = useState<string>('');
+  const { showToast } = useToast();
 
-  // Simulated data fetch
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
+  // State for invoices
+  const [invoices, setInvoices] = useState<WalkinInvoice[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(8);
+  const [totalItems, setTotalItems] = useState(0);
 
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 500));
+  // Modal state
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<WalkinInvoice | null>(null);
+  const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null);
+  const [refundQuantity, setRefundQuantity] = useState<string>('');
+  const [refundAmountPaid, setRefundAmountPaid] = useState<string>('');
+  const [refundDate, setRefundDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [submitting, setSubmitting] = useState(false);
 
-        // Mock data
-        const mockInvoices: Invoice[] = [
-          { id: '1', invoice_no: 'CIV-001', customer_name: 'John Doe', total_amount: 125.50, amount_paid: 125.50, balance_due: 0.00, payment_status: 'paid', created_at: '2026-02-01T10:30:00.000Z', type: 'customer' },
-          { id: '2', invoice_no: 'WIV-001', customer_name: 'Walk-in Customer', total_amount: 89.99, amount_paid: 89.99, balance_due: 0.00, payment_status: 'paid', created_at: '2026-02-01T11:15:00.000Z', type: 'walkin' },
-          { id: '3', invoice_no: 'CIV-002', customer_name: 'Jane Smith', total_amount: 245.75, amount_paid: 100.00, balance_due: 145.75, payment_status: 'partial', created_at: '2026-02-02T09:45:00.000Z', type: 'customer' },
-        ];
+  // Get today's date in YYYY-MM-DD format
+  const getTodayDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
-        const mockRefunds: Refund[] = [
-          { id: '1', invoice_id: '1', invoice_no: 'CIV-001', customer_name: 'John Doe', refund_amount: 25.00, refund_items: [{ product_name: 'T-Shirt', quantity_returned: 1 }], reason: 'Defective product', created_at: '2026-02-02T14:30:00.000Z' },
-        ];
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayDate());
 
-        setInvoices(mockInvoices);
-        setRefunds(mockRefunds);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch data');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
-
-  // Handle refund request
-  const handleRefund = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!selectedInvoice || !refundReason || !refundAmount) {
-      alert('Please fill in all required fields');
-      return;
-    }
-
+  // Fetch walk-in invoices
+  const fetchInvoices = async () => {
     try {
-      // In a real app, this would be an API call
-      console.log('Processing refund:', {
-        invoiceId: selectedInvoice,
-        reason: refundReason,
-        amount: parseFloat(refundAmount)
+      setLoading(true);
+      
+      let url = `/api/walkin-invoices?limit=${pageSize}&skip=${(currentPage - 1) * pageSize}`;
+      
+      if (searchTerm) {
+        // Search by invoice number or customer name - no date filter
+        url += `&customer_id=${encodeURIComponent(searchTerm)}`;
+      } else {
+        // Filter by selected date (default: today)
+        url += `&date=${selectedDate}`;
+      }
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
       });
 
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Update UI with new refund
-      const invoice = invoices.find(inv => inv.id === selectedInvoice);
-      if (invoice) {
-        const newRefund: Refund = {
-          id: (refunds.length + 1).toString(),
-          invoice_id: invoice.id,
-          invoice_no: invoice.invoice_no,
-          customer_name: invoice.customer_name,
-          refund_amount: parseFloat(refundAmount),
-          refund_items: [], // Would come from invoice items in real app
-          reason: refundReason,
-          created_at: new Date().toISOString()
-        };
-
-        setRefunds([newRefund, ...refunds]);
-        setSelectedInvoice('');
-        setRefundReason('');
-        setRefundAmount('');
-        setShowRefundForm(false);
-
-        alert('Refund processed successfully!');
+      if (response.ok) {
+        const data = await response.json();
+        setInvoices(data);
+        setTotalItems(data.length);
+      } else {
+        const errorData = await response.json();
+        showToast(errorData.error || 'Failed to fetch invoices', 'error');
+        setInvoices([]);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to process refund');
+    } catch (error) {
+      console.error('Error fetching invoices:', error);
+      showToast('Error fetching invoices', 'error');
+      setInvoices([]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Filter invoices for refund (only paid/partial invoices)
-  const refundableInvoices = invoices.filter(
-    invoice => invoice.payment_status !== 'unpaid' && invoice.balance_due < invoice.total_amount
-  );
+  useEffect(() => {
+    fetchInvoices();
+  }, [currentPage, searchTerm, selectedDate]);
 
-  // Filter refunds based on search term
-  const filteredRefunds = refunds.filter(refund =>
-    refund.invoice_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    refund.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    refund.reason.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Handle refund button click
+  const handleRefundClick = (invoice: WalkinInvoice, item: SelectedItem) => {
+    // Check if invoice is already fully refunded
+    if (invoice.payment_status === 'refunded') {
+      Swal.fire({
+        icon: 'error',
+        title: 'Already Refunded',
+        text: 'This invoice has already been fully refunded.',
+        timer: 3000,
+        timerProgressBar: true,
+        showConfirmButton: false
+      });
+      return;
+    }
 
-  if (loading) {
-    return (
-      <div className="regal-card m-6">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-          <div className="space-y-4">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-16 bg-gray-200 rounded"></div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+    // Check if all items are already refunded (amount_paid is 0)
+    if (invoice.amount_paid === 0 && invoice.total_amount > 0) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Already Refunded',
+        text: 'This invoice has already been fully refunded.',
+        timer: 3000,
+        timerProgressBar: true,
+        showConfirmButton: false
+      });
+      return;
+    }
 
-  if (error) {
-    return (
-      <div className="regal-card m-6">
-        <div className="text-red-600 p-4">Error: {error}</div>
-      </div>
-    );
-  }
+    setSelectedInvoice(invoice);
+    setSelectedItem(item);
+    setRefundQuantity('');
+    setRefundAmountPaid('');
+    setRefundDate(new Date().toISOString().split('T')[0]);
+    setShowRefundModal(true);
+  };
+
+  // Calculate per unit price from selected item
+  const getPerUnitPrice = () => {
+    if (!selectedItem) return 0;
+    return selectedItem.unit_price || ((selectedItem.total_price || 0) / selectedItem.quantity);
+  };
+
+  // Calculate refund amount based on quantity
+  const getRefundAmount = () => {
+    const qty = parseInt(refundQuantity) || 0;
+    return qty * getPerUnitPrice();
+  };
+
+  // Handle refund quantity change with validation
+  const handleRefundQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const numValue = parseInt(value) || 0;
+    
+    if (selectedItem) {
+      if (value === '') {
+        setRefundQuantity('');
+      } else if (numValue > selectedItem.quantity) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Invalid Quantity',
+          text: `You only have ${selectedItem.quantity} quantity of this product. You cannot refund more than that.`,
+          timer: 3000,
+          timerProgressBar: true,
+          showConfirmButton: false
+        });
+        setRefundQuantity(selectedItem.quantity.toString());
+      } else if (numValue < 1) {
+        setRefundQuantity('');
+      } else {
+        setRefundQuantity(value);
+      }
+    }
+  };
+
+  // Handle refund amount paid change
+  const handleRefundAmountPaidChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setRefundAmountPaid(value);
+  };
+
+  // Submit refund
+  const handleSubmitRefund = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!selectedInvoice || !selectedItem) return;
+
+    const qty = parseInt(refundQuantity) || 0;
+    
+    if (!refundQuantity || qty < 1) {
+      showToast('Refund quantity must be at least 1', 'error');
+      return;
+    }
+
+    if (!refundAmountPaid || parseFloat(refundAmountPaid) <= 0) {
+      showToast('Please enter a valid refund amount', 'error');
+      return;
+    }
+
+    const perUnitPrice = getPerUnitPrice();
+    const maxRefundAmount = qty * perUnitPrice;
+
+    if (parseFloat(refundAmountPaid) > maxRefundAmount) {
+      showToast(`Refund amount cannot exceed ${maxRefundAmount.toFixed(2)} for ${qty} items`, 'error');
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      // Refund only the selected product
+      const refundItems: RefundItem[] = [{
+        product_name: selectedItem.product_name,
+        product_id: selectedItem.product_id,
+        quantity_returned: qty,
+        unit_price: perUnitPrice,
+        total_amount: qty * perUnitPrice
+      }];
+
+      const refundData = {
+        invoice_id: selectedInvoice.invoice_id,
+        refunded_items: refundItems,
+        amount: parseFloat(refundAmountPaid),
+        reason: 'Customer return',
+        customer_id: null
+      };
+
+      const response = await fetch('/api/refunds/walkin-invoice', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(refundData),
+      });
+
+      if (response.ok) {
+        await Swal.fire({
+          title: 'Refund Processed!',
+          text: 'Refund has been processed successfully and stock has been updated.',
+          icon: 'success',
+          timer: 2000,
+          timerProgressBar: true,
+          showConfirmButton: false
+        });
+
+        setShowRefundModal(false);
+        setSelectedInvoice(null);
+        setSelectedItem(null);
+        setRefundQuantity('');
+        setRefundAmountPaid('');
+        fetchInvoices();
+      } else {
+        const errorData = await response.json();
+        showToast(errorData.detail || errorData.error || 'Failed to process refund', 'error');
+      }
+    } catch (error) {
+      console.error('Error processing refund:', error);
+      showToast('Error processing refund', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Handle page change
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
 
   return (
-    <div className="regal-card m-6">
-      <h1 className="text-2xl font-bold mb-6">Refund Management</h1>
+    <div className="p-4">
+      <PageHeader title="Refund" />
 
-      {/* Search and Action Buttons */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
-        <div className="flex-1">
+      {/* Controls Section */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+        {/* Left side - Search by Order ID */}
+        <div className="w-full sm:w-auto flex items-center gap-2">
+          <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+            Search by Order ID
+          </label>
+          <div className="relative">
+            <input
+              id="searchInput"
+              type="text"
+              placeholder="Search by invoice number..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  setCurrentPage(1);
+                }
+              }}
+              className="regal-input w-64 pl-10 pr-4 py-2"
+            />
+            <svg
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <button
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+            onClick={() => {
+              setSearchTerm('');
+              setCurrentPage(1);
+              document.getElementById('searchInput')?.focus();
+            }}
+          >
+            Clear
+          </button>
+        </div>
+
+        {/* Right side - Date filter */}
+        <div className="w-full sm:w-auto flex items-center gap-2">
+          <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+            Date:
+          </label>
           <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search refunds..."
-            className="regal-input w-full md:w-80"
+            type="date"
+            value={selectedDate}
+            onChange={(e) => {
+              setSelectedDate(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="regal-input w-40"
           />
         </div>
-
-        <button
-          onClick={() => setShowRefundForm(!showRefundForm)}
-          className="regal-btn bg-regal-yellow text-regal-black"
-        >
-          {showRefundForm ? 'Cancel Refund' : 'Process New Refund'}
-        </button>
       </div>
 
-      {/* Refund Form */}
-      {showRefundForm && (
-        <div className="regal-card mb-6">
-          <h2 className="text-lg font-semibold mb-4">Process New Refund</h2>
-
-          <form onSubmit={handleRefund} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Select Invoice</label>
-              <select
-                value={selectedInvoice}
-                onChange={(e) => setSelectedInvoice(e.target.value)}
-                className="regal-input w-full"
-                required
-              >
-                <option value="">Select an invoice</option>
-                {refundableInvoices.map(invoice => (
-                  <option key={invoice.id} value={invoice.id}>
-                    {invoice.invoice_no} - {invoice.customer_name} (${invoice.total_amount.toFixed(2)})
-                  </option>
-                ))}
-              </select>
+      {/* Walk-in Invoices Table */}
+      <div className="border-0 p-0">
+        {loading ? (
+          <div className="text-center py-4">
+            <div className="animate-pulse">
+              <div className="h-12 bg-gray-200 rounded mb-4"></div>
+              <div className="h-64 bg-gray-200 rounded"></div>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Refund Amount</label>
-              <input
-                type="number"
-                step="0.01"
-                value={refundAmount}
-                onChange={(e) => setRefundAmount(e.target.value)}
-                placeholder="Enter refund amount"
-                className="regal-input w-full"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Refund</label>
-              <textarea
-                value={refundReason}
-                onChange={(e) => setRefundReason(e.target.value)}
-                placeholder="Enter reason for refund"
-                className="regal-input w-full"
-                rows={3}
-                required
-              ></textarea>
-            </div>
-
-            <div className="flex gap-2">
-              <button type="submit" className="regal-btn bg-green-600 hover:bg-green-700">
-                Process Refund
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowRefundForm(false);
-                  setSelectedInvoice('');
-                  setRefundAmount('');
-                  setRefundReason('');
-                }}
-                className="regal-btn bg-gray-500 hover:bg-gray-600"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Refunds Table */}
-      <div className="regal-card">
-        <h2 className="text-lg font-semibold mb-4">Refund History</h2>
-
-        <div className="overflow-x-auto">
-          <table className="regal-table">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice #</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reason</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredRefunds.map((refund) => (
-                <tr key={refund.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{refund.invoice_no}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{refund.customer_name}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${refund.refund_amount.toFixed(2)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{refund.reason}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(refund.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button className="text-indigo-600 hover:text-indigo-900 mr-3">View</button>
-                    <button className="text-red-600 hover:text-red-900">Reversal</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Empty State */}
-        {filteredRefunds.length === 0 && (
+          </div>
+        ) : invoices.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-gray-500">No refunds found.</p>
-            {!searchTerm && (
-              <button
-                onClick={() => setShowRefundForm(true)}
-                className="regal-btn mt-4"
-              >
-                Process New Refund
-              </button>
-            )}
+            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <p className="mt-2 text-gray-500">No walk-in invoices found for {selectedDate}</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full table-fixed">
+              <thead className="bg-gray-100">
+                <tr className="text-xs text-gray-900 uppercase tracking-wider font-semibold">
+                  <th className="px-3 py-5 text-left w-28">Order ID</th>
+                  <th className="px-3 py-5 text-left w-40">Product</th>
+                  <th className="px-3 py-5 text-left w-28">Total Price</th>
+                  <th className="px-3 py-5 text-left w-28">Amount Paid</th>
+                  <th className="px-3 py-5 text-left w-20">Quantity</th>
+                  <th className="px-3 py-5 text-left w-28">Balance</th>
+                  <th className="px-3 py-5 text-left w-32">Action</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {invoices.flatMap((invoice, invoiceIndex) => 
+                  invoice.items.map((item, itemIndex) => {
+                    // Show payment only in first row
+                    const showPayment = itemIndex === 0;
+                    const amountPaidToShow = showPayment ? invoice.amount_paid : 0;
+                    // Calculate balance: total_amount - amount_paid
+                    const balanceToShow = showPayment ? (invoice.total_amount - invoice.amount_paid) : 0;
+                    
+                    return (
+                      <tr 
+                        key={`${invoice.invoice_id}-${itemIndex}`} 
+                        className="hover:bg-gray-50 text-sm text-gray-900 transition-colors"
+                      >
+                        <td className="px-3 py-4 text-sm font-medium text-gray-900">
+                          {invoice.invoice_no}
+                        </td>
+                        <td className="px-3 py-4 text-sm text-gray-900">
+                          <span className="font-medium">{item.product_name}</span>
+                        </td>
+                        <td className="px-3 py-4 text-sm text-gray-900">
+                          Rs. {item.total_price?.toFixed(2) || (item.quantity * item.unit_price).toFixed(2)}
+                        </td>
+                        <td className="px-3 py-4 text-sm text-gray-900">
+                          Rs. {amountPaidToShow.toFixed(2)}
+                        </td>
+                        <td className="px-3 py-4 text-sm text-gray-900">
+                          {item.quantity}
+                        </td>
+                        <td className="px-3 py-4 text-sm text-gray-900">
+                          Rs. {balanceToShow.toFixed(2)}
+                        </td>
+                        <td className="px-3 py-4">
+                          {showPayment && (invoice.payment_status === 'refunded' || invoice.amount_paid === 0) ? (
+                            <button
+                              disabled
+                              className="bg-gray-400 text-gray-200 px-4 py-2 rounded text-xs font-medium cursor-not-allowed"
+                            >
+                              Refunded
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleRefundClick(invoice, item)}
+                              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-xs font-medium transition-colors"
+                            >
+                              Refund
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
+
+      {/* Pagination */}
+      {invoices.length > 0 && (
+        <div className="mt-4">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={Math.ceil(totalItems / pageSize)}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            baseUrl="/refund"
+            onPageChange={handlePageChange}
+          />
+        </div>
+      )}
+
+      {/* Refund Modal */}
+      {showRefundModal && selectedInvoice && selectedItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900">Process Refund</h3>
+
+              <form onSubmit={handleSubmitRefund}>
+                {/* Order ID and Product - Side by side */}
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Order ID
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedInvoice.invoice_no}
+                      disabled
+                      className="regal-input w-full bg-gray-100 cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Product
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedItem.product_name}
+                      disabled
+                      className="regal-input w-full bg-gray-100 cursor-not-allowed"
+                    />
+                  </div>
+                </div>
+
+                {/* Price and Original Quantity - Side by side */}
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Price (Per Unit)
+                    </label>
+                    <input
+                      type="text"
+                      value={`Rs. ${getPerUnitPrice()}`}
+                      disabled
+                      className="regal-input w-full bg-gray-100 cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Original Quantity
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedItem.quantity}
+                      disabled
+                      className="regal-input w-full bg-gray-100 cursor-not-allowed"
+                    />
+                  </div>
+                </div>
+
+                {/* Refund Quantity and Amount - Row 1 */}
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Refund Quantity <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={selectedItem.quantity}
+                      value={refundQuantity}
+                      onChange={handleRefundQuantityChange}
+                      className="regal-input w-full"
+                      placeholder="Enter quantity"
+                      required
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Max: {selectedItem.quantity}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Amount
+                    </label>
+                    <input
+                      type="text"
+                      value={`Rs. ${getRefundAmount()}`}
+                      disabled
+                      className="regal-input w-full bg-gray-100 cursor-not-allowed"
+                    />
+                  </div>
+                </div>
+
+                {/* Amount Paid and Balance - Row 2 */}
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Amount Paid <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max={refundQuantity * getPerUnitPrice()}
+                      value={refundAmountPaid}
+                      onChange={handleRefundAmountPaidChange}
+                      className="regal-input w-full"
+                      placeholder="Enter amount"
+                      required
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Max: Rs. {getRefundAmount()}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Balance
+                    </label>
+                    <input
+                      type="text"
+                      value={`Rs. ${(getRefundAmount() - (parseFloat(refundAmountPaid) || 0))}`}
+                      disabled
+                      className="regal-input w-full bg-gray-100 cursor-not-allowed"
+                    />
+                  </div>
+                </div>
+
+                {/* Date - Full width */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Refund Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={refundDate}
+                    onChange={(e) => setRefundDate(e.target.value)}
+                    className="regal-input w-1/4"
+                    required
+                  />
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRefundModal(false);
+                      setSelectedInvoice(null);
+                      setSelectedItem(null);
+                      setRefundQuantity('');
+                      setRefundAmountPaid('');
+                    }}
+                    disabled={submitting}
+                    className={`regal-btn bg-gray-300 text-black ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className={`regal-btn bg-regal-yellow text-regal-black ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {submitting ? (
+                      <span className="flex items-center gap-2">
+                        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Processing...
+                      </span>
+                    ) : (
+                      'Process Refund'
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

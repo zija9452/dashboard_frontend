@@ -267,16 +267,7 @@ const ViewCustomerOrderPage: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full table-fixed">
               <thead className="bg-gray-100">
-                <tr className="text-xs text-gray-900 uppercase tracking-wider font-semibold">
-                  <th className="px-3 py-5 text-left w-32">Order ID</th> {/* Invoice No */}
-                  <th className="px-3 py-5 text-left w-28">Status</th>
-                  <th className="px-3 py-5 text-left w-40">Customer</th>
-                  <th className="px-3 py-5 text-left w-32">Team Name</th>
-                  <th className="px-3 py-5 text-left w-20">Qty</th>
-                  <th className="px-3 py-5 text-left w-28">Total Amount</th>
-                  <th className="px-3 py-5 text-left w-28">Date</th>
-                  <th className="px-3 py-5 text-left w-32">Action</th>
-                </tr>
+                <tr className="text-xs text-gray-900 uppercase tracking-wider font-semibold"><th className="px-3 py-5 text-left w-32">Order ID</th>{/* Invoice No */}<th className="px-3 py-5 text-left w-28">Status</th><th className="px-3 py-5 text-left w-40">Customer</th><th className="px-3 py-5 text-left w-32">Team Name</th><th className="px-3 py-5 text-left w-20">Qty</th><th className="px-3 py-5 text-left w-28">Total Amount</th><th className="px-3 py-5 text-left w-28">Date</th><th className="px-3 py-5 text-left w-32">Action</th></tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {orders.map((order, index) => (

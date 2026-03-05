@@ -66,7 +66,11 @@ const Pagination: React.FC<PaginationProps> = ({
       rangeWithDots.push(totalPages);
     }
 
-    return rangeWithDots;
+    // Remove duplicates
+    return rangeWithDots.filter((page, index) => {
+      if (page === '...') return true;
+      return rangeWithDots.indexOf(page) === index;
+    });
   };
 
   const pageNumbers = getPageNumbers();

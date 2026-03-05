@@ -119,6 +119,7 @@ const SalesViewPage: React.FC = () => {
 
   // Branch options
   const branchOptions = [
+    "Select Branch",
     'European Sports Light House',
   ];
 
@@ -357,11 +358,11 @@ const SalesViewPage: React.FC = () => {
             </div>
 
             {/* Fetch Button */}
-            <div className="md:col-span-2 flex items-end">
+            <div className="md:col-span-1 flex items-end">
               <button
                 onClick={fetchSalesData}
                 disabled={loading}
-                className="text-regal-black bg-regal-yellow px-4 py-3 rounded-md text-sm font-semibold transition disabled:opacity-50"
+                className="text-regal-black w-24 bg-regal-yellow py-3 rounded-md text-sm font-semibold transition disabled:opacity-50"
               >
                 {loading ? 'Fetching...' : 'Fetch'}
               </button>

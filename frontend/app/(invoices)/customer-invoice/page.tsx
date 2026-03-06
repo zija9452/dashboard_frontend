@@ -804,21 +804,34 @@ const CustomerInvoicePage: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium mb-1">Quantity</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     value={quantity}
                     onChange={(e) => {
-                      const value = e.target.value;
+                      const value = e.target.value.trim();
                       if (value === '') {
                         setQuantity('');
                       } else {
-                        const numValue = Math.floor(Number(value));
-                        setQuantity(numValue > 0 ? numValue : '');
+                        // Only allow positive integers
+                        const numValue = parseInt(value, 10);
+                        if (!isNaN(numValue) && numValue > 0) {
+                          setQuantity(numValue);
+                        } else if (value.match(/^\d*$/)) {
+                          // Allow typing digits only (but don't set invalid values)
+                          setQuantity(value === '' ? '' : parseInt(value, 10) || '');
+                        }
+                      }
+                    }}
+                    onBlur={(e) => {
+                      // Ensure valid value on blur
+                      const value = e.target.value;
+                      if (value && (!parseInt(value, 10) || parseInt(value, 10) <= 0)) {
+                        setQuantity('');
                       }
                     }}
                     className="regal-input w-full h-9"
                     placeholder="Quantity"
                     min="1"
-                    step="1"
                   />
                 </div>
 

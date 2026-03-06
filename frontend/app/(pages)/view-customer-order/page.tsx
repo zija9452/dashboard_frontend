@@ -30,7 +30,7 @@ const ViewCustomerOrderPage: React.FC = () => {
   const [showSearch, setShowSearch] = useState(false);
 
   // Calculate totalPages - limit to max 5 pages (same as products page)
-  const totalPages = Math.min(totalPagesFromApi, 5);
+  const totalPages = totalPagesFromApi;
 
   // Status colors mapping
   const statusColors = {

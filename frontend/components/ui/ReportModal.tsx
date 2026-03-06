@@ -25,7 +25,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
     console.log('isOpen:', isOpen);
     console.log('reportUrl:', reportUrl);
     console.log('pdfData:', pdfData);
-    
+
     if (isOpen) {
       // If pdfData is provided directly, use it immediately
       if (pdfData) {
@@ -71,7 +71,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
           console.log('Parsed JSON data:', data);
           console.log('Data type:', typeof data);
           console.log('Is data a string?', typeof data === 'string');
-          
+
           // Backend returns raw string (base64), not JSON object
           if (typeof data === 'string') {
             setReportData(data);
@@ -100,12 +100,12 @@ const ReportModal: React.FC<ReportModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div 
+    <div
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm"
       onClick={onClose}
     >
-      <div 
-        className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-auto"
+      <div
+        className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[95vh] overflow-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-4">
@@ -119,17 +119,17 @@ const ReportModal: React.FC<ReportModalProps> = ({
             </svg>
           </button>
         </div>
-        
+
         {loading ? (
           <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-regal-yellow mx-auto"></div>
+            <div className="animate-spin rounded-full h-24 w-12 border-b-2 border-regal-yellow mx-auto"></div>
             <p className="mt-4 text-gray-600">Loading report...</p>
           </div>
         ) : reportData ? (
           <div>
             <iframe
               src={`data:application/pdf;base64,${reportData}`}
-              className="w-full h-[70vh] border rounded"
+              className="w-full h-[80vh] border rounded"
               title={title}
             />
           </div>

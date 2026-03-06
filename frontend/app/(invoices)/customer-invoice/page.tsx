@@ -806,10 +806,19 @@ const CustomerInvoicePage: React.FC = () => {
                   <input
                     type="number"
                     value={quantity}
-                    onChange={(e) => setQuantity(e.target.value === '' ? '' : Number(e.target.value))}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === '') {
+                        setQuantity('');
+                      } else {
+                        const numValue = Math.floor(Number(value));
+                        setQuantity(numValue > 0 ? numValue : '');
+                      }
+                    }}
                     className="regal-input w-full h-9"
                     placeholder="Quantity"
                     min="1"
+                    step="1"
                   />
                 </div>
 

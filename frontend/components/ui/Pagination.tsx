@@ -42,35 +42,37 @@ const Pagination: React.FC<PaginationProps> = ({
     }
   };
 
-  // Generate page numbers to show (limited to 7 buttons max)
+  // Generate page numbers to show (max 5 visible at a time, sliding window)
   const getPageNumbers = () => {
-    const delta = 2; // How many pages to show around current page
+    const maxVisible = 5; // Show maximum 5 page buttons
     const range = [];
-    const rangeWithDots = [];
-
-    for (let i = Math.max(2, currentPage - delta); i <= Math.min(totalPages - 1, currentPage + delta); i++) {
-      range.push(i);
-    }
-
-    if (currentPage - delta > 2) {
-      rangeWithDots.push(1, '...');
+    
+    if (totalPages <= maxVisible) {
+      // If total pages <= 5, show all
+      for (let i = 1; i <= totalPages; i++) {
+        range.push(i);
+      }
     } else {
-      rangeWithDots.push(1);
+      // Sliding window: show 5 pages centered around current page
+      let startPage = Math.max(1, currentPage - 2);
+      let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+      
+      // Adjust if we're near the end
+      if (endPage - startPage < maxVisible - 1) {
+        startPage = Math.max(1, endPage - maxVisible + 1);
+      }
+      
+      for (let i = startPage; i <= endPage; i++) {
+        range.push(i);
+      }
+      
+      // Add dots if there are more pages ahead
+      if (endPage < totalPages) {
+        range.push('...');
+      }
     }
-
-    rangeWithDots.push(...range);
-
-    if (currentPage + delta < totalPages - 1) {
-      rangeWithDots.push('...', totalPages);
-    } else {
-      rangeWithDots.push(totalPages);
-    }
-
-    // Remove duplicates
-    return rangeWithDots.filter((page, index) => {
-      if (page === '...') return true;
-      return rangeWithDots.indexOf(page) === index;
-    });
+    
+    return range;
   };
 
   const pageNumbers = getPageNumbers();

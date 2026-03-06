@@ -74,7 +74,7 @@ const CustomerInvoicePage: React.FC = () => {
   const [totalAmount, setTotalAmount] = useState<number>(0);
   const [amountPaid, setAmountPaid] = useState<string>('');
   const [balance, setBalance] = useState<number>(0);
-  const [paymentMethod, setPaymentMethod] = useState('Credit');
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [submitting, setSubmitting] = useState(false);
 
   // Add customer modal state
@@ -454,7 +454,7 @@ const CustomerInvoicePage: React.FC = () => {
         setSelectedCustomer('');
         setTeamName('');
         setAmountPaid('');
-        setPaymentMethod('Credit');
+        setPaymentMethod('Cash');
 
         // Show receipt modal using report URL (consistent with customer details)
         if (result.invoice_id) {

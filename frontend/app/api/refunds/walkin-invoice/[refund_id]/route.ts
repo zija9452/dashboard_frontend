@@ -3,12 +3,12 @@ import { NextRequest } from 'next/server';
 // PUT /api/refunds/walkin-invoice/[refund_id] - Update refund
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { refund_id: string } }
+  { params }: { params: Promise<{ refund_id: string }> }
 ) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
     const body = await request.json();
-    const refund_id = params.refund_id;
+    const { refund_id } = await params;
 
     const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/walkinrefund/refunds/walkin-invoice/${refund_id}`;
 

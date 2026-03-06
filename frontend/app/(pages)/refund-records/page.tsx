@@ -103,6 +103,10 @@ const RefundRecordsPage: React.FC = () => {
     setSubmitting(true);
 
     try {
+      // Convert date to ISO string without timezone (YYYY-MM-DDTHH:MM:SS format)
+      const naiveDatetime = new Date(editDate);
+      const naiveDatetimeStr = naiveDatetime.toISOString().replace('Z', '');
+
       const response = await fetch(`/api/refunds/walkin-invoice/${editingRefund.refund_id}`, {
         method: 'PUT',
         headers: {
@@ -110,7 +114,7 @@ const RefundRecordsPage: React.FC = () => {
         },
         credentials: 'include',
         body: JSON.stringify({
-          created_at: new Date(editDate).toISOString()
+          created_at: naiveDatetimeStr
         }),
       });
 

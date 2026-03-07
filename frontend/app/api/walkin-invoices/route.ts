@@ -106,6 +106,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Backend returns JSON with PDF (same as customer_invoice)
     const data = await response.json();
     return Response.json(data, {
       status: response.status,

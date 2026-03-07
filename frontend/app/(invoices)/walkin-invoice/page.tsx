@@ -88,9 +88,25 @@ interface CartItem {
   barcode: string;
 }
 
+// Helper function: Convert base64 to blob (same as customer invoice)
+const base64ToBlob = (base64: string, mimeType: string) => {
+  const byteCharacters = atob(base64);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+  return new Blob([byteArray], { type: mimeType });
+};
+
 const WalkInInvoicePage: React.FC = () => {
   const router = useRouter();
   const { showToast } = useToast();
+
+  // PDF viewing state
+  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string>('');
+  const [billType, setBillType] = useState<string>('SALE RECEIPT');
 
   // Customer and Salesman state
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -472,14 +488,20 @@ const WalkInInvoicePage: React.FC = () => {
       });
 
       if (response.ok) {
-        Swal.fire({
-          title: 'Invoice Created!',
-          text: 'Walk-in invoice has been created successfully.',
-          icon: 'success',
-          timer: 2000,
-          timerProgressBar: true,
-          showConfirmButton: false
-        });
+        // Get PDF data from JSON response (same as customer_invoice)
+        const data = await response.json();
+        const pdfBase64 = data.pdf;
+
+        // Convert base64 to blob
+        const pdfBlob = base64ToBlob(pdfBase64, 'application/pdf');
+        const pdfObjectUrl = URL.createObjectURL(pdfBlob);
+
+        // Set PDF state
+        setPdfUrl(pdfObjectUrl);
+        setBillType('SALE RECEIPT');
+
+        // Show PDF modal directly (no SweetAlert)
+        setShowPdfModal(true);
 
         // Reset form
         clearAll();
@@ -489,7 +511,7 @@ const WalkInInvoicePage: React.FC = () => {
         setSelectedSalesman('');
         setPaymentDate(new Date().toISOString().split('T')[0]);
         setManualDiscount(0);
-        
+
         // Refresh products to update stock
         fetchDefaultProducts();
       } else {
@@ -1565,6 +1587,37 @@ const WalkInInvoicePage: React.FC = () => {
                 <p className="mt-1">Generated on {new Date().toLocaleString('en-PK')}</p>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* PDF View Modal */}
+      {showPdfModal && pdfUrl && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm"
+          onClick={() => setShowPdfModal(false)}
+        >
+          <div
+            className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[95vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">{billType}</h2>
+              <button
+                onClick={() => setShowPdfModal(false)}
+                className="text-gray-500 hover:text-gray-700 p-2"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <iframe
+              src={pdfUrl}
+              className="w-full h-[80vh] border-2 border-gray-300 rounded-lg"
+              title={billType}
+            />
           </div>
         </div>
       )}

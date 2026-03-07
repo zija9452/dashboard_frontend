@@ -1,9 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { format } from 'date-fns';
+import { useRouter } from 'next/navigation';
+import { useToast } from '@/components/ui/Toast';
+import PageHeader from '@/components/ui/PageHeader';
+import Pagination from '@/components/ui/Pagination';
+import Swal from 'sweetalert2';
 
-// Define interfaces
 interface InvoiceItem {
   id: string;
   product_name: string;
@@ -17,311 +20,345 @@ interface Invoice {
   id: string;
   invoice_no: string;
   customer_name: string;
-  items: InvoiceItem[];
+  team_name?: string;
+  type: 'walkin' | 'customer';
   total_amount: number;
   amount_paid: number;
   balance_due: number;
-  payment_status: 'paid' | 'partial' | 'unpaid';
+  discount: number;
+  payment_status: string;
   payment_method: string;
+  payment_date: string;
   created_at: string;
-  type: 'customer' | 'walkin';
+  items: InvoiceItem[];
+}
+
+interface SearchResponse {
+  invoices: Invoice[];
+  total: number;
+  search_query: string | null;
+  time_range: string;
 }
 
 const DuplicateBillPage: React.FC = () => {
+  const router = useRouter();
+  const { showToast } = useToast();
+
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  const [invoiceType, setInvoiceType] = useState<'all' | 'customer' | 'walkin'>('all');
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
-  const [orderId, setOrderId] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(8);
+  const [totalItems, setTotalItems] = useState(0);
 
-  // Simulated data fetch
+  // PDF modal
+  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string>('');
+  const [pdfFilename, setPdfFilename] = useState<string>('');
+  const [billType, setBillType] = useState<string>('DUPLICATE BILL');
+  const [printingInvoice, setPrintingInvoice] = useState<{id: string, type: string} | null>(null);
+
+  // Debounce search
   useEffect(() => {
-    const fetchInvoices = async () => {
-      try {
-        setLoading(true);
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
 
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 500));
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-        // Mock data
-        const mockInvoices: Invoice[] = [
-          { id: '1', invoice_no: 'CIV-001', customer_name: 'John Doe', items: [{ id: '1', product_name: 'T-Shirt', quantity: 2, unit_price: 25.00, discount: 0, category: 'Clothing' }], total_amount: 50.00, amount_paid: 50.00, balance_due: 0.00, payment_status: 'paid', payment_method: 'cash', created_at: '2026-02-01T10:30:00.000Z', type: 'customer' },
-          { id: '2', invoice_no: 'WIV-001', customer_name: 'Walk-in Customer', items: [{ id: '1', product_name: 'Jeans', quantity: 1, unit_price: 75.00, discount: 5.00, category: 'Clothing' }], total_amount: 70.00, amount_paid: 70.00, balance_due: 0.00, payment_status: 'paid', payment_method: 'card', created_at: '2026-02-01T11:15:00.000Z', type: 'walkin' },
-          { id: '3', invoice_no: 'CIV-002', customer_name: 'Jane Smith', items: [{ id: '1', product_name: 'Sneakers', quantity: 1, unit_price: 120.00, discount: 0, category: 'Footwear' }], total_amount: 120.00, amount_paid: 80.00, balance_due: 40.00, payment_status: 'partial', payment_method: 'cash', created_at: '2026-02-02T09:45:00.000Z', type: 'customer' },
-          { id: '4', invoice_no: 'WIV-002', customer_name: 'Walk-in Customer', items: [{ id: '1', product_name: 'Watch', quantity: 1, unit_price: 200.00, discount: 10.00, category: 'Accessories' }], total_amount: 190.00, amount_paid: 190.00, balance_due: 0.00, payment_status: 'paid', payment_method: 'card', created_at: '2026-02-02T14:20:00.000Z', type: 'walkin' },
-          { id: '5', invoice_no: 'CIV-003', customer_name: 'Bob Johnson', items: [{ id: '1', product_name: 'Backpack', quantity: 1, unit_price: 60.00, discount: 0, category: 'Accessories' }], total_amount: 60.00, amount_paid: 60.00, balance_due: 0.00, payment_status: 'paid', payment_method: 'cash', created_at: '2026-02-03T10:15:00.000Z', type: 'customer' },
-          { id: '6', invoice_no: 'WIV-003', customer_name: 'Walk-in Customer', items: [{ id: '1', product_name: 'Sunglasses', quantity: 1, unit_price: 45.00, discount: 0, category: 'Accessories' }], total_amount: 45.00, amount_paid: 45.00, balance_due: 0.00, payment_status: 'paid', payment_method: 'cash', created_at: '2026-02-03T13:30:00.000Z', type: 'walkin' },
-          { id: '7', invoice_no: 'CIV-004', customer_name: 'Alice Williams', items: [{ id: '1', product_name: 'Hat', quantity: 2, unit_price: 25.00, discount: 2.00, category: 'Clothing' }], total_amount: 48.00, amount_paid: 0.00, balance_due: 48.00, payment_status: 'issued', payment_method: 'cash', created_at: '2026-02-04T09:10:00.000Z', type: 'customer' },
-          { id: '8', invoice_no: 'WIV-004', customer_name: 'Walk-in Customer', items: [{ id: '1', product_name: 'Belt', quantity: 1, unit_price: 35.00, discount: 0, category: 'Accessories' }], total_amount: 35.00, amount_paid: 35.00, balance_due: 0.00, payment_status: 'paid', payment_method: 'card', created_at: '2026-02-04T15:45:00.000Z', type: 'walkin' },
-        ];
-
-        setInvoices(mockInvoices);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch invoices');
-      } finally {
-        setLoading(false);
-      }
-    };
-
+  // Fetch invoices
+  useEffect(() => {
     fetchInvoices();
-  }, []);
+  }, [debouncedSearch, currentPage]);
 
-  // Filter invoices based on search term and type
-  const filteredInvoices = invoices.filter(invoice => {
-    const matchesSearch = !searchTerm ||
-                         invoice.invoice_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         invoice.customer_name.toLowerCase().includes(searchTerm.toLowerCase());
+  const fetchInvoices = async () => {
+    try {
+      setLoading(true);
 
-    const matchesType = invoiceType === 'all' || invoice.type === invoiceType;
+      const params = new URLSearchParams();
+      if (debouncedSearch) {
+        params.append('search_query', debouncedSearch);
+      }
+      params.append('page', currentPage.toString());
+      params.append('limit', pageSize.toString());
 
-    return matchesSearch && matchesType;
-  });
+      const response = await fetch(`/api/duplicatebill/search?${params.toString()}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
 
-  // Handle getting invoice by order ID
-  const handleGetByOrderId = (e: React.FormEvent) => {
-    e.preventDefault();
+      if (response.status === 401) {
+        showToast('Session expired. Please login again.', 'error');
+        router.push('/login');
+        return;
+      }
 
-    if (!orderId.trim()) return;
+      if (!response.ok) {
+        throw new Error('Failed to fetch invoices');
+      }
 
-    const invoice = invoices.find(inv => inv.id === orderId || inv.invoice_no.toLowerCase() === orderId.toLowerCase());
-
-    if (invoice) {
-      setSelectedInvoice(invoice);
-    } else {
-      alert('Invoice not found');
+      const data: SearchResponse = await response.json();
+      setInvoices(data.invoices);
+      setTotalItems(data.total);
+    } catch (error: any) {
+      console.error('Error fetching invoices:', error);
+      showToast(error.message || 'Failed to fetch invoices', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="regal-card m-6">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-          <div className="space-y-4">
-            {[...Array(8)].map((_, i) => (
-              <div key={i} className="h-16 bg-gray-200 rounded"></div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Print invoice
+  const handlePrintInvoice = async (invoice: Invoice) => {
+    try {
+      setPrintingInvoice({ id: invoice.id, type: invoice.type });
 
-  if (error) {
-    return (
-      <div className="regal-card m-6">
-        <div className="text-red-600 p-4">Error: {error}</div>
-      </div>
-    );
-  }
+      const response = await fetch(
+        `/api/duplicatebill/${invoice.id}/duplicate?invoice_type=${invoice.type}`,
+        {
+          method: 'GET',
+          credentials: 'include',
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to generate PDF');
+      }
+
+      const data = await response.json();
+      const pdfBase64 = data.pdf;
+
+      // Convert base64 to blob
+      const pdfBlob = base64ToBlob(pdfBase64, 'application/pdf');
+      const pdfObjectUrl = URL.createObjectURL(pdfBlob);
+
+      // Set PDF state
+      setPdfUrl(pdfObjectUrl);
+      setPdfFilename(`Duplicate_${invoice.invoice_no}.pdf`);
+      setBillType('DUPLICATE BILL');
+
+      // Show PDF modal
+      setShowPdfModal(true);
+
+      // Show cache source
+      if (data.source === 'cache') {
+        console.log('PDF loaded from Redis cache');
+      } else {
+        console.log('PDF generated fresh and cached for 7 days');
+      }
+    } catch (error: any) {
+      console.error('Error printing invoice:', error);
+      showToast(error.message || 'Failed to print invoice', 'error');
+    } finally {
+      setPrintingInvoice(null);
+    }
+  };
+
+  // Helper: Convert base64 to blob
+  const base64ToBlob = (base64: string, mimeType: string) => {
+    const byteCharacters = atob(base64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    return new Blob([byteArray], { type: mimeType });
+  };
+
+  // Format date
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-PK', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  // Format currency
+  const formatCurrency = (amount: number) => {
+    return `Rs. ${amount.toFixed(2)}`;
+  };
 
   return (
-    <div className="regal-card m-6">
-      <h1 className="text-2xl font-bold mb-6">Duplicate Bill</h1>
+    <div className="p-4 bg-white min-h-screen">
+      <PageHeader title="Duplicate Bill" />
 
-      {/* Search by Order ID */}
-      <div className="regal-card mb-6">
-        <h2 className="text-lg font-semibold mb-4">Search by Order ID</h2>
-        <form onSubmit={handleGetByOrderId} className="flex gap-2">
+      {/* Search Bar */}
+      <div className="mb-6 max-w-sm">
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+            Search by Order ID:
+          </label>
           <input
             type="text"
-            value={orderId}
-            onChange={(e) => setOrderId(e.target.value)}
-            placeholder="Enter Order ID or Invoice Number"
-            className="regal-input flex-grow"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder=""
+            className="regal-input flex-1 w-1/4"
           />
-          <button type="submit" className="regal-btn bg-regal-yellow text-regal-black">Search</button>
-          <button
-            type="button"
-            onClick={() => {
-              setOrderId('');
-              setSelectedInvoice(null);
-            }}
-            className="regal-btn bg-gray-500 hover:bg-gray-600"
-          >
-            Clear
-          </button>
-        </form>
+        </div>
       </div>
 
-      {/* Invoice Details if found by ID */}
-      {selectedInvoice && (
-        <div className="regal-card mb-6">
-          <div className="flex justify-between items-start mb-4">
-            <h2 className="text-xl font-semibold">Invoice Details: {selectedInvoice.invoice_no}</h2>
-            <div className="flex gap-2">
-              <button className="regal-btn bg-green-600 hover:bg-green-700">Print Bill</button>
-              <button className="regal-btn bg-blue-600 hover:bg-blue-700">Download PDF</button>
-              <button className="regal-btn bg-gray-500 hover:bg-gray-600">Email</button>
+      {/* Invoices Table */}
+      <div className="">
+       {loading ? (
+          <div className="text-center py-4">
+            <div className="animate-pulse">
+              <div className="h-12 bg-gray-200 rounded mb-4"></div>
+              <div className="h-64 bg-gray-200 rounded"></div>
             </div>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div>
-              <h3 className="font-medium mb-2">Customer Information</h3>
-              <p><span className="font-medium">Name:</span> {selectedInvoice.customer_name}</p>
-              <p><span className="font-medium">Date:</span> {format(new Date(selectedInvoice.created_at), 'MMM dd, yyyy HH:mm')}</p>
-            </div>
-            <div>
-              <h3 className="font-medium mb-2">Payment Information</h3>
-              <p><span className="font-medium">Status:</span>
-                <span className={`ml-2 px-2 py-1 rounded-full text-xs ${
-                  selectedInvoice.payment_status === 'paid'
-                    ? 'bg-green-100 text-green-800'
-                    : selectedInvoice.payment_status === 'partial'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-red-100 text-red-800'
-                }`}>
-                  {selectedInvoice.payment_status.toUpperCase()}
-                </span>
-              </p>
-              <p><span className="font-medium">Method:</span> {selectedInvoice.payment_method}</p>
-            </div>
-          </div>
-
-          <div className="mb-6">
-            <h3 className="font-medium mb-3">Items</h3>
-            <table className="regal-table">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-2 text-left">Product</th>
-                  <th className="px-4 py-2 text-right">Qty</th>
-                  <th className="px-4 py-2 text-right">Price</th>
-                  <th className="px-4 py-2 text-right">Discount</th>
-                  <th className="px-4 py-2 text-right">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedInvoice.items.map((item) => {
-                  const itemTotal = (item.quantity * item.unit_price) - item.discount;
-                  return (
-                    <tr key={item.id}>
-                      <td className="px-4 py-2">{item.product_name}</td>
-                      <td className="px-4 py-2 text-right">{item.quantity}</td>
-                      <td className="px-4 py-2 text-right">${item.unit_price.toFixed(2)}</td>
-                      <td className="px-4 py-2 text-right">${item.discount.toFixed(2)}</td>
-                      <td className="px-4 py-2 text-right">${itemTotal.toFixed(2)}</td>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="regal-table">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Order ID
+                    </th>
+                    <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Total Price
+                    </th>
+                    <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Amount Paid
+                    </th>
+                    <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Discount
+                    </th>
+                    <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {invoices.map((invoice) => (
+                    <tr key={invoice.id}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">
+                          {invoice.invoice_no}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {invoice.customer_name}
+                          {invoice.team_name && ` (${invoice.team_name})`}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatCurrency(invoice.total_amount)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatCurrency(invoice.amount_paid)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatCurrency(invoice.discount)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(invoice.payment_date)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button
+                          onClick={() => handlePrintInvoice(invoice)}
+                          disabled={printingInvoice?.id === invoice.id}
+                          className={`regal-btn bg-regal-yellow text-regal-black ${
+                            printingInvoice?.id === invoice.id ? 'opacity-50 cursor-not-allowed' : ''
+                          }`}
+                        >
+                          {printingInvoice?.id === invoice.id ? (
+                            <span className="flex items-center gap-2">
+                              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              Printing...
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-2">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                              </svg>
+                              Print
+                            </span>
+                          )}
+                        </button>
+                      </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="border-t pt-4">
-            <div className="flex justify-end space-x-8">
-              <div className="text-right">
-                <p className="mb-1"><span className="font-medium">Subtotal:</span> ${selectedInvoice.total_amount.toFixed(2)}</p>
-                <p className="mb-1"><span className="font-medium">Paid:</span> ${selectedInvoice.amount_paid.toFixed(2)}</p>
-                <p className="font-bold text-lg"><span className="font-medium">Balance Due:</span> ${selectedInvoice.balance_due.toFixed(2)}</p>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
+
+            {/* Empty State */}
+            {invoices.length === 0 && !loading && (
+              <div className="text-center py-12">
+                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <h3 className="mt-2 text-sm font-medium text-gray-900">No invoices found</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  {debouncedSearch
+                    ? `No results found for "${debouncedSearch}"`
+                    : 'No invoices in the last 24 hours'}
+                </p>
+              </div>
+            )}
+
+            {/* Pagination */}
+            {totalItems > 0 && (
+              <div className="mt-4">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={Math.ceil(totalItems / pageSize)}
+                  totalItems={totalItems}
+                  pageSize={pageSize}
+                  baseUrl="/duplicate-bill"
+                  onPageChange={setCurrentPage}
+                />
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* PDF Modal */}
+      {showPdfModal && pdfUrl && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm"
+          onClick={() => setShowPdfModal(false)}
+        >
+          <div
+            className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[95vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">{billType}</h2>
+              <button
+                onClick={() => setShowPdfModal(false)}
+                className="text-gray-500 hover:text-gray-700 p-2"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <iframe
+              src={pdfUrl}
+              className="w-full h-[80vh] border-2 border-gray-300 rounded-lg"
+              title={pdfFilename}
+            />
           </div>
         </div>
       )}
-
-      {/* All Invoices Table */}
-      <div className="regal-card">
-        <h2 className="text-lg font-semibold mb-4">All Invoices</h2>
-
-        {/* Filters */}
-        <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
-          <div className="flex-1">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search invoices..."
-              className="regal-input w-full"
-            />
-          </div>
-
-          <select
-            value={invoiceType}
-            onChange={(e) => setInvoiceType(e.target.value as 'all' | 'customer' | 'walkin')}
-            className="regal-input"
-          >
-            <option value="all">All Types</option>
-            <option value="customer">Customer Invoice</option>
-            <option value="walkin">Walk-in Invoice</option>
-          </select>
-        </div>
-
-        {/* Invoices Table */}
-        <div className="overflow-x-auto">
-          <table className="regal-table">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice #</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredInvoices.map((invoice) => (
-                <tr key={invoice.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{invoice.invoice_no}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{invoice.customer_name}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${invoice.total_amount.toFixed(2)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${invoice.amount_paid.toFixed(2)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${invoice.balance_due.toFixed(2)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      invoice.payment_status === 'paid'
-                        ? 'bg-green-100 text-green-800'
-                        : invoice.payment_status === 'partial'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-red-100 text-red-800'
-                    }`}>
-                      {invoice.payment_status.toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {format(new Date(invoice.created_at), 'MMM dd, yyyy')}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">{invoice.type}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button
-                      onClick={() => setSelectedInvoice(invoice)}
-                      className="text-indigo-600 hover:text-indigo-900 mr-3"
-                    >
-                      View
-                    </button>
-                    <button className="text-green-600 hover:text-green-900 mr-3">Print</button>
-                    <button className="text-blue-600 hover:text-blue-900">PDF</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Empty State */}
-        {filteredInvoices.length === 0 && !selectedInvoice && (
-          <div className="text-center py-12">
-            <p className="text-gray-500">No invoices found matching your criteria.</p>
-            {(searchTerm || invoiceType !== 'all') && (
-              <button
-                onClick={() => {
-                  setSearchTerm('');
-                  setInvoiceType('all');
-                }}
-                className="regal-btn mt-4"
-              >
-                Clear Filters
-              </button>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 };

@@ -1,4 +1,5 @@
 // Centralized export of all API services
+export * from './apiClient';
 export * from './products';
 export * from './customers';
 export * from './vendors';

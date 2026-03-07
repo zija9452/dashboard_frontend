@@ -934,7 +934,7 @@ const WalkInInvoicePage: React.FC = () => {
           {/* Selected Items (Bottom) */}
           <div className="regal-card" style={{ minHeight: '200px' }}>
             <h2 className="text-xl font-semibold mb-4">Selected Items ({selectedItems.length})</h2>
-            <div className="overflow-hidden" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+            <div className="overflow-hidden" style={{ height: '200px', overflowY: 'auto' }}>
               <table className="w-full">
                 <thead className="bg-gray-100 sticky top-0">
                   <tr>

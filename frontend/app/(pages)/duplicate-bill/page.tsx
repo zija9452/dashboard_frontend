@@ -220,49 +220,49 @@ const DuplicateBillPage: React.FC = () => {
             <div className="overflow-x-auto">
               <table className="regal-table">
                 <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <tr className='text-black font-semibold text-xs uppercase'>
+                    <th className="px-6 py-5 text-left tracking-wider">
                       Order ID
                     </th>
-                    <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-5 text-left tracking-wider">
                       Total Price
                     </th>
-                    <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-5 text-left tracking-wider">
                       Amount Paid
                     </th>
-                    <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-5 text-left tracking-wider">
                       Discount
                     </th>
-                    <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-5 text-left tracking-wider">
                       Date
                     </th>
-                    <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-5 text-left tracking-wider">
                       Action
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white divide-y divide-gray-200 text-gray-900">
                   {invoices.map((invoice) => (
                     <tr key={invoice.id}>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
+                        <div className="text-sm font-medium">
                           {invoice.invoice_no}
                         </div>
-                        <div className="text-sm text-gray-500">
+                        <div className="text-sm">
                           {invoice.customer_name}
                           {invoice.team_name && ` (${invoice.team_name})`}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
                         {formatCurrency(invoice.total_amount)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
                         {formatCurrency(invoice.amount_paid)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
                         {formatCurrency(invoice.discount)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
                         {formatDate(invoice.payment_date)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -279,7 +279,7 @@ const DuplicateBillPage: React.FC = () => {
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                               </svg>
-                              Printing...
+                              Print
                             </span>
                           ) : (
                             <span className="flex items-center gap-2">

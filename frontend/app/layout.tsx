@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "JnS Dashboard",
+  title: "European Sports Dashboard",
   description: "Production-ready POS frontend for FastAPI backend",
 };
 

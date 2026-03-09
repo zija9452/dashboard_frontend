@@ -32,10 +32,11 @@ export default function PagesLayout({
           {/* Desktop Sidebar */}
           <div id="desktop-sidebar" className="flex w-64 flex-col fixed inset-y-0 z-30 border-r border-gray-200 border-b bg-white shadow-lg">
             <div className="flex flex-col flex-grow pt-5 pb-3">
-              <div className="flex-shrink-0 px-4 flex items-center justify-start">
-                <Image width={180} height={180} src="/jns_logo.svg" alt="J&S Dashboard Logo" className="h-24 w-auto" />
-                <span className="text-regal-black text-xl font-semibold font-serif leading-none">J&S Sportswear</span>
-              </div>
+              <Link href={"/"}>
+              <div className="flex-shrink-0 px-6">
+                <Image width={240} height={240} src="/european-logo.svg" alt="European Sports Dashboard Logo" className="h-28 w-auto" />
+          
+              </div></Link>
 
               <div className="mt-5 flex-1 flex flex-col overflow-hidden">
                 <nav className="h-[70%] overflow-y-auto px-2">

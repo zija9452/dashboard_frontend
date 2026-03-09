@@ -33,12 +33,16 @@ interface DashboardData {
   outOfStock: number;
   shortStock: number;
   adminUser: string;
+  userRole: string;
   openingBalance: number;
   chartData: {
     dates: string[];
     sales: number[];
     expenses: number[];
   };
+  month: number;
+  year: number;
+  monthName: string;
 }
 
 const DashboardPage: React.FC = () => {
@@ -50,46 +54,36 @@ const DashboardPage: React.FC = () => {
     outOfStock: 0,
     shortStock: 0,
     adminUser: 'Admin',
+    userRole: 'Admin',
     openingBalance: 0,
     chartData: {
       dates: [],
       sales: [],
       expenses: [],
     },
+    month: new Date().getMonth() + 1,
+    year: new Date().getFullYear(),
+    monthName: '',
   });
 
   useEffect(() => {
-    fetchDashboardData();
+    const today = new Date();
+    fetchDashboardData(today.getMonth() + 1, today.getFullYear());
   }, []);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (month: number, year: number) => {
     try {
       setLoading(true);
 
-      // Fetch sales data (you may need to create this API endpoint)
-      const salesResponse = await fetch('/api/dashboard/stats', {
+      const response = await fetch(`/api/dashboard/stats?month=${month}&year=${year}`, {
         credentials: 'include',
       });
 
-      if (salesResponse.ok) {
-        const data = await salesResponse.json();
+      if (response.ok) {
+        const data = await response.json();
         setDashboardData(data);
       } else {
-        // Mock data for now
-        setDashboardData({
-          totalSales: 11950.00,
-          totalExpense: 0,
-          totalPurchase: 0,
-          outOfStock: 542,
-          shortStock: 1626,
-          adminUser: 'Admin',
-          openingBalance: 5000,
-          chartData: {
-            dates: ['01', '05', '10', '15', '20', '25'],
-            sales: [2000, 3500, 2800, 4200, 3100, 4500],
-            expenses: [500, 800, 600, 1200, 700, 900],
-          },
-        });
+        console.error('Failed to fetch dashboard data');
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -99,7 +93,7 @@ const DashboardPage: React.FC = () => {
   };
 
   const chartData = {
-    labels: dashboardData.chartData.dates,
+    labels: dashboardData.chartData.dates.map((day) => `${day}/${String(dashboardData.month).padStart(2, '0')}/${dashboardData.year}`),
     datasets: [
       {
         label: 'Sales',
@@ -132,7 +126,7 @@ const DashboardPage: React.FC = () => {
         intersect: false,
         callbacks: {
           label: function (context: any) {
-            return `${context.dataset.label}: ${context.parsed.y.toFixed(2)}`;
+            return `${context.dataset.label}: Rs. ${context.parsed.y.toLocaleString()}`;
           },
         },
       },
@@ -140,6 +134,17 @@ const DashboardPage: React.FC = () => {
     scales: {
       y: {
         beginAtZero: true,
+        ticks: {
+          callback: function (value: any) {
+            return 'Rs. ' + value.toLocaleString();
+          },
+        },
+      },
+      x: {
+        ticks: {
+          maxRotation: 45,
+          minRotation: 45,
+        },
       },
     },
   };
@@ -148,7 +153,7 @@ const DashboardPage: React.FC = () => {
     return (
       <div className="p-6">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
+          <div className="h-12 bg-gray-200 rounded mx-auto w-1/4 mb-6"></div>
           <div className="grid grid-cols-4 gap-6 mb-6">
             {[...Array(4)].map((_, i) => (
               <div key={i} className="h-32 bg-gray-200 rounded"></div>
@@ -179,7 +184,7 @@ const DashboardPage: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600 mb-1">Sale</p>
                 <p className="text-2xl font-semibold text-gray-900">
-                  {Math.round(dashboardData.totalSales)}
+                  Rs. {Math.round(dashboardData.totalSales).toLocaleString()}
                 </p>
               </div>
               <div className="text-4xl">💰</div>
@@ -192,7 +197,7 @@ const DashboardPage: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600 mb-1">Expense</p>
                 <p className="text-2xl font-semibold text-gray-900">
-                  {Math.round(dashboardData.totalExpense)}
+                  Rs. {Math.round(dashboardData.totalExpense).toLocaleString()}
                 </p>
               </div>
               <div className="text-4xl">💸</div>
@@ -205,7 +210,7 @@ const DashboardPage: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600 mb-1">Purchase</p>
                 <p className="text-2xl font-semibold text-gray-900">
-                  {Math.round(dashboardData.totalPurchase)}
+                  Rs. {Math.round(dashboardData.totalPurchase).toLocaleString()}
                 </p>
               </div>
               <div className="text-4xl">🛒</div>
@@ -246,8 +251,11 @@ const DashboardPage: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 mb-1">User</p>
-                <p className="text-2xl font-semibold text-gray-900">
+                <p className="text-xl font-semibold text-gray-900">
                   {dashboardData.adminUser}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {dashboardData.userRole}
                 </p>
               </div>
               <div className="text-4xl">👤</div>
@@ -260,7 +268,7 @@ const DashboardPage: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600 mb-1">Opening</p>
                 <p className="text-2xl font-semibold text-gray-900">
-                  {Math.round(dashboardData.openingBalance)}
+                  Rs. {Math.round(dashboardData.openingBalance).toLocaleString()}
                 </p>
               </div>
               <div className="text-4xl">💵</div>
@@ -270,7 +278,9 @@ const DashboardPage: React.FC = () => {
 
         {/* Chart - Sales & Expenses */}
         <div className="regal-card">
-          <h2 className="text-xl font-semibold mb-4">Monthly Sales & Expenses</h2>
+          <h2 className="text-xl font-semibold mb-4">
+            Daily Sales & Expenses
+          </h2>
           <div className="h-96">
             <Line data={chartData} options={chartOptions} />
           </div>
@@ -284,3 +294,4 @@ const DashboardPage: React.FC = () => {
 };
 
 export default DashboardPage;
+// https://europeansports.regalpos.pk/Admin/ViewStock

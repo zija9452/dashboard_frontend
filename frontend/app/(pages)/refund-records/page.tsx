@@ -170,12 +170,7 @@ const RefundRecordsPage: React.FC = () => {
             }}
             className="regal-input w-40"
           />
-          <button
-            onClick={fetchRefundRecords}
-            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
-          >
-            Refresh
-          </button>
+         
         </div>
 
         {/* Back to Refund button */}

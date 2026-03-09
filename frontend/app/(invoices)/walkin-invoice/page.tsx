@@ -742,8 +742,8 @@ const WalkInInvoicePage: React.FC = () => {
       {/* Navbar Header */}
       <nav className="flex items-center justify-between mb-6 px-6 py-2 bg-regal-yellow shadow-lg relative">
         <div className="flex items-center">
-          <Image width={50} height={50} src="/jns_logo.svg" alt="J&S Logo" className="h-12 w-auto" />
-          <span className='text-2xl font-semibold text-regal-black font-serif'>J&S <span className=''>Sportswear</span></span>
+          <Image width={50} height={50} src="/european-logo.svg" alt="European Sports Logo" className="h-10 w-auto" />
+          <span className='text-lg font-semibold text-regal-black font-serif mt-5'>European <span className=''>Sports</span></span>
         </div>
         <div className="absolute left-1/2 transform -translate-x-1/2">
           <div className="text-2xl font-bold text-regal-black">INVOICES</div>
@@ -1443,7 +1443,7 @@ const WalkInInvoicePage: React.FC = () => {
             <div id="printable-report" className="p-6">
               {/* Header */}
               <div className="text-center mb-6 pb-4 border-b-2 border-gray-300 print:border-b-0">
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">J&S Sportswear</h1>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">European Sporstwear</h1>
                 <h2 className="text-xl font-semibold text-gray-700">Daily Sales Report</h2>
                 <p className="text-gray-600 mt-1">
                   {todaySalesReport.date ? new Date(todaySalesReport.date + 'T00:00:00').toLocaleDateString('en-PK', { 

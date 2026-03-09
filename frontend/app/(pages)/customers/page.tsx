@@ -19,6 +19,10 @@ interface Customer {
   branch: string;
 }
 
+interface CustomerWithBalance extends Customer {
+  total_balance?: number;
+}
+
 interface Salesman {
   sal_id: string;
   sal_name: string;
@@ -28,7 +32,7 @@ const CustomersPage: React.FC = () => {
   const router = useRouter();
   const { showToast } = useToast();
 
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customers, setCustomers] = useState<CustomerWithBalance[]>([]);
   const [salesmans, setSalesmans] = useState<Salesman[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false); // Prevent duplicate submissions
@@ -36,6 +40,7 @@ const CustomersPage: React.FC = () => {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showReportModal, setShowReportModal] = useState(false);
+  const [calculatingBalance, setCalculatingBalance] = useState<string | null>(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -127,13 +132,56 @@ const CustomersPage: React.FC = () => {
   // Fetch customers on page change or initial load
   useEffect(() => {
     console.log('useEffect triggered - currentPage:', currentPage);
-    fetchCustomers();
+    fetchCustomersWithBalance();
   }, [currentPage, pageSize, searchTerm]);
 
   // Fetch salesmans on mount
   useEffect(() => {
     fetchSalesmans();
   }, []);
+
+  // Calculate customer balance from invoices
+  const calculateCustomerBalance = async (customerId: string) => {
+    try {
+      setCalculatingBalance(customerId);
+      const response = await fetch(`/api/customerinvoice/customerbalance?customer_id=${customerId}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`Balance for ${customerId}:`, data.total_balance);
+        return data.total_balance || 0;
+      }
+      return 0;
+    } catch (error) {
+      console.error('Error calculating balance:', error);
+      return 0;
+    } finally {
+      setCalculatingBalance(null);
+    }
+  };
+
+  // Fetch customers and calculate balances
+  const fetchCustomersWithBalance = async () => {
+    await fetchCustomers();
+    
+    // Calculate balance for each customer
+    setTimeout(async () => {
+      const customersList = customers;
+      for (const customer of customersList) {
+        const balance = await calculateCustomerBalance(customer.cus_id);
+        setCustomers(prev => 
+          prev.map(c => 
+            c.cus_id === customer.cus_id 
+              ? { ...c, total_balance: balance }
+              : c
+          )
+        );
+      }
+    }, 100);
+  };
 
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -526,7 +574,15 @@ const CustomersPage: React.FC = () => {
                     <td className="px-4 py-4 whitespace-nowrap">{customer.cus_phone}</td>
                     <td className="px-4 py-4 whitespace-nowrap">{customer.cus_cnic || '-'}</td>
                     <td className="px-4 py-4">{customer.cus_address || '-'}</td>
-                    <td className="px-4 py-4 whitespace-nowrap">{customer.cus_balance?.toFixed(2) || '0.00'}</td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      {calculatingBalance === customer.cus_id ? (
+                        <span className="text-gray-500">Calculating...</span>
+                      ) : (
+                        <span className="font-semibold text-gray-900">
+                          {(customer.total_balance !== undefined ? customer.total_balance : customer.cus_balance)?.toFixed(2)}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-4">
                       {salesmans.find(s => s.sal_id === customer.cus_sal_id_fk)?.sal_name || '-'}
                     </td>

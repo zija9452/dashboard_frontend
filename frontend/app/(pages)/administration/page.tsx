@@ -195,6 +195,13 @@ const AdministrationPage: React.FC = () => {
         // Update existing user using /users/ endpoint
         console.log('Updating user with data:', formData);
 
+        // Validate role name before sending
+        const validRoles = ['admin', 'cashier', 'employee'];
+        if (!validRoles.includes(formData.role_id)) {
+          showToast('Invalid role selected', 'error');
+          return;
+        }
+
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/users/${editingUser.id}`, {
           method: 'PUT',
           headers: {
@@ -204,7 +211,7 @@ const AdministrationPage: React.FC = () => {
           body: JSON.stringify({
             full_name: formData.full_name || '',
             username: formData.username || '',
-            role_name: formData.role_id, // Send role name instead of UUID
+            role_name: formData.role_id, // Send role name
             phone: formData.phone || '',
             address: formData.address || '',
             cnic: formData.cnic || '',
@@ -333,8 +340,15 @@ const AdministrationPage: React.FC = () => {
   // Edit user
   const handleEdit = (user: AdminUser) => {
     setEditingUser(user);
-    // Convert UUID to role name for dropdown
-    const roleName = getRoleName(user.role_id);
+    // Get role name from user object if available, otherwise derive from UUID
+    let roleName = user.role_name || getRoleName(user.role_id);
+    
+    // Ensure we have a valid role name
+    if (roleName === 'unknown' || !roleName) {
+      // Default to 'employee' if role is unknown
+      roleName = 'employee';
+    }
+    
     setFormData({
       id: user.id,
       full_name: user.full_name || '',

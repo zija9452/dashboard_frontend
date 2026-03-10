@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     const date = searchParams.get('date') || new Date().toISOString().split('T')[0];
 
     // Use the backend's today sales report endpoint
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/walkin-invoice/today?date=${date}`;
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/walkininvoice/today?date=${date}`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',

@@ -14,7 +14,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       headers['Cookie'] = cookieHeader;
     }
 
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/walkin-invoice/daily-cash/${date}`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/walkininvoice/daily-cash/${date}`, {
       method: 'GET',
       headers,
       cache: 'no-store',

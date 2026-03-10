@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/Toast';
 import PageHeader from '@/components/ui/PageHeader';
 import Pagination from '@/components/ui/Pagination';
-import Swal from 'sweetalert2';
 
 interface InvoiceItem {
   id: string;

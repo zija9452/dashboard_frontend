@@ -294,4 +294,3 @@ const DashboardPage: React.FC = () => {
 };
 
 export default DashboardPage;
-// https://europeansports.regalpos.pk/Admin/ViewStock

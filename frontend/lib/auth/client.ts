@@ -29,7 +29,7 @@ const SESSION_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 export const signIn = async (provider: string, options: any): Promise<SignInResult> => {
   try {
     if (provider !== 'credentials') {
-      return { error: 'Only credentials provider is supported' };
+      return { ok: false, error: 'Only credentials provider is supported' };
     }
 
     const response = await fetch('/api/auth/login', {
@@ -48,7 +48,7 @@ export const signIn = async (provider: string, options: any): Promise<SignInResu
     const data = await response.json();
 
     if (!response.ok) {
-      return { error: data.error || data.detail || 'Login failed' };
+      return { ok: false, error: data.error || data.detail || 'Login failed' };
     }
 
     // Clear cached session on successful login
@@ -58,7 +58,7 @@ export const signIn = async (provider: string, options: any): Promise<SignInResu
     return { ok: true, data };
   } catch (error) {
     console.error('Sign in error:', error);
-    return { error: 'Network error occurred' };
+    return { ok: false, error: 'Network error occurred' };
   }
 };
 

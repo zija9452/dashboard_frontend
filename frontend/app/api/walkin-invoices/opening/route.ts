@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
       headers['Cookie'] = cookieHeader;
     }
 
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/walkin-invoice/opening`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/walkininvoice/opening`, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),

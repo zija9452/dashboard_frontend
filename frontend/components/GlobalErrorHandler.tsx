@@ -15,7 +15,7 @@ export function GlobalErrorHandler({ children }: { children: React.ReactNode }) 
     const originalFetch = window.fetch;
 
     // Override fetch to intercept 401s
-    window.fetch = async function(...args: any[]) {
+    window.fetch = async function(...args: Parameters<typeof window.fetch>) {
       try {
         const response = await originalFetch(...args);
         

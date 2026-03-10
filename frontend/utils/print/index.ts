@@ -35,7 +35,7 @@ export class PrintManager {
       if (!validationResult.isValid) {
         return {
           success: false,
-          method: 'validation',
+          method: 'preview',
           message: 'ZPL validation failed',
           error: validationResult.errors.join('; ')
         };
@@ -102,7 +102,7 @@ export class PrintManager {
     // If neither method worked and no fallback was available
     return {
       success: false,
-      method: 'none',
+      method: 'preview',
       message: 'No printing method available'
     };
   }

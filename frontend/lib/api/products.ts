@@ -42,6 +42,7 @@ export interface ProductListResponse {
   page: number;
   limit: number;
   totalPages: number;
+  hasMore?: boolean;
 }
 
 // Cache for storing all fetched products

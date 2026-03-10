@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 // GET /api/duplicatebill/[invoice_id]/duplicate - Get duplicate invoice PDF
 export async function GET(
   request: NextRequest,
-  { params }: { params: { invoice_id: string } }
+  { params }: { params: Promise<{ invoice_id: string }> }
 ) {
   try {
     const { invoice_id } = await params;

@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
-import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import ReportModal from '@/components/ui/ReportModal';

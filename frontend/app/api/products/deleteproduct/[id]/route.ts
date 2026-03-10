@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 // POST /api/products/deleteproduct/[id] - Delete a product
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';

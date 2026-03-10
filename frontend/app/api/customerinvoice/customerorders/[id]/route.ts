@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 // GET /api/customerinvoice/customerorders/[id] - Get customer orders by customer ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const url = new URL(request.url);

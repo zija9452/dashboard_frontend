@@ -70,7 +70,7 @@ export class WalkInInvoiceApi {
       params.append('search_string', search);
     }
 
-    const response = await fetch(`${this.baseUrl}/walkin-invoice/walkin-invoices?${params.toString()}`, {
+    const response = await fetch(`${this.baseUrl}/walkininvoice/walkin-invoices?${params.toString()}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -109,7 +109,7 @@ export class WalkInInvoiceApi {
    * @returns Promise<WalkInInvoice>
    */
   async getWalkInInvoiceById(id: string): Promise<WalkInInvoice> {
-    const response = await fetch(`${this.baseUrl}/walkin-invoice/walkin-invoices/${id}`, {
+    const response = await fetch(`${this.baseUrl}/walkininvoice/walkin-invoices/${id}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -136,7 +136,7 @@ export class WalkInInvoiceApi {
    * @returns Promise<WalkInInvoice>
    */
   async createWalkInInvoice(invoice: WalkInInvoiceCreateRequest): Promise<WalkInInvoice> {
-    const response = await fetch(`${this.baseUrl}/walkin-invoice/walkin-invoices`, {
+    const response = await fetch(`${this.baseUrl}/walkininvoice/walkin-invoices`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -165,7 +165,7 @@ export class WalkInInvoiceApi {
    * @returns Promise<WalkInInvoice>
    */
   async updateWalkInInvoice(id: string, invoice: Partial<WalkInInvoice>): Promise<WalkInInvoice> {
-    const response = await fetch(`${this.baseUrl}/walkin-invoice/walkin-invoices/${id}`, {
+    const response = await fetch(`${this.baseUrl}/walkininvoice/walkin-invoices/${id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -193,7 +193,7 @@ export class WalkInInvoiceApi {
    * @returns Promise<void>
    */
   async deleteWalkInInvoice(id: string): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/walkin-invoice/walkin-invoices/${id}`, {
+    const response = await fetch(`${this.baseUrl}/walkininvoice/walkin-invoices/${id}`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',

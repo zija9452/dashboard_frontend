@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 // DELETE /api/expense-type/[id] - Delete an expense type
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
@@ -56,7 +56,7 @@ export async function DELETE(
 // PUT /api/expense-type/[id] - Update an expense type
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';

@@ -1,4 +1,5 @@
-import { Geist, Geist_Mono } from "next/font/google";
+'use client';
+
 import "../globals.css"
 import Link from "next/link";
 import { ToastProvider } from "@/components/ui/Toast";
@@ -6,22 +7,33 @@ import SidebarLink from "@/components/SidebarLink";
 import SidebarClientWrapper from "@/components/SidebarClientWrapper";
 import PageHamburgerButton from "@/components/PageHamburgerButton";
 import Image from "next/image";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import { useEffect, useState } from "react";
 
 export default function PagesLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Fetch user role from session
+    const fetchUserRole = async () => {
+      try {
+        const response = await fetch('/api/auth/session', {
+          credentials: 'include',
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setUserRole(data.user?.role || null);
+        }
+      } catch (error) {
+        console.error('Error fetching user role:', error);
+      }
+    };
+
+    fetchUserRole();
+  }, []);
   return (
     <>
       <ToastProvider>
@@ -43,9 +55,11 @@ export default function PagesLayout({
                   <SidebarLink href="/dashboard" className="text-base py-3 border-b border-gray-200">
                     Dashboard
                   </SidebarLink>
-                  <SidebarLink href="/administration" className="text-base py-3 border-b border-gray-200">
-                    Administration
-                  </SidebarLink>
+                  {userRole === 'admin' && (
+                    <SidebarLink href="/administration" className="text-base py-3 border-b border-gray-200">
+                      Administration
+                    </SidebarLink>
+                  )}
                   <SidebarLink href="/products" className="text-base py-3 border-b border-gray-200">
                     Products
                   </SidebarLink>

@@ -3,6 +3,50 @@
  * Handles direct printing to Zebra printers via WebUSB
  */
 
+// Declare USBDevice type for TypeScript
+declare global {
+  interface USBDeviceFilter {
+    vendorId?: number;
+    productId?: number;
+  }
+  
+  interface USBAlternateInterface {
+    alternateSetting: number;
+    endpoints: Array<{
+      endpointNumber: number;
+      direction: 'in' | 'out';
+      type: 'bulk' | 'interrupt' | 'isochronous';
+    }>;
+  }
+  
+  interface USBInterface {
+    interfaceNumber: number;
+    alternates: USBAlternateInterface[];
+  }
+  
+  interface USBDevice {
+    productName?: string;
+    vendorId: number;
+    productId: number;
+    serialNumber?: string;
+    deviceId: string;
+    configuration: {
+      interfaces: USBInterface[];
+    } | null;
+    open(): Promise<void>;
+    close(): Promise<void>;
+    selectConfiguration(config: number): Promise<void>;
+    claimInterface(interfaceNumber: number): Promise<void>;
+    releaseInterface(interfaceNumber: number): Promise<void>;
+    controlTransferOut(...args: any[]): Promise<any>;
+    transferOut(endpoint: number, data: BufferSource): Promise<any>;
+  }
+  
+  interface Navigator {
+    usb: any;
+  }
+}
+
 export interface PrinterDevice {
   device: USBDevice;
   name: string;

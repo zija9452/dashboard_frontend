@@ -98,6 +98,8 @@ const RefundPage: React.FC = () => {
   const [loadingRefunded, setLoadingRefunded] = useState(false);
   const [editingRefund, setEditingRefund] = useState<RefundRecord | null>(null);
   const [editDate, setEditDate] = useState<string>('');
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedRefundInvoice, setSelectedRefundInvoice] = useState<WalkinInvoice | null>(null);
 
   // Fetch today's refunded items
   const fetchRefundedItems = async () => {
@@ -595,12 +597,17 @@ const RefundPage: React.FC = () => {
                         </td>
                         <td className="px-3 py-4">
                           {viewMode === 'refunded' ? (
-                            <button
-                              onClick={() => handleEditRefundDate(invoice)}
+                            <>
+                              <button
+                              onClick={() => {
+                                setSelectedRefundInvoice(invoice);
+                                setShowEditModal(true);
+                              }}
                               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-xs font-medium transition-colors mr-2"
                             >
                               Edit
                             </button>
+                            </>
                           ) : showPayment && invoice.payment_status === 'refunded' ? (
                             <button
                               disabled
@@ -747,7 +754,7 @@ const RefundPage: React.FC = () => {
                       type="number"
                       step="0.01"
                       min="0"
-                      max={refundQuantity * getPerUnitPrice()}
+                      max={refundQuantity ? parseInt(refundQuantity) * getPerUnitPrice() : 0}
                       value={refundAmountPaid}
                       onChange={handleRefundAmountPaidChange}
                       className="regal-input w-full"

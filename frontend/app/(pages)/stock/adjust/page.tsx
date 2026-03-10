@@ -30,7 +30,6 @@ const AdjustStockPage: React.FC = () => {
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   const [barcode, setBarcode] = useState('');
-  const [products, setProducts] = useState<Product[]>([]);
   const [adjustItems, setAdjustItems] = useState<AdjustItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
 

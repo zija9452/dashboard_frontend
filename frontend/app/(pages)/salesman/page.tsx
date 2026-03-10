@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
-import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import ReportModal from '@/components/ui/ReportModal';
 import PageHeader from '@/components/ui/PageHeader';
@@ -17,7 +16,6 @@ interface Salesman {
 }
 
 const SalesmanPage: React.FC = () => {
-  const router = useRouter();
   const { showToast } = useToast();
 
   const [salesmen, setSalesmen] = useState<Salesman[]>([]);

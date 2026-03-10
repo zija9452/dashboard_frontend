@@ -47,6 +47,7 @@ interface DashboardData {
 
 const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string>('Admin');
   const [dashboardData, setDashboardData] = useState<DashboardData>({
     totalSales: 0,
     totalExpense: 0,
@@ -65,6 +66,28 @@ const DashboardPage: React.FC = () => {
     year: new Date().getFullYear(),
     monthName: '',
   });
+
+  // Fetch current user role on mount
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      try {
+        const response = await fetch('/api/auth/session', {
+          credentials: 'include',
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.user?.role) {
+            const role = data.user.role;
+            setUserRole(role.charAt(0).toUpperCase() + role.slice(1)); // Capitalize first letter
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching user role:', error);
+      }
+    };
+
+    fetchUserRole();
+  }, []);
 
   useEffect(() => {
     const today = new Date();

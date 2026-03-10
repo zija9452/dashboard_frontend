@@ -66,9 +66,11 @@ export default function PagesLayout({
                   <SidebarLink href="/customers" className="text-base py-3 border-b border-gray-200">
                     Customers
                   </SidebarLink>
+                  {userRole === 'admin' && (
                   <SidebarLink href="/vendors" className="text-base py-3 border-b border-gray-200">
                     Vendors
                   </SidebarLink>
+                  )}
                   <SidebarLink href="/salesman" className="text-base py-3 border-b border-gray-200">
                     Salesman
                   </SidebarLink>
@@ -87,9 +89,11 @@ export default function PagesLayout({
                   <SidebarLink href="/walkin-invoice" className="text-base py-3 border-b border-gray-200" target="_blank" rel="noopener noreferrer">
                     Walk-in Invoice
                   </SidebarLink>
-                  <SidebarLink href="/sales-view" className="text-base py-3 border-b border-gray-200">
-                    Sales View
-                  </SidebarLink>
+                  {(userRole === 'admin' || userRole === 'employee') && (
+                    <SidebarLink href="/sales-view" className="text-base py-3 border-b border-gray-200">
+                      Sales View
+                    </SidebarLink>
+                  )}
                   <SidebarLink href="/duplicate-bill" className="text-base py-3 border-b border-gray-200">
                     Duplicate Bill
                   </SidebarLink>

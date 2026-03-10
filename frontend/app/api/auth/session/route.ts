@@ -9,10 +9,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ authenticated: false }, { status: 401 });
     }
 
-    // Since there's no dedicated session validation endpoint,
-    // we'll make a request to a protected endpoint to check if session is valid
-    // Using the /admin/ endpoint which requires authentication
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/admin/`, {
+    // Fetch current user from backend using session cookie
+    // The backend should have an endpoint that returns current user info
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/auth/me`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -21,20 +20,11 @@ export async function GET(request: NextRequest) {
     });
 
     if (response.ok) {
-      // If the request succeeds, the user is authenticated
-      // Return a basic user object based on the response
-      const backendData = await response.json();
+      const userData = await response.json();
       
-      // Extract user info from the response (this is a simplified approach)
-      // In a real implementation, you might want to call a specific user endpoint
       return NextResponse.json({
         authenticated: true,
-        user: {
-          id: 'current-user-id', // Backend would provide actual user ID
-          name: 'Current User',  // Backend would provide actual user name
-          role: 'admin',         // Backend would provide actual role
-          ...backendData         // Include any other data from the response
-        }
+        user: userData
       });
     } else {
       // If backend session validation fails, return unauthenticated

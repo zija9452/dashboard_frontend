@@ -37,24 +37,10 @@ interface AdminUser {
 const AdministrationPage: React.FC = () => {
   const { showToast } = useToast();
 
-  // Function to map role UUIDs to role names (hardcoded for common IDs)
-  const getRoleName = (roleId: string | undefined): string => {
-    if (!roleId) return 'unknown';
-
-    // Common role UUIDs - hardcoded for performance
-    if (roleId === '58e08ebd-c5ce-4005-96ed-31ddbe5ee204') return 'admin';
-    if (roleId === '6c44d6cc-2287-49d9-8018-9013c3469627') return 'cashier';
-    if (roleId === 'dd14c670-cba6-43c5-b863-b4f06dfb78d0') return 'employee';
-
-    // For other UUIDs, return unknown
-    return 'unknown';
-  };
-
-  // Function to map role names to UUIDs - NOW RETURNS ROLE NAME DIRECTLY
-  // Backend will handle role name to UUID conversion
-  const getRoleIdFromName = (roleName: string): string => {
-    // Return the role name directly (backend expects role name, not UUID)
-    return roleName;
+  // Function to get role name - backend sends role_name directly
+  const getRoleName = (role_name: string | undefined): string => {
+    if (!role_name) return 'unknown';
+    return role_name;
   };
 
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
@@ -70,7 +56,7 @@ const AdministrationPage: React.FC = () => {
   const [formData, setFormData] = useState<AdminUser>({
     id: '',
     full_name: '',
-    role_id: 'cashier', // Default to cashier
+    role_id: 'admin', // Default to admin (role_name stored in role_id field)
     phone: '',
     address: '',
     cnic: '',
@@ -82,12 +68,12 @@ const AdministrationPage: React.FC = () => {
     original_password: ''
   });
 
-  // State for available roles
-  const [availableRoles, setAvailableRoles] = useState<Array<{value: string, label: string}>>([
+  // Available roles for dropdown
+  const availableRoles = [
     {value: 'admin', label: 'Admin'},
     {value: 'cashier', label: 'Cashier'},
     {value: 'employee', label: 'Employee'}
-  ]);
+  ];
 
   // Fetch all users (not just admins)
   const fetchAdminUsers = async () => {
@@ -340,15 +326,9 @@ const AdministrationPage: React.FC = () => {
   // Edit user
   const handleEdit = (user: AdminUser) => {
     setEditingUser(user);
-    // Get role name from user object if available, otherwise derive from UUID
-    let roleName = user.role_name || getRoleName(user.role_id);
-    
-    // Ensure we have a valid role name
-    if (roleName === 'unknown' || !roleName) {
-      // Default to 'employee' if role is unknown
-      roleName = 'employee';
-    }
-    
+    // Use role_name directly from backend
+    const roleName = user.role_name || 'employee';
+
     setFormData({
       id: user.id,
       full_name: user.full_name || '',
@@ -357,7 +337,7 @@ const AdministrationPage: React.FC = () => {
       address: user.address || '',
       cnic: user.cnic || '',
       branch: user.branch || '',
-      password_hash: user.original_password || '', // Show original password if available
+      password_hash: user.original_password || '',
       username: user.username || '',
       company_id: user.company_id || null,
       is_biometric_enabled: user.is_biometric_enabled || false,

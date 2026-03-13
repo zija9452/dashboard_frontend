@@ -59,7 +59,7 @@ const LoginPage: React.FC = () => {
             Welcome Back
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            Sign in to access your J&S dashboard
+            Sign in to access your European Sports dashboard
           </p>
         </div>
 
@@ -130,7 +130,7 @@ const LoginPage: React.FC = () => {
               </div>
             </div>
 
-            
+
 
             {/* Password Field */}
             <div>
@@ -173,8 +173,8 @@ const LoginPage: React.FC = () => {
                 type="submit"
                 disabled={loading}
                 className={`group relative w-full flex justify-center py-3 px-4 border border-transparent text-md font-semibold rounded-lg shadow-sm text-regal-black ${
-                  loading 
-                    ? 'bg-gray-400 cursor-not-allowed' 
+                  loading
+                    ? 'bg-gray-400 cursor-not-allowed'
                     : 'bg-gradient-to-r from-regal-orange to-regal-yellow hover:from-regal-orange/90 hover:to-regal-yellow/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-regal-yellow'
                 }`}
               >
@@ -212,7 +212,7 @@ const LoginPage: React.FC = () => {
 
         {/* Footer */}
         <div className="text-center text-xs text-gray-500 mt-8">
-          <p>© {new Date().getFullYear()} J&S. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} European Sports. All rights reserved.</p>
           <div className="mt-1 space-x-4">
             <a href="#" className="hover:text-regal-yellow">Privacy Policy</a>
             <span>|</span>

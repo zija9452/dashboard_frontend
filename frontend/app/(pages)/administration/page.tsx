@@ -211,9 +211,21 @@ const AdministrationPage: React.FC = () => {
           let errorDetails = `HTTP error! status: ${response.status}`;
           try {
             const errorData = await response.json();
-            // Handle the case where errorData might be an object
-            if (typeof errorData === 'object' && errorData !== null) {
-              errorDetails = errorData.detail || errorData.error || JSON.stringify(errorData) || errorDetails;
+            console.error('Backend error response:', errorData);
+            
+            // Handle nested error structure from backend
+            if (errorData?.error?.message) {
+              errorDetails = errorData.error.message;
+            } else if (errorData?.detail) {
+              errorDetails = errorData.detail;
+            } else if (errorData?.error) {
+              errorDetails = typeof errorData.error === 'string' 
+                ? errorData.error 
+                : JSON.stringify(errorData.error);
+            } else if (errorData?.message) {
+              errorDetails = errorData.message;
+            } else if (typeof errorData === 'object') {
+              errorDetails = JSON.stringify(errorData);
             } else {
               errorDetails = errorData || errorDetails;
             }
@@ -226,6 +238,7 @@ const AdministrationPage: React.FC = () => {
               // Use default error message
             }
           }
+          console.error('Error saving user:', errorDetails);
           throw new Error(errorDetails);
         }
 
@@ -271,9 +284,21 @@ const AdministrationPage: React.FC = () => {
           let errorDetails = `HTTP error! status: ${response.status}`;
           try {
             const errorData = await response.json();
-            // Handle the case where errorData might be an object
-            if (typeof errorData === 'object' && errorData !== null) {
-              errorDetails = errorData.detail || errorData.error || JSON.stringify(errorData) || errorDetails;
+            console.error('Backend error response:', errorData);
+            
+            // Handle nested error structure from backend
+            if (errorData?.error?.message) {
+              errorDetails = errorData.error.message;
+            } else if (errorData?.detail) {
+              errorDetails = errorData.detail;
+            } else if (errorData?.error) {
+              errorDetails = typeof errorData.error === 'string' 
+                ? errorData.error 
+                : JSON.stringify(errorData.error);
+            } else if (errorData?.message) {
+              errorDetails = errorData.message;
+            } else if (typeof errorData === 'object') {
+              errorDetails = JSON.stringify(errorData);
             } else {
               errorDetails = errorData || errorDetails;
             }
@@ -286,6 +311,7 @@ const AdministrationPage: React.FC = () => {
               // Use default error message
             }
           }
+          console.error('Error saving user:', errorDetails);
           throw new Error(errorDetails);
         }
 
@@ -376,9 +402,21 @@ const AdministrationPage: React.FC = () => {
           let errorDetails = `HTTP error! status: ${response.status}`;
           try {
             const errorData = await response.json();
-            // Handle the case where errorData might be an object
-            if (typeof errorData === 'object' && errorData !== null) {
-              errorDetails = errorData.detail || errorData.error || JSON.stringify(errorData) || errorDetails;
+            console.error('Backend error response:', errorData);
+            
+            // Handle nested error structure from backend
+            if (errorData?.error?.message) {
+              errorDetails = errorData.error.message;
+            } else if (errorData?.detail) {
+              errorDetails = errorData.detail;
+            } else if (errorData?.error) {
+              errorDetails = typeof errorData.error === 'string' 
+                ? errorData.error 
+                : JSON.stringify(errorData.error);
+            } else if (errorData?.message) {
+              errorDetails = errorData.message;
+            } else if (typeof errorData === 'object') {
+              errorDetails = JSON.stringify(errorData);
             } else {
               errorDetails = errorData || errorDetails;
             }
@@ -391,6 +429,7 @@ const AdministrationPage: React.FC = () => {
               // Use default error message
             }
           }
+          console.error('Error saving user:', errorDetails);
           throw new Error(errorDetails);
         }
 

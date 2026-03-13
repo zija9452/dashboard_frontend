@@ -44,6 +44,9 @@ const ProductsPage: React.FC = () => {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false); // Prevent duplicate submissions
+  const [editingId, setEditingId] = useState<string | null>(null); // Track which product is being edited
+  const [deletingId, setDeletingId] = useState<string | null>(null); // Track which product is being deleted
+  const [openingForm, setOpeningForm] = useState(false); // Track form opening state
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -175,17 +178,31 @@ const ProductsPage: React.FC = () => {
     }));
   };
 
-  // Handle image selection
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle image selection and upload to Cloudinary
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedImage(file);
-      // Create preview
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      
+      // Upload to Cloudinary immediately
+      try {
+        showToast('Uploading image...', 'info');
+        const { url } = await productsApi.uploadImage(file);
+        
+        // Set the URL as preview and for form submission
+        setImagePreview(url);
+        setFormData(prev => ({ ...prev, attributes: url }));
+        showToast('Image uploaded successfully!', 'success');
+      } catch (error) {
+        console.error('Image upload error:', error);
+        showToast('Failed to upload image', 'error');
+        // Fallback to local preview
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setImagePreview(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -297,35 +314,51 @@ const ProductsPage: React.FC = () => {
     }
   };
 
-  // Edit product
-  const handleEdit = (product: Product) => {
-    setEditingProduct(product);
-    setFormData({
-      name: product.pro_name,
-      unit_price: product.pro_price,
-      cost_price: product.pro_cost,
-      barcode: product.pro_barcode,
-      discount: product.pro_dis,
-      limited_qty: product.limitedquan,
-      category: product.cat_id_fk,
-      branch: product.branch,
-      brand_action: product.brand,
-      sku: '',
-      desc: '',
-      attributes: product.pro_image
-    });
-    // Set image preview if exists
-    if (product.pro_image) {
-      setImagePreview(product.pro_image);
+  // Edit product - fetch full details including image
+  const handleEdit = async (product: Product) => {
+    setEditingId(product.pro_id);
+    try {
+      // Fetch full product details from backend (includes image data)
+      const fullProduct = await productsApi.getProductById(product.pro_id);
+
+      console.log('📝 Editing product:', fullProduct);
+      console.log('🖼️ Product image:', fullProduct.pro_image);
+
+      setEditingProduct(fullProduct);
+      setFormData({
+        name: fullProduct.pro_name,
+        unit_price: fullProduct.pro_price,
+        cost_price: fullProduct.pro_cost,
+        barcode: fullProduct.pro_barcode,
+        discount: fullProduct.pro_dis,
+        limited_qty: fullProduct.limitedquan,
+        category: fullProduct.cat_id_fk,
+        branch: fullProduct.branch,
+        brand_action: fullProduct.brand,
+        sku: '',
+        desc: '',
+        attributes: fullProduct.pro_image
+      });
+      // Set image preview if exists, otherwise clear it
+      if (fullProduct.pro_image && fullProduct.pro_image.startsWith('http')) {
+        setImagePreview(fullProduct.pro_image);
+      } else {
+        setImagePreview('');  // Clear previous image
+      }
+      setShowAddForm(true);
+
+      // Auto-scroll to top smoothly to show the edit form
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (error) {
+      console.error('Error fetching product details:', error);
+      showToast('Failed to load product details', 'error');
+    } finally {
+      setEditingId(null);
     }
-    setShowAddForm(true);
-    
-    // Auto-scroll to top smoothly to show the edit form
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Delete product
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+
 
   const handleDelete = async (id: string) => {
     const result = await Swal.fire({
@@ -382,8 +415,9 @@ const ProductsPage: React.FC = () => {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={async () => {
-              if (!showAddForm) {
+              if (!showAddForm && !openingForm) {
                 // Opening form - generate new barcode from backend API
+                setOpeningForm(true);
                 try {
                   const newBarcode = await generateBarcode();
                   setFormData({
@@ -406,15 +440,30 @@ const ProductsPage: React.FC = () => {
                   setImagePreview('');
                 } catch (error) {
                   showToast('Failed to generate barcode. Please try again.', 'error');
+                } finally {
+                  setOpeningForm(false);
                 }
               } else {
                 // Closing form
                 setShowAddForm(false);
               }
             }}
-            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+            disabled={openingForm}
+            className={`regal-btn bg-regal-yellow text-regal-black whitespace-nowrap ${
+              openingForm ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
           >
-            {showAddForm ? 'Cancel' : '+ Add Product'}
+            {openingForm ? (
+              <span className="flex items-center gap-2">
+                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Loading...
+              </span>
+            ) : (
+              showAddForm ? 'Cancel' : '+ Add Product'
+            )}
           </button>
           
           <button
@@ -669,12 +718,11 @@ const ProductsPage: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div>
             <table className="w-full table-fixed">
               <thead className="bg-gray-100">
                 <tr className='text-black font-semibold text-xs uppercase'>
                   <th className="px-3 py-5 text-left w-12">S.No</th>
-                  <th className="px-2 py-5 text-left w-24">Image</th>
                   <th className="px-2 py-5 text-left w-40">Name</th>
                   <th className="px-2 py-5 text-left w-20">Price</th>
                   <th className="px-2 py-5 text-left w-20">Cost</th>
@@ -684,45 +732,43 @@ const ProductsPage: React.FC = () => {
                   <th className="px-2 py-5 text-left w-24">Limited Qty</th>
                   <th className="px-2 py-5 text-left w-28">Category</th>
                   <th className="px-2 py-5 text-left w-32">Branch</th>
-                  <th className="px-2 py-5 text-left">Brand</th>
+                  <th className="px-2 py-5 text-left w-24">Brand</th>
                   <th className="px-2 py-5 text-center w-32">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {products.map((product, index) => (
                   <tr key={product.pro_id} className="hover:bg-gray-50 text-sm text-gray-900">
-                    <td className="px-3 py-4 text-sm text-gray-900">{((currentPage - 1) * pageSize) + index + 1}</td>
-                    <td className="px-3 py-4 text-sm">
-                      {product.pro_image ? (
-                        <img src={product.pro_image} alt={product.pro_name} className="h-12 w-12 object-cover rounded flex-shrink-0" style={{minWidth: '48px'}} />
-                      ) : (
-                        <div className="h-12 w-12 bg-gray-200 rounded flex items-center justify-center flex-shrink-0" style={{minWidth: '48px'}}>
-                          <span className="text-xs text-gray-400">No Img</span>
-                        </div>
-                      )}
-                    </td>
+                    <td className="px-3 py-4 text-sm text-gray-900 whitespace-nowrap">{((currentPage - 1) * pageSize) + index + 1}</td>
                     <td className="px-3 py-4">{product.pro_name}</td>
-                    <td className="px-2 py-4">{product.pro_price.toFixed(2)}</td>
-                    <td className="px-2 py-4">{product.pro_cost.toFixed(2)}</td>
-                    <td className="px-2 py-4">{product.pro_barcode || 'N/A'}</td>
-                    <td className="px-2 py-4 text-center">{product.pro_dis}%</td>
-                    <td className="px-2 py-4 text-center">{product.stock || 0}</td>
-                    <td className="px-5 py-4 text-center">{product.limitedquan || 0}</td>
-                    <td className="px-2 py-4">{product.cat_id_fk || 'N/A'}</td>
+                    <td className="px-2 py-4 whitespace-nowrap">{product.pro_price.toFixed(2)}</td>
+                    <td className="px-2 py-4 whitespace-nowrap">{product.pro_cost.toFixed(2)}</td>
+                    <td className="px-2 py-4 whitespace-nowrap">{product.pro_barcode || 'N/A'}</td>
+                    <td className="px-2 py-4 text-center whitespace-nowrap">{product.pro_dis}%</td>
+                    <td className="px-2 py-4 text-center whitespace-nowrap">{product.stock || 0}</td>
+                    <td className="px-5 py-4 text-center whitespace-nowrap">{product.limitedquan || 0}</td>
+                    <td className="px-2 py-4 whitespace-nowrap">{product.cat_id_fk || 'N/A'}</td>
                     <td className="px-2 py-4">{product.branch || 'N/A'}</td>
-                    <td className="px-2 py-4">{product.brand || 'N/A'}</td>
+                    <td className="px-2 py-4 whitespace-nowrap">{product.brand || 'N/A'}</td>
                     <td className="px-2 py-4 text-center">
                       <div className="flex justify-center items-center gap-3">
                         <button
                           onClick={() => handleEdit(product)}
-                          disabled={deletingId === product.pro_id}
+                          disabled={editingId === product.pro_id || deletingId === product.pro_id}
                           className={`${
-                            deletingId === product.pro_id
+                            editingId === product.pro_id || deletingId === product.pro_id
                               ? 'text-gray-400 cursor-not-allowed'
                               : 'text-blue-600 hover:text-blue-900'
                           }`}
                         >
-                          Edit
+                          {editingId === product.pro_id ? (
+                            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          ) : (
+                            'Edit'
+                          )}
                         </button>
                         <button
                           onClick={() => handleDelete(product.pro_id)}

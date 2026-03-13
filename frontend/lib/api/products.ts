@@ -130,6 +130,40 @@ export class ProductsApi {
   }
 
   /**
+   * Upload product image to Cloudinary
+   * @param file Image file to upload
+   * @returns Promise with image URL
+   */
+  async uploadImage(file: File): Promise<{ url: string; size: number }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await this.apiClient.post('/products/upload-image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 120000, // 2 minute timeout
+    });
+
+    return {
+      url: response.data.url,
+      size: response.data.size
+    };
+  }
+
+  /**
+   * Get a single product by ID (with image data)
+   * @param id Product ID
+   * @returns Promise<Product>
+   */
+  async getProductById(id: string): Promise<Product> {
+    const response = await this.apiClient.get(`/products/${id}`, {
+      timeout: 60000,
+    });
+    return response.data;
+  }
+
+  /**
    * Create a new product
    * @param product Product data to create
    * @returns Promise<Product>

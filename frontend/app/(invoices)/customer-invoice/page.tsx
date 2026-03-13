@@ -51,6 +51,11 @@ interface CartItem {
   tracktrouser_pocket?: string;
   tracktrouser_bottom?: string;
   tracktrouser_fabric?: string;
+  // Cap fields
+  cap_style?: string;  // 5 Panel, 6 Panel
+  cap_fabric?: string;  // Twill Tape, etc.
+  // Other fields
+  custom_description?: string;  // Custom text for Other category
 }
 
 const CustomerInvoicePage: React.FC = () => {
@@ -117,6 +122,11 @@ const CustomerInvoicePage: React.FC = () => {
   const [tracktrouser_pocket, setTracktrouser_pocket] = useState('');
   const [tracktrouser_bottom, setTracktrouser_bottom] = useState('');
   const [tracktrouser_fabric, setTracktrouser_fabric] = useState('');
+  // Cap state
+  const [cap_style, setCap_style] = useState('');  // 5 Panel, 6 Panel
+  const [cap_fabric, setCap_fabric] = useState('');  // Twill Tape, etc.
+  // Other category state
+  const [custom_description, setCustom_description] = useState('');
 
   // Fetch customers and salesmans
   useEffect(() => {
@@ -236,6 +246,11 @@ const CustomerInvoicePage: React.FC = () => {
       tracktrouser_pocket: selectedCategory === 'Track Trouser' ? tracktrouser_pocket : undefined,
       tracktrouser_bottom: selectedCategory === 'Track Trouser' ? tracktrouser_bottom : undefined,
       tracktrouser_fabric: selectedCategory === 'Track Trouser' ? tracktrouser_fabric : undefined,
+      // Cap fields
+      cap_style: selectedCategory === 'Cap' ? cap_style : undefined,
+      cap_fabric: selectedCategory === 'Cap' ? cap_fabric : undefined,
+      // Other fields
+      custom_description: selectedCategory === 'Other' ? custom_description : undefined,
     };
 
     setCart([...cart, newItem]);
@@ -278,6 +293,11 @@ const CustomerInvoicePage: React.FC = () => {
     setTracktrouser_pocket('');
     setTracktrouser_bottom('');
     setTracktrouser_fabric('');
+    // Clear cap fields
+    setCap_style('');
+    setCap_fabric('');
+    // Clear custom description
+    setCustom_description('');
   };
 
   // Reset new customer form
@@ -382,41 +402,56 @@ const CustomerInvoicePage: React.FC = () => {
 
     try {
       // Prepare items for backend with all category-specific fields
-      const items = cart.map(item => ({
-        pro_name: item.category,
-        cat_name: item.category,
-        unit_price: item.unitPrice,
-        pro_quantity: item.quantity,
-        total_price: item.totalPrice,
-        imgfile: item.image1 || '',
-        imgfile2: item.image2 || '',
-        imgfile3: item.image3 || '',
-        // Category-specific fields
-        cricktshirt_Neckstyle: item.tshirt_neckstyle || '',
-        cricktshirt_sleeve: item.tshirt_sleeve || '',
-        cricktshirt_bottom: item.tshirt_bottom || '',
-        cricktshirt_fabric: item.tshirt_fabric || '',
-        cricktrouser_style: item.trouser_style1 || '',
-        cricktrouser_style2: item.trouser_style2 || '',
-        cricktrouser_bottom: item.trouser_bottom || '',
-        cricktrouser_pocket: item.trouser_pocket || '',
-        cricktrouser_fabric: item.trouser_fabric || '',
-        foottshirt_neckstyle: item.football_neckstyle || '',
-        foottshirt_sleeves: item.football_sleeve || '',
-        football_fabric: item.football_fabric || '',
-        footshorts_style: item.football_style || '',
-        footshorts_pocket: item.football_pocket || '',
-        footballshort_fabric: item.footballshort_fabric || '',
-        trackjack_style: item.tracktshirt_style || '',
-        trackjack_waist: item.tracktshirt_waist || '',
-        trackjack_pocket: item.tracktshirt_pocket || '',
-        trackjack_bottom: item.tracktshirt_bottom || '',
-        trackjack_fabric: item.tracktshirt_fabric || '',
-        tracktrous_style: item.tracktrouser_style || '',
-        tracktrous_bottom: item.tracktrouser_bottom || '',
-        tracktrous_pocket: item.tracktrouser_pocket || '',
-        tracktrous_fabric: item.tracktrouser_fabric || '',
-      }));
+      const items = cart.map(item => {
+        // Build product name with custom details for display in invoice
+        let displayName = item.category;
+
+        // For Other category, show custom description
+        if (item.category === 'Other' && item.custom_description) {
+          displayName = item.custom_description;
+        }
+
+        return {
+          pro_name: displayName,
+          cat_name: item.category,
+          unit_price: item.unitPrice,
+          pro_quantity: item.quantity,
+          total_price: item.totalPrice,
+          imgfile: item.image1 || '',
+          imgfile2: item.image2 || '',
+          imgfile3: item.image3 || '',
+          // Category-specific fields
+          cricktshirt_Neckstyle: item.tshirt_neckstyle || '',
+          cricktshirt_sleeve: item.tshirt_sleeve || '',
+          cricktshirt_bottom: item.tshirt_bottom || '',
+          cricktshirt_fabric: item.tshirt_fabric || '',
+          cricktrouser_style: item.trouser_style1 || '',
+          cricktrouser_style2: item.trouser_style2 || '',
+          cricktrouser_bottom: item.trouser_bottom || '',
+          cricktrouser_pocket: item.trouser_pocket || '',
+          cricktrouser_fabric: item.trouser_fabric || '',
+          foottshirt_neckstyle: item.football_neckstyle || '',
+          foottshirt_sleeves: item.football_sleeve || '',
+          football_fabric: item.football_fabric || '',
+          footshorts_style: item.football_style || '',
+          footshorts_pocket: item.football_pocket || '',
+          footballshort_fabric: item.footballshort_fabric || '',
+          trackjack_style: item.tracktshirt_style || '',
+          trackjack_waist: item.tracktshirt_waist || '',
+          trackjack_pocket: item.tracktshirt_pocket || '',
+          trackjack_bottom: item.tracktshirt_bottom || '',
+          trackjack_fabric: item.tracktshirt_fabric || '',
+          tracktrous_style: item.tracktrouser_style || '',
+          tracktrous_bottom: item.tracktrouser_bottom || '',
+          tracktrous_pocket: item.tracktrouser_pocket || '',
+          tracktrous_fabric: item.tracktrouser_fabric || '',
+          // Cap fields
+          cap_style: item.cap_style || '',
+          cap_fabric: item.cap_fabric || '',
+          // Other fields
+          custom_description: item.custom_description || '',
+        };
+      });
 
       // Get customer details
       const customer = customers.find(c => c.cus_id === selectedCustomer);
@@ -525,6 +560,8 @@ const CustomerInvoicePage: React.FC = () => {
                     <option value="Football Short">Football Short</option>
                     <option value="Track Jacket">Track Jacket</option>
                     <option value="Track Trouser">Track Trouser</option>
+                    <option value="Cap">Cap</option>
+                    <option value="Other">Other (Custom)</option>
                   </select>
                 </div>
 
@@ -798,6 +835,48 @@ const CustomerInvoicePage: React.FC = () => {
                   </div>
                 )}
 
+                {/* Cap Fields */}
+                {selectedCategory === 'Cap' && (
+                  <div className="space-y-3 p-3 bg-regal-yellow rounded">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Style (Panels)</label>
+                        <select value={cap_style} onChange={(e) => setCap_style(e.target.value)} className="regal-input w-full">
+                          <option value="">Select</option>
+                          <option value="5 Panel">5 Panel</option>
+                          <option value="6 Panel">6 Panel</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Fabric</label>
+                        <select value={cap_fabric} onChange={(e) => setCap_fabric(e.target.value)} className="regal-input w-full">
+                          <option value="">Select</option>
+                          <option value="Twill Tape">Twill Tape</option>
+                          <option value="Cotton">Cotton</option>
+                          <option value="Polyester">Polyester</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Other/Custom Category Fields */}
+                {selectedCategory === 'Other' && (
+                  <div className="space-y-3 p-3 bg-regal-yellow rounded">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Custom Description</label>
+                      <input
+                        type="text"
+                        value={custom_description}
+                        onChange={(e) => setCustom_description(e.target.value)}
+                        className="regal-input w-full"
+                        placeholder="Enter custom product details (e.g., Custom Jersey with logo)"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">This will appear on the invoice</p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Rate (Unit Price) */}
                 <div>
                   <label className="block text-sm font-medium mb-1">Rate (Unit Price)</label>
@@ -932,7 +1011,19 @@ const CustomerInvoicePage: React.FC = () => {
                     {cart.map((item, index) => (
                       <tr key={item.id} className="hover:bg-gray-50">
                         <td className="px-4 py-4 text-sm text-gray-900">{index + 1}</td>
-                        <td className="px-4 py-4 text-sm font-medium text-gray-900">{item.category}</td>
+                        <td className="px-4 py-4 text-sm">
+                          <div className="font-medium text-gray-900">{item.category}</div>
+                          {/* Show custom description for Other category */}
+                          {item.custom_description && (
+                            <div className="text-xs text-gray-500 mt-1">{item.custom_description}</div>
+                          )}
+                          {/* Show cap details if available */}
+                          {item.cap_style && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              {item.cap_style}{item.cap_fabric && ` • ${item.cap_fabric}`}
+                            </div>
+                          )}
+                        </td>
                         <td className="px-4 py-4 text-sm text-gray-900">{item.unitPrice.toFixed(2)}</td>
                         <td className="px-4 py-4 text-sm text-gray-900">{item.quantity}</td>
                         <td className="px-4 py-4 text-sm font-semibold text-gray-900">{item.totalPrice.toFixed(2)}</td>

@@ -1,8 +1,10 @@
 import { NextRequest } from 'next/server';
 
+// GET /api/products/generatebarcode - Generate unique barcode
 export async function GET(request: NextRequest) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
+
     const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/products/generatebarcode`;
 
     const headers: Record<string, string> = {
@@ -13,12 +15,17 @@ export async function GET(request: NextRequest) {
       headers['Cookie'] = cookieHeader;
     }
 
+    console.log('🔗 Generating barcode from backend:', backendUrl);
+
     const response = await fetch(backendUrl, {
       method: 'GET',
       headers,
+      credentials: 'include',
       cache: 'no-store',
-      signal: AbortSignal.timeout(120000), // 2 minute timeout
+      signal: AbortSignal.timeout(60000),  // 60 seconds timeout
     });
+
+    console.log('📊 Backend response status:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -29,6 +36,7 @@ export async function GET(request: NextRequest) {
       } catch {
         errorMessage = errorText || errorMessage;
       }
+      console.error('❌ Backend error:', errorMessage);
       return Response.json(
         { error: errorMessage, status: response.status },
         { status: response.status }
@@ -36,21 +44,12 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
+    console.log('✅ Barcode generated successfully:', data);
     return Response.json(data, {
       status: response.status,
     });
   } catch (error) {
     console.error('Error generating barcode:', error);
-    
-    // Handle timeout errors
-    if (error instanceof Error && error.name === 'TimeoutError') {
-      return Response.json(
-        { error: 'Request timeout. Please try again.', type: 'TIMEOUT' },
-        { status: 504 }
-      );
-    }
-    
-    // Handle other errors
     return Response.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }

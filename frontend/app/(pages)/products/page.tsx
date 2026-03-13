@@ -26,29 +26,17 @@ const ProductsPage: React.FC = () => {
   const { showToast } = useToast();
 
   // Generate unique barcode by calling backend API (production-ready approach)
+  // Backend uses sequential auto-increment: 690000000, 690000001, etc.
   const generateBarcode = async (): Promise<string> => {
-    try {
-      const response = await fetch('/api/products/generatebarcode', {
-        method: 'GET',
-        credentials: 'include',
-      });
-      if (response.ok) {
-        const data = await response.json();
-        return data.barcode;
-      }
-    } catch (error) {
-      console.error('Error generating barcode:', error);
+    const response = await fetch('/api/products/generatebarcode', {
+      method: 'GET',
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to generate barcode');
     }
-    // Fallback to local generation if API fails
-    const prefix = "690";
-    const randomPart = Math.floor(10000 + Math.random() * 90000).toString();
-    const baseCode = prefix + randomPart;
-    let sum = 0;
-    for (let i = 0; i < baseCode.length; i++) {
-      sum += parseInt(baseCode[i]) * (i % 2 === 0 ? 1 : 3);
-    }
-    const checkDigit = (10 - (sum % 10)) % 10;
-    return baseCode + checkDigit;
+    const data = await response.json();
+    return data.barcode;
   };
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -337,6 +325,8 @@ const ProductsPage: React.FC = () => {
   };
 
   // Delete product
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   const handleDelete = async (id: string) => {
     const result = await Swal.fire({
       title: 'Are you sure?',
@@ -350,6 +340,7 @@ const ProductsPage: React.FC = () => {
     });
 
     if (result.isConfirmed) {
+      setDeletingId(id);
       try {
         await productsApi.deleteProduct(id);
 
@@ -359,6 +350,7 @@ const ProductsPage: React.FC = () => {
         // Refresh product list from backend
         await fetchProducts();
 
+        setDeletingId(null);
         Swal.fire({
           title: 'Deleted!',
           text: 'Product has been deleted.',
@@ -369,6 +361,7 @@ const ProductsPage: React.FC = () => {
         });
       } catch (error) {
         console.error('Error deleting product:', error);
+        setDeletingId(null);
         showToast('Failed to delete product', 'error');
       }
     }
@@ -388,37 +381,32 @@ const ProductsPage: React.FC = () => {
         {/* Left side - Action Buttons */}
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => {
+            onClick={async () => {
               if (!showAddForm) {
-                // Opening form - generate new barcode synchronously with fallback
-                const prefix = "690";
-                const randomPart = Math.floor(10000 + Math.random() * 90000).toString();
-                const baseCode = prefix + randomPart;
-                let sum = 0;
-                for (let i = 0; i < baseCode.length; i++) {
-                  sum += parseInt(baseCode[i]) * (i % 2 === 0 ? 1 : 3);
+                // Opening form - generate new barcode from backend API
+                try {
+                  const newBarcode = await generateBarcode();
+                  setFormData({
+                    name: '',
+                    unit_price: 0,
+                    cost_price: 0,
+                    barcode: newBarcode,
+                    discount: 0,
+                    limited_qty: 0,
+                    category: '',
+                    branch: '',
+                    brand_action: '',
+                    sku: '',
+                    desc: '',
+                    attributes: ''
+                  });
+                  setEditingProduct(null);
+                  setShowAddForm(true);
+                  setSelectedImage(null);
+                  setImagePreview('');
+                } catch (error) {
+                  showToast('Failed to generate barcode. Please try again.', 'error');
                 }
-                const checkDigit = (10 - (sum % 10)) % 10;
-                const localBarcode = baseCode + checkDigit;
-                
-                setFormData({
-                  name: '',
-                  unit_price: 0,
-                  cost_price: 0,
-                  barcode: localBarcode,
-                  discount: 0,
-                  limited_qty: 0,
-                  category: '',
-                  branch: '',
-                  brand_action: '',
-                  sku: '',
-                  desc: '',
-                  attributes: ''
-                });
-                setEditingProduct(null);
-                setShowAddForm(true);
-                setSelectedImage(null);
-                setImagePreview('');
               } else {
                 // Closing form
                 setShowAddForm(false);
@@ -537,27 +525,15 @@ const ProductsPage: React.FC = () => {
                   Barcode
                   <span className="text-xs text-gray-500 ml-2">(Auto-generated, scanner compatible)</span>
                 </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    name="barcode"
-                    value={formData.barcode}
-                    onChange={handleInputChange}
-                    className="regal-input w-full font-mono"
-                    placeholder="Auto-generated barcode"
-                  />
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const newBarcode = await generateBarcode();
-                      setFormData(prev => ({ ...prev, barcode: newBarcode }));
-                    }}
-                    className="px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded text-sm whitespace-nowrap"
-                    title="Generate new barcode"
-                  >
-                    🔄 Regenerate
-                  </button>
-                </div>
+                <input
+                  type="text"
+                  name="barcode"
+                  value={formData.barcode}
+                  readOnly
+                  className="regal-input w-full font-mono bg-gray-50 cursor-not-allowed"
+                  placeholder="Auto-generated barcode"
+                  disabled
+                />
               </div>
 
               <div>
@@ -739,15 +715,32 @@ const ProductsPage: React.FC = () => {
                       <div className="flex justify-center items-center gap-3">
                         <button
                           onClick={() => handleEdit(product)}
-                          className="text-blue-600 hover:text-blue-900"
+                          disabled={deletingId === product.pro_id}
+                          className={`${
+                            deletingId === product.pro_id
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-blue-600 hover:text-blue-900'
+                          }`}
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => handleDelete(product.pro_id)}
-                          className="text-red-600 hover:text-red-900"
+                          disabled={deletingId === product.pro_id}
+                          className={`hover:text-red-900 ${
+                            deletingId === product.pro_id
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-red-600'
+                          }`}
                         >
-                          Delete
+                          {deletingId === product.pro_id ? (
+                            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          ) : (
+                            'Delete'
+                          )}
                         </button>
                       </div>
                     </td>

@@ -17,6 +17,16 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "European Sports Dashboard",
   description: "Production-ready POS frontend for FastAPI backend",
+  icons: {
+    icon: [
+      { url: '/european-logo.svg', type: 'image/svg+xml' },
+      { url: '/favicon.png', type: 'image/png', sizes: '512x512' },
+    ],
+    apple: [
+      { url: '/european-logo.svg', type: 'image/svg+xml' },
+      { url: '/favicon.png', type: 'image/png', sizes: '512x512' },
+    ],
+  },
 };
 
 export default function RootLayout({

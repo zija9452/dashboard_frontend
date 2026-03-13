@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
-import PageHeader from '@/components/ui/PageHeader';
 import ReportModal from '@/components/ui/ReportModal';
 
 interface Customer {
@@ -485,10 +484,23 @@ const CustomerInvoicePage: React.FC = () => {
   };
 
   return (
-    <div className="p-4 bg-white min-h-screen">
-      <PageHeader title="Customer Invoice" />
+    <div className=" bg-white min-h-screen">
+      {/* Navbar Header */}
+      <nav className="flex px-6 mb-6 py-1 bg-regal-yellow shadow-lg relative">
+        <div className="flex items-center">
+          <div className="h-14 w-14 rounded-full bg-gradient-to-br from-regal-orange via-regal-yellow to-regal-orange p-0.5 shadow-lg">
+            <div className="h-full w-full rounded-full bg-white flex items-center justify-center overflow-hidden">
+              <img src="/european-logo.svg" alt="European Sports Logo" className="h-9 w-9 object-contain" />
+            </div>
+          </div>
+          <span className='text-2xl font-semibold text-regal-black font-serif ml-2'>European <span className='font-bold'>Sports</span></span>
+        </div>
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="text-2xl font-bold text-regal-black text-center">CUSTOMER INVOICES</div>
+        </div>
+      </nav>
 
-      <div className="max-w-[95%] mx-auto">
+      <div className="max-w-[95%] mx-auto px-4">
         {/* Top Section - Add Items (Left) + Items Table (Right Top) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           

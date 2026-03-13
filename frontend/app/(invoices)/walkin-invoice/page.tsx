@@ -740,10 +740,14 @@ const WalkInInvoicePage: React.FC = () => {
       <style dangerouslySetInnerHTML={{ __html: printStyles }} />
       <div className="bg-white min-h-screen">
       {/* Navbar Header */}
-      <nav className="flex items-center justify-between mb-6 px-6 py-2 bg-regal-yellow shadow-lg relative">
+      <nav className="flex items-center justify-between mb-6 px-6 py-1 bg-regal-yellow shadow-lg relative">
         <div className="flex items-center">
-          <Image width={50} height={50} src="/european-logo.svg" alt="European Sports Logo" className="h-10 w-auto" />
-          <span className='text-lg font-semibold text-regal-black font-serif mt-5'>European <span className=''>Sports</span></span>
+          <div className="h-14 w-14 rounded-full bg-gradient-to-br from-regal-orange via-regal-yellow to-regal-orange p-0.5 shadow-lg transform hover:scale-105 transition-transform duration-300">
+            <div className="h-full w-full rounded-full bg-white flex items-center justify-center overflow-hidden">
+              <Image width={48} height={48} src="/european-logo.svg" alt="European Sports Logo" className="h-9 w-9 object-contain" />
+            </div>
+          </div>
+          <span className='text-2xl font-semibold text-regal-black font-serif ml-2'>European <span className='font-bold'>Sports</span></span>
         </div>
         <div className="absolute left-1/2 transform -translate-x-1/2">
           <div className="text-2xl font-bold text-regal-black">INVOICES</div>

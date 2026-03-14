@@ -138,29 +138,25 @@ const SalesViewPage: React.FC = () => {
     try {
       setLoading(true);
 
-      // Fetch walk-in invoices
-      const walkinResponse = await fetch(
-        `/api/salesview/walkin-invoices?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
-        { credentials: 'include' }
-      );
-
-      // Fetch customized invoices (customer invoices with payments in date range)
-      const customizedResponse = await fetch(
-        `/api/salesview/customized-invoices?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
-        { credentials: 'include' }
-      );
-
-      // Fetch combined summary
-      const summaryResponse = await fetch(
-        `/api/salesview/summary?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
-        { credentials: 'include' }
-      );
-
-      // Fetch customized summary (customer payments breakdown)
-      const customizedSummaryResponse = await fetch(
-        `/api/salesview/customized-summary?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
-        { credentials: 'include' }
-      );
+      // Fetch all APIs in parallel for better performance
+      const [walkinResponse, customizedResponse, summaryResponse, customizedSummaryResponse] = await Promise.all([
+        fetch(
+          `/api/salesview/walkin-invoices?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
+          { credentials: 'include' }
+        ),
+        fetch(
+          `/api/salesview/customized-invoices?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
+          { credentials: 'include' }
+        ),
+        fetch(
+          `/api/salesview/summary?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
+          { credentials: 'include' }
+        ),
+        fetch(
+          `/api/salesview/customized-summary?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
+          { credentials: 'include' }
+        )
+      ]);
 
       const walkinData = await walkinResponse.json();
       const customizedData = await customizedResponse.json();
@@ -567,7 +563,7 @@ const SalesViewPage: React.FC = () => {
                               {invoice.payment_status}
                             </span>
                           </td>
-                          <td className="px-3 py-4">
+                          <td className="px-3 py-4 text-center">
                             <div className="text-xs">
                               {invoice.payment_methods_used.map((method, idx) => (
                                 <span key={idx} className="inline-block px-2 py-2 bg-gray-100 rounded mr-1 mb-1 capitalize">

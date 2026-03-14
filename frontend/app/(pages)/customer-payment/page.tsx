@@ -487,6 +487,7 @@ const CustomerPaymentPage: React.FC = () => {
                   placeholder="0.00"
                   step="0.01"
                   min="0"
+                  autoComplete="off"
                   required
                 />
               </div>

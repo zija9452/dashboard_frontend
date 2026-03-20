@@ -34,13 +34,16 @@ const RefundRecordsPage: React.FC = () => {
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(8);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
+  const totalPages = totalPagesFromApi;
 
   // Fetch refunded items for selected date
   const fetchRefundRecords = async () => {
     try {
       setLoading(true);
-      
-      const response = await fetch(`/api/refunds/walkin-invoice?date=${selectedDate}`, {
+
+      const response = await fetch(`/api/refunds/walkin-invoice?date=${selectedDate}&limit=${pageSize}&skip=${(currentPage - 1) * pageSize}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -49,16 +52,23 @@ const RefundRecordsPage: React.FC = () => {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        console.log('Refund records API response:', data); // Debug log
+        const result = await response.json();
+        console.log('Refund records API response:', result); // Debug log
         
+        // Handle paginated response format: { data: [...], page, limit, total, totalPages, has_more }
+        const data = result.data || [];
+        const total = result.total || 0;
+        const totalPagesApi = result.total_pages || Math.ceil(total / pageSize);
+        setTotalItems(total);
+        setTotalPagesFromApi(totalPagesApi);
+
         // Transform data to include serial numbers
         const records: RefundRecord[] = data.map((refund: any, index: number) => {
           // Parse refund items
           const refundItems = refund.refunded_items || [];
           const productName = refundItems[0]?.product_name || 'N/A';
           const quantityReturned = refundItems[0]?.quantity_returned || 0;
-          
+
           return {
             refund_id: refund.refund_id,
             invoice_id: refund.invoice_id,
@@ -72,7 +82,7 @@ const RefundRecordsPage: React.FC = () => {
             serial_number: index + 1
           };
         });
-        
+
         setRefundRecords(records);
         console.log('Transformed refund records:', records); // Debug log
       } else {
@@ -148,7 +158,7 @@ const RefundRecordsPage: React.FC = () => {
   // Initial fetch
   useEffect(() => {
     fetchRefundRecords();
-  }, [selectedDate]);
+  }, [selectedDate, currentPage]);
 
   return (
     <div className="p-4">
@@ -256,12 +266,12 @@ const RefundRecordsPage: React.FC = () => {
       </div>
 
       {/* Pagination */}
-      {refundRecords.length > 0 && (
+      {totalPages > 1 && (
         <div className="mt-4">
           <Pagination
             currentPage={currentPage}
-            totalPages={Math.ceil(refundRecords.length / pageSize)}
-            totalItems={refundRecords.length}
+            totalPages={totalPages}
+            totalItems={totalItems}
             pageSize={pageSize}
             baseUrl="/refund-records"
             onPageChange={setCurrentPage}

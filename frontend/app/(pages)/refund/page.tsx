@@ -66,11 +66,15 @@ const RefundPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'invoices' | 'refunded'>('invoices');
-  
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(8);
   const [totalItems, setTotalItems] = useState(0);
+  const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
+
+  // Calculate totalPages from API
+  const totalPages = totalPagesFromApi;
 
   // Modal state
   const [showRefundModal, setShowRefundModal] = useState(false);
@@ -106,8 +110,8 @@ const RefundPage: React.FC = () => {
     try {
       setLoading(true);
       const today = getTodayDate();
-      
-      const response = await fetch(`/api/refunds/walkin-invoice?date=${today}`, {
+
+      const response = await fetch(`/api/refunds/walkin-invoice?date=${today}&limit=${pageSize}&skip=${(currentPage - 1) * pageSize}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -116,8 +120,13 @@ const RefundPage: React.FC = () => {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const result = await response.json();
         
+        // Handle paginated response format: { data: [...], page, limit, total, totalPages, has_more }
+        const data = result.data || [];
+        const total = result.total || 0;
+        const totalPagesApi = result.total_pages || Math.ceil(total / pageSize);
+
         // Transform data to WalkinInvoice format for display
         const refundInvoices: WalkinInvoice[] = await Promise.all(
           data.map(async (refund: any) => {
@@ -127,7 +136,7 @@ const RefundPage: React.FC = () => {
               const productName = refundItems[0]?.product_name || 'N/A';
               const quantityReturned = refundItems[0]?.quantity_returned || 0;
               const unitPrice = refundItems[0]?.unit_price || 0;
-              
+
               return {
                 invoice_id: refund.refund_id,
                 invoice_no: refund.invoice_id || 'N/A',
@@ -153,10 +162,12 @@ const RefundPage: React.FC = () => {
             }
           })
         );
-        
+
         setInvoices(refundInvoices.filter(i => i !== null) as WalkinInvoice[]);
+        setTotalItems(total);
+        setTotalPagesFromApi(totalPagesApi);
         setViewMode('refunded');
-        showToast(`Found ${refundInvoices.length} refunded items for today`, 'success');
+        showToast(`Found ${total} refunded items for today`, 'success');
       } else {
         showToast('Failed to fetch refunded items', 'error');
       }
@@ -217,9 +228,9 @@ const RefundPage: React.FC = () => {
   const fetchInvoices = async () => {
     try {
       setLoading(true);
-      
+
       let url = `/api/walkin-invoices?limit=${pageSize}&skip=${(currentPage - 1) * pageSize}`;
-      
+
       if (searchTerm) {
         // Search by invoice number or customer name - no date filter
         url += `&customer_id=${encodeURIComponent(searchTerm)}`;
@@ -237,18 +248,28 @@ const RefundPage: React.FC = () => {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const result = await response.json();
+        // Handle paginated response format: { data: [...], page, limit, total, totalPages, has_more }
+        const data = result.data || [];
+        const total = result.total || 0;
+        const totalPagesApi = result.total_pages || Math.ceil(total / pageSize);
+
         setInvoices(data);
-        setTotalItems(data.length);
+        setTotalItems(total);
+        setTotalPagesFromApi(totalPagesApi);
       } else {
         const errorData = await response.json();
         showToast(errorData.error || 'Failed to fetch invoices', 'error');
         setInvoices([]);
+        setTotalItems(0);
+        setTotalPagesFromApi(0);
       }
     } catch (error) {
       console.error('Error fetching invoices:', error);
       showToast('Error fetching invoices', 'error');
       setInvoices([]);
+      setTotalItems(0);
+      setTotalPagesFromApi(0);
     } finally {
       setLoading(false);
     }
@@ -635,11 +656,11 @@ const RefundPage: React.FC = () => {
       </div>
 
       {/* Pagination */}
-      {invoices.length > 0 && (
+      {totalPages > 1 && (
         <div className="mt-4">
           <Pagination
             currentPage={currentPage}
-            totalPages={Math.ceil(totalItems / pageSize)}
+            totalPages={totalPages}
             totalItems={totalItems}
             pageSize={pageSize}
             baseUrl="/refund"

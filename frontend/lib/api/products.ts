@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { DEFAULT_PAGE_SIZE } from '@/lib/constants/pagination';
+import { optimizeCloudinaryUrl } from '@/lib/cloudinary';
 
 // Define TypeScript interfaces for Product entity (matching backend request format)
 export interface Product {
@@ -112,8 +113,14 @@ export class ProductsApi {
       throw new Error(result.error);
     }
 
+    // Optimize Cloudinary image URLs for all products
+    const optimizedData = (result.data || []).map((product: Product) => ({
+      ...product,
+      pro_image: product.pro_image ? optimizeCloudinaryUrl(product.pro_image) : product.pro_image
+    }));
+
     return {
-      data: result.data || [],
+      data: optimizedData,
       total: result.total || 0,
       page: result.page || page,
       limit: result.limit || limit,
@@ -160,7 +167,14 @@ export class ProductsApi {
     const response = await this.apiClient.get(`/products/${id}`, {
       timeout: 60000,
     });
-    return response.data;
+    const product = response.data;
+    
+    // Optimize Cloudinary image URL if present
+    if (product?.pro_image) {
+      product.pro_image = optimizeCloudinaryUrl(product.pro_image);
+    }
+    
+    return product;
   }
 
   /**

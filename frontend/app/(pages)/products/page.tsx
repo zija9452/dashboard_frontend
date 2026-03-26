@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import { productsApi, Product } from '@/lib/api/products';
 import PageHeader from '@/components/ui/PageHeader';
+import { CloudinaryImage, IMAGE_SIZES } from '@/lib/cloudinary';
 
 interface Category {
   id: string;
@@ -670,7 +671,13 @@ const ProductsPage: React.FC = () => {
                 />
                 {imagePreview && (
                   <div className="mt-2">
-                    <img src={imagePreview} alt="Product preview" className="h-32 w-32 object-cover rounded-lg border" />
+                    <CloudinaryImage
+                      src={imagePreview}
+                      alt="Product preview"
+                      size="medium"
+                      className="h-32 w-32 object-cover rounded-lg border"
+                      priority={true}
+                    />
                   </div>
                 )}
               </div>

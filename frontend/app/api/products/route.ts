@@ -109,16 +109,31 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('Backend error response:', errorText);
+      
       let errorMessage = 'Backend request failed';
+      let errorDetail = null;
+      
       try {
         const errorData = JSON.parse(errorText);
-        errorMessage = errorData.detail || errorData.message || errorMessage;
-      } catch {
+        console.error('Parsed error data:', errorData);
+        errorMessage = errorData.detail || errorData.message || errorData.error || errorMessage;
+        errorDetail = errorData;
+      } catch (parseError) {
+        console.error('Failed to parse error JSON:', parseError);
         errorMessage = errorText || errorMessage;
       }
-      return Response.json(
-        { error: errorMessage, status: response.status },
-        { status: response.status }
+      
+      return new Response(
+        JSON.stringify({ 
+          error: errorMessage,
+          detail: errorDetail,
+          status: response.status 
+        }),
+        { 
+          status: response.status,
+          headers: { 'Content-Type': 'application/json' }
+        }
       );
     }
 
@@ -128,7 +143,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error in products POST API:', error);
-    
+
     // Handle timeout errors
     if (error instanceof Error && error.name === 'TimeoutError') {
       return Response.json(
@@ -136,7 +151,7 @@ export async function POST(request: NextRequest) {
         { status: 504 }
       );
     }
-    
+
     // Handle other errors
     return Response.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },

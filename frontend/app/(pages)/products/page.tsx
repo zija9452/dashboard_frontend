@@ -79,6 +79,8 @@ const ProductsPage: React.FC = () => {
   });
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [deletingImage, setDeletingImage] = useState(false);
 
   // Predefined branch options
   const branchOptions = [
@@ -183,17 +185,26 @@ const ProductsPage: React.FC = () => {
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Delete existing image from Cloudinary if one exists
+      if (imagePreview && formData.attributes) {
+        try {
+          await productsApi.deleteImage(formData.attributes, editingProduct?.pro_id);
+        } catch (error) {
+          console.error('Error deleting old image:', error);
+          // Continue with new upload anyway
+        }
+      }
+
+      setUploadingImage(true);
       setSelectedImage(file);
-      
+
       // Upload to Cloudinary immediately
       try {
-        showToast('Uploading image...', 'info');
         const { url } = await productsApi.uploadImage(file);
-        
+
         // Set the URL as preview and for form submission
         setImagePreview(url);
         setFormData(prev => ({ ...prev, attributes: url }));
-        showToast('Image uploaded successfully!', 'success');
       } catch (error) {
         console.error('Image upload error:', error);
         showToast('Failed to upload image', 'error');
@@ -203,6 +214,50 @@ const ProductsPage: React.FC = () => {
           setImagePreview(reader.result as string);
         };
         reader.readAsDataURL(file);
+      } finally {
+        setUploadingImage(false);
+      }
+    }
+  };
+
+  // Handle image deletion
+  const handleDeleteImage = async () => {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: "You won't be able to revert this!",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel'
+    });
+
+    if (result.isConfirmed) {
+      setDeletingImage(true);
+      try {
+        // Delete image from Cloudinary via backend
+        // Pass product ID if editing an existing product
+        await productsApi.deleteImage(formData.attributes, editingProduct?.pro_id);
+        
+        // Clear image state
+        setImagePreview('');
+        setFormData(prev => ({ ...prev, attributes: '' }));
+        setSelectedImage(null);
+        
+        Swal.fire({
+          title: 'Deleted!',
+          text: 'Image has been deleted.',
+          icon: 'success',
+          timer: 2000,
+          timerProgressBar: true,
+          showConfirmButton: false
+        });
+      } catch (error) {
+        console.error('Error deleting image:', error);
+        showToast('Failed to delete image', 'error');
+      } finally {
+        setDeletingImage(false);
       }
     }
   };
@@ -228,6 +283,8 @@ const ProductsPage: React.FC = () => {
     setShowAddForm(false);
     setSelectedImage(null);
     setImagePreview('');
+    setUploadingImage(false);
+    setDeletingImage(false);
   };
 
   // Close form without resetting (for cancel button)
@@ -308,9 +365,29 @@ const ProductsPage: React.FC = () => {
       await fetchProducts();
       await resetForm();
       setSubmitting(false);
-    } catch (error) {
-      console.error('Error saving product:', error);
-      showToast(error instanceof Error ? error.message : 'Failed to save product', 'error');
+    } catch (error: any) {
+      // Extract error message from response
+      let errorMessage = 'Failed to save product';
+      
+      // Backend returns error in different formats, check all possibilities
+      if (error?.response?.data?.detail?.error?.message) {
+        // Format: { detail: { error: { message: "..." } } }
+        errorMessage = error.response.data.detail.error.message;
+      } else if (error?.response?.data?.detail?.message) {
+        // Format: { detail: { message: "..." } }
+        errorMessage = error.response.data.detail.message;
+      } else if (error?.response?.data?.detail) {
+        // Format: { detail: "..." } (string)
+        errorMessage = error.response.data.detail;
+      } else if (error?.response?.data?.error) {
+        // Format: { error: "..." }
+        errorMessage = error.response.data.error;
+      } else if (error?.response?.data?.message) {
+        // Format: { message: "..." }
+        errorMessage = error.response.data.message;
+      }
+      
+      showToast(errorMessage, 'error');
       setSubmitting(false);
     }
   };
@@ -662,24 +739,59 @@ const ProductsPage: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium mb-1">Product Image</label>
-                <input
-                  type="file"
-                  name="product_image"
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  className="w-full my-2"
-                />
-                {imagePreview && (
-                  <div className="mt-2">
-                    <CloudinaryImage
-                      src={imagePreview}
-                      alt="Product preview"
-                      size="medium"
-                      className="h-32 w-32 object-cover rounded-lg border"
-                      priority={true}
+                <div className="flex items-start gap-2">
+                  {/* Upload Spinner */}
+                  {uploadingImage && (
+                    <div className="flex items-center justify-center h-32 w-32 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
+                      <div className="text-center">
+                        <svg className="animate-spin h-8 w-8 text-regal-yellow mx-auto mb-2" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        <p className="text-xs text-gray-600">Uploading...</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Image Preview with Delete Button */}
+                  {!uploadingImage && imagePreview && (
+                    <div className="flex items-center gap-2">
+                      <CloudinaryImage
+                        src={imagePreview}
+                        alt="Product preview"
+                        size="medium"
+                        className="h-32 w-32 object-cover rounded-lg border"
+                        priority={true}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleDeleteImage}
+                        disabled={deletingImage}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-md shadow-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Delete image"
+                      >
+                        {deletingImage ? (
+                          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                        ) : null}
+                        <span>Delete Image</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Choose File Input (shown when no image) */}
+                  {!uploadingImage && !imagePreview && (
+                    <input
+                      type="file"
+                      name="product_image"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      className="w-full my-2"
                     />
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
 
@@ -730,7 +842,7 @@ const ProductsPage: React.FC = () => {
               <thead className="bg-gray-100">
                 <tr className='text-black font-semibold text-xs uppercase'>
                   <th className="px-3 py-5 text-left w-12">S.No</th>
-                  <th className="px-2 py-5 text-left w-40">Name</th>
+                  <th className="px-2 py-5 text-left w-52">Name</th>
                   <th className="px-2 py-5 text-left w-20">Price</th>
                   <th className="px-2 py-5 text-left w-20">Cost</th>
                   <th className="px-2 py-5 text-left w-28">Barcode</th>

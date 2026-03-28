@@ -183,11 +183,21 @@ export class ProductsApi {
    * @returns Promise<Product>
    */
   async createProduct(product: ProductCreateRequest): Promise<Product> {
-    // Call Next.js API route which forwards to backend with proper cookie handling
-    const response = await this.apiClient.post('/products?action=create', product);
-    // Clear cache after creating product
-    this.clearCache();
-    return response.data;
+    try {
+      // Call Next.js API route which forwards to backend with proper cookie handling
+      const response = await this.apiClient.post('/products?action=create', product);
+      // Clear cache after creating product
+      this.clearCache();
+      return response.data;
+    } catch (error: any) {
+      // Re-throw with proper error structure
+      throw {
+        response: {
+          data: error?.response?.data || { error: 'Failed to create product' },
+          status: error?.response?.status || 500
+        }
+      };
+    }
   }
 
   /**
@@ -197,12 +207,22 @@ export class ProductsApi {
    * @returns Promise<Product>
    */
   async updateProduct(id: string, product: Partial<ProductCreateRequest>): Promise<Product> {
-    const response = await this.apiClient.put(`/products/${id}`, product, {
-      timeout: 120000, // 2 minute timeout
-    });
-    // Clear cache after updating product
-    this.clearCache();
-    return response.data;
+    try {
+      const response = await this.apiClient.put(`/products/${id}`, product, {
+        timeout: 120000, // 2 minute timeout
+      });
+      // Clear cache after updating product
+      this.clearCache();
+      return response.data;
+    } catch (error: any) {
+      // Re-throw with proper error structure
+      throw {
+        response: {
+          data: error?.response?.data || { error: 'Failed to update product' },
+          status: error?.response?.status || 500
+        }
+      };
+    }
   }
 
   /**
@@ -215,6 +235,48 @@ export class ProductsApi {
     // Clear cache after deleting product
     this.clearCache();
     return result;
+  }
+
+  /**
+   * Delete product image from Cloudinary
+   * @param imageUrl Cloudinary image URL to delete
+   * @param productId Optional product ID to also clear the image field
+   * @returns Promise<void>
+   */
+  async deleteImage(imageUrl: string, productId?: string): Promise<void> {
+    if (!imageUrl) return;
+    
+    // Call backend to delete from Cloudinary
+    // Backend will extract public_id from the URL
+    const payload: { image_url: string; product_id?: string } = {
+      image_url: imageUrl
+    };
+    
+    if (productId) {
+      payload.product_id = productId;
+    }
+    
+    await this.apiClient.post('/products/delete-image', payload);
+  }
+
+  /**
+   * Extract public ID from Cloudinary URL (client-side utility if needed)
+   * @param url Cloudinary image URL
+   * @returns Public ID or null
+   */
+  private extractPublicIdFromUrl(url: string): string | null {
+    try {
+      // URL format: https://res.cloudinary.com/{cloud_name}/image/upload/{transformations}/{version}/{folder}/{public_id}.{ext}
+      const match = url.match(/\/upload\/(?:[^/]+\/)*([^\/]+)\/([^\/]+)\.[^\.]+$/);
+      if (match) {
+        // Return folder/public_id format
+        return `${match[1]}/${match[2]}`;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error extracting public ID:', error);
+      return null;
+    }
   }
 }
 

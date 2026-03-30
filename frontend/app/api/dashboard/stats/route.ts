@@ -5,16 +5,21 @@ export async function GET(request: NextRequest) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
     const searchParams = request.nextUrl.searchParams;
+    const from_date = searchParams.get('from_date') || '';
+    const to_date = searchParams.get('to_date') || '';
     const month = searchParams.get('month') || '';
     const year = searchParams.get('year') || '';
 
-    // Build backend URL with optional month/year params
+    // Build backend URL with optional date range or month/year params
     let backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/salesview/dashboard/stats`;
-    
+
     const params = new URLSearchParams();
-    if (month) params.append('month', month);
-    if (year) params.append('year', year);
-    
+    // Priority: from_date/to_date > month/year
+    if (from_date) params.append('from_date', from_date);
+    if (to_date) params.append('to_date', to_date);
+    if (month && !from_date) params.append('month', month);
+    if (year && !from_date) params.append('year', year);
+
     if (params.toString()) {
       backendUrl += `?${params.toString()}`;
     }

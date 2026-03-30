@@ -140,15 +140,30 @@ const CustomerPaymentPage: React.FC = () => {
       setBranches([
         { id: '1', name: 'European Sports Light House' },
       ]);
+      // Set default branch
+      setFormData(prev => ({
+        ...prev,
+        branch_id: '1'
+      }));
     } catch (error) {
       console.error('Error fetching branches:', error);
     }
   };
 
   useEffect(() => {
-    fetchCustomers();
-    fetchBranches();
+    const initData = async () => {
+      await fetchCustomers();
+      await fetchBranches();
+    };
+    initData();
   }, []);
+
+  // Fetch all unpaid invoices after customers are loaded
+  useEffect(() => {
+    if (customers.length > 0 && !formData.customer_id) {
+      fetchAllUnpaidInvoices();
+    }
+  }, [customers]);
 
   // Handle customer selection
   const handleCustomerChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -168,8 +183,8 @@ const CustomerPaymentPage: React.FC = () => {
     if (customerId) {
       await fetchCustomerInvoices(customerId);
     } else {
-      setInvoices([]);
-      setTotalBalance(0);
+      // If customer cleared, fetch all unpaid invoices
+      await fetchAllUnpaidInvoices();
     }
   };
 
@@ -186,9 +201,10 @@ const CustomerPaymentPage: React.FC = () => {
       if (response.ok) {
         const result = await response.json();
         const data = result.data || result || [];
-        
+
+        // When specific customer is selected, show ALL invoices (paid + unpaid)
         setInvoices(data);
-        
+
         // Calculate total balance
         const total = data.reduce((sum: number, invoice: Invoice) => sum + (invoice.balance_due || 0), 0);
         setTotalBalance(total);
@@ -196,6 +212,40 @@ const CustomerPaymentPage: React.FC = () => {
     } catch (error) {
       console.error('Error fetching customer invoices:', error);
       showToast('Failed to fetch invoices', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch all unpaid invoices from all customers
+  const fetchAllUnpaidInvoices = async () => {
+    try {
+      setLoading(true);
+      // Fetch all customers' invoices
+      const promises = customers.map(customer => 
+        fetch(`/api/customerinvoice/customerorders/${customer.cus_id}?skip=0&limit=10000`, {
+          method: 'GET',
+          credentials: 'include',
+        })
+      );
+
+      const responses = await Promise.all(promises);
+      const results = await Promise.all(responses.map(res => res.json()));
+
+      // Combine all invoices and filter only unpaid/partial
+      const allInvoices = results.flatMap(result => result.data || result || []);
+      const unpaidInvoices = allInvoices.filter((invoice: Invoice) => 
+        invoice.payment_status === 'unpaid' || invoice.payment_status === 'partial'
+      );
+
+      setInvoices(unpaidInvoices);
+
+      // Calculate total balance
+      const total = unpaidInvoices.reduce((sum: number, invoice: Invoice) => sum + (invoice.balance_due || 0), 0);
+      setTotalBalance(total);
+    } catch (error) {
+      console.error('Error fetching unpaid invoices:', error);
+      showToast('Failed to fetch unpaid invoices', 'error');
     } finally {
       setLoading(false);
     }
@@ -570,33 +620,37 @@ const CustomerPaymentPage: React.FC = () => {
                 <table className="w-full table-fixed">
                   <thead className="bg-gray-100 sticky top-0">
                     <tr className="text-xs text-gray-900 uppercase tracking-wider font-semibold">
-                      <th className="px-3 py-3 text-left w-24">Invoice No</th>
-                      <th className="px-3 py-3 text-left w-24">Order Status</th>
-                      <th className="px-3 py-3 text-left w-20">Payment</th>
-                      <th className="px-3 py-3 text-left w-24">Total</th>
-                      <th className="px-3 py-3 text-left w-24">Paid</th>
-                      <th className="px-3 py-3 text-left w-24">Balance</th>
-                      <th className="px-3 py-3 text-left w-28">Date</th>
-                      <th className="px-3 py-3 text-left">Actions</th>
+                      <th className="px-3 py-4 text-left w-24">Invoice No</th>
+                      <th className="px-3 py-4 text-left w-24">Order Status</th>
+                      <th className="px-3 py-4 text-left w-20">Payment</th>
+                      <th className="px-3 py-4 text-left w-24">Total</th>
+                      <th className="px-3 py-4 text-left w-24">Paid</th>
+                      <th className="px-3 py-4 text-left w-24">Balance</th>
+                      <th className="px-3 py-4 text-left w-28">Date</th>
+                      <th className="px-3 py-4 text-left">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {loading && invoices.length === 0 ? (
+                    {loading ? (
                       <tr>
                         <td colSpan={8} className="text-center py-12">
-                          <div className="animate-pulse">
-                            <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                            <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                            <div className="h-4 bg-gray-200 rounded"></div>
+                          <div className="animate-pulse gap-4 grid">
+                            <div className="h-12 bg-gray-200 rounded"></div>
+                            <div className="h-12 bg-gray-200 rounded"></div>
+                            <div className="h-12 bg-gray-200 rounded"></div>
+                            <div className="h-12 bg-gray-200 rounded"></div>
+                            <div className="h-12 bg-gray-200 rounded"></div>
+                            <div className="h-12 bg-gray-200 rounded"></div>
+                            <div className="h-12 bg-gray-200 rounded"></div>
                           </div>
                         </td>
                       </tr>
                     ) : invoices.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="text-center py-12 text-gray-500">
-                          {formData.customer_id 
-                            ? 'No invoices found for this customer.' 
-                            : 'No customer selected. Please select a customer to view invoices.'}
+                        <td colSpan={8} className="text-center py-20 text-gray-500">
+                          {formData.customer_id
+                            ? 'No invoices found for this customer.'
+                            : 'No unpaid invoices found.'}
                         </td>
                       </tr>
                     ) : (
@@ -608,15 +662,15 @@ const CustomerPaymentPage: React.FC = () => {
                           }`}
                           onClick={() => handleInvoiceSelect(invoice)}
                         >
-                          <td className="px-3 py-3">
+                          <td className="px-3 py-6">
                             <span className="font-medium text-gray-900">{invoice.invoice_no}</span>
                           </td>
-                          <td className="px-3 py-3">
+                          <td className="px-3 py-6">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(invoice.status)}`}>
                               {invoice.status.toUpperCase()}
                             </span>
                           </td>
-                          <td className="px-3 py-3">
+                          <td className="px-3 py-6">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                               invoice.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
                               invoice.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
@@ -625,11 +679,11 @@ const CustomerPaymentPage: React.FC = () => {
                               {invoice.payment_status.toUpperCase()}
                             </span>
                           </td>
-                          <td className="px-3 py-3">{invoice.total_amount.toFixed(0)}</td>
-                          <td className="px-3 py-3 text-green-700 font-medium">{invoice.amount_paid.toFixed(0)}</td>
-                          <td className="px-3 py-3 text-red-700 font-medium text-center">{invoice.balance_due.toFixed(0)}</td>
-                          <td className="px-3 py-3">{invoice.date}</td>
-                          <td className="px-3 py-3">
+                          <td className="px-3 py-6">{invoice.total_amount.toFixed(0)}</td>
+                          <td className="px-3 py-6 text-green-700 font-medium">{invoice.amount_paid.toFixed(0)}</td>
+                          <td className="px-3 py-6 text-red-700 font-medium text-center">{invoice.balance_due.toFixed(0)}</td>
+                          <td className="px-3 py-6">{invoice.date}</td>
+                          <td className="px-3 py-6">
                             <div className="flex gap-2">
                               <button
                                 onClick={(e) => {

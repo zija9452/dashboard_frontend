@@ -154,16 +154,18 @@ const CustomerPaymentPage: React.FC = () => {
     const initData = async () => {
       await fetchCustomers();
       await fetchBranches();
+      // Fetch all unpaid invoices on initial load
+      await fetchAllUnpaidInvoices();
     };
     initData();
   }, []);
 
-  // Fetch all unpaid invoices after customers are loaded
+  // Fetch all unpaid invoices when customer is deselected
   useEffect(() => {
-    if (customers.length > 0 && !formData.customer_id) {
+    if (customers.length > 0 && !formData.customer_id && invoices.length === 0) {
       fetchAllUnpaidInvoices();
     }
-  }, [customers]);
+  }, [formData.customer_id]);
 
   // Handle customer selection
   const handleCustomerChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -221,8 +223,24 @@ const CustomerPaymentPage: React.FC = () => {
   const fetchAllUnpaidInvoices = async () => {
     try {
       setLoading(true);
+      
+      // Use customers from state (should already be loaded)
+      let customersList = customers;
+      
+      // Fallback: fetch customers if not loaded
+      if (customersList.length === 0) {
+        const customerResponse = await fetch('/api/customers/viewcustomer?page=1&limit=10000', {
+          method: 'GET',
+          credentials: 'include',
+        });
+        if (customerResponse.ok) {
+          const data = await customerResponse.json();
+          customersList = Array.isArray(data.data) ? data.data : [];
+        }
+      }
+
       // Fetch all customers' invoices
-      const promises = customers.map(customer => 
+      const promises = customersList.map(customer =>
         fetch(`/api/customerinvoice/customerorders/${customer.cus_id}?skip=0&limit=10000`, {
           method: 'GET',
           credentials: 'include',
@@ -234,7 +252,7 @@ const CustomerPaymentPage: React.FC = () => {
 
       // Combine all invoices and filter only unpaid/partial
       const allInvoices = results.flatMap(result => result.data || result || []);
-      const unpaidInvoices = allInvoices.filter((invoice: Invoice) => 
+      const unpaidInvoices = allInvoices.filter((invoice: Invoice) =>
         invoice.payment_status === 'unpaid' || invoice.payment_status === 'partial'
       );
 
@@ -274,9 +292,8 @@ const CustomerPaymentPage: React.FC = () => {
   // Fetch payment history
   const fetchPaymentHistory = async (invoiceId: string) => {
     try {
-      setLoading(true);
       setLoadingInvoiceId(invoiceId);
-      
+
       // Get invoice details with payment history
       const response = await fetch(`/api/customerinvoice/payment-history/${invoiceId}`, {
         method: 'GET',
@@ -330,7 +347,7 @@ const CustomerPaymentPage: React.FC = () => {
     }
   };
 
-  // Reset form
+  // Reset form only (keep invoices as is)
   const resetForm = () => {
     setFormData({
       payment_type: 'payment',
@@ -344,8 +361,13 @@ const CustomerPaymentPage: React.FC = () => {
       invoice_no: '',
       description: ''
     });
-    setInvoices([]);
     setSelectedInvoice(null);
+  };
+
+  // Reset form and clear invoices
+  const resetFormWithInvoices = () => {
+    resetForm();
+    setInvoices([]);
     setTotalBalance(0);
   };
 
@@ -354,11 +376,6 @@ const CustomerPaymentPage: React.FC = () => {
     e.preventDefault();
 
     // Validation
-    if (!formData.customer_id) {
-      showToast('Please select a customer', 'error');
-      return;
-    }
-
     const paymentAmount = formData.amount_paid === '' ? 0 : Number(formData.amount_paid);
     if (paymentAmount <= 0) {
       showToast('Please enter a valid payment amount', 'error');
@@ -405,6 +422,9 @@ const CustomerPaymentPage: React.FC = () => {
         // Refresh invoices
         if (formData.customer_id) {
           await fetchCustomerInvoices(formData.customer_id);
+        } else {
+          // If no customer selected, refresh all unpaid invoices
+          await fetchAllUnpaidInvoices();
         }
         resetForm();
       } else {
@@ -605,7 +625,7 @@ const CustomerPaymentPage: React.FC = () => {
               <div className="pt-6">
                 <button
                   type="submit"
-                  disabled={submitting || !formData.order_id || !formData.customer_id}
+                  disabled={submitting || !formData.order_id}
                   className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed w-full py-3 font-semibold"
                 >
                   {submitting ? 'Processing...' : 'Save Payment'}

@@ -103,6 +103,10 @@ const WalkInInvoicePage: React.FC = () => {
   const router = useRouter();
   const { showToast } = useToast();
 
+  // User role state for role-based access control
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [roleLoading, setRoleLoading] = useState(true);
+
   // PDF viewing state
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string>('');
@@ -197,6 +201,29 @@ const WalkInInvoicePage: React.FC = () => {
       console.error('Error fetching products:', error);
     }
   };
+
+  // Fetch user role on mount for role-based access control
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      try {
+        const response = await fetch('/api/auth/session', {
+          credentials: 'include',
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.user?.role) {
+            setUserRole(data.user.role);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching user role:', error);
+      } finally {
+        setRoleLoading(false);
+      }
+    };
+
+    fetchUserRole();
+  }, []);
 
   // Debounced search
   useEffect(() => {
@@ -931,7 +958,9 @@ const WalkInInvoicePage: React.FC = () => {
                     <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Product Name</th>
                     <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
                     <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
-                    <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Cost</th> 
+                    {!roleLoading && userRole !== 'cashier' && (
+                      <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Cost</th>
+                    )}
                     <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Stock</th>
                   </tr>
                 </thead>
@@ -948,7 +977,9 @@ const WalkInInvoicePage: React.FC = () => {
                       <td className="px-4 py-4 text-sm font-medium text-gray-900">{product.product_name}</td>
                       <td className="px-4 py-4 text-sm text-gray-900">{product.category || '-'}</td>
                       <td className="px-4 py-4 text-sm font-semibold text-gray-900">{product.price || 0}</td>
-                      <td className="px-4 py-4 text-sm font-semibold text-gray-900">{product.cost || 0}</td>
+                      {!roleLoading && userRole !== 'cashier' && (
+                        <td className="px-4 py-4 text-sm font-semibold text-gray-900">{product.cost || 0}</td>
+                      )}
                       <td className="px-4 py-4 text-sm text-gray-900">{product.stock_level || product.stock || 0}</td>
                     </tr>
                   ))}

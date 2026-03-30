@@ -26,6 +26,10 @@ const ProductsPage: React.FC = () => {
   const router = useRouter();
   const { showToast } = useToast();
 
+  // User role state for role-based access control
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [roleLoading, setRoleLoading] = useState(true);
+
   // Generate unique barcode by calling backend API (production-ready approach)
   // Backend uses sequential auto-increment: 690000000, 690000001, etc.
   const generateBarcode = async (): Promise<string> => {
@@ -166,6 +170,26 @@ const ProductsPage: React.FC = () => {
 
   // Fetch data on mount
   useEffect(() => {
+    // Fetch user role for role-based access control
+    const fetchUserRole = async () => {
+      try {
+        const response = await fetch('/api/auth/session', {
+          credentials: 'include',
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.user?.role) {
+            setUserRole(data.user.role);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching user role:', error);
+      } finally {
+        setRoleLoading(false);
+      }
+    };
+
+    fetchUserRole();
     fetchProducts();
     fetchCategories();
     fetchBrands();
@@ -844,7 +868,9 @@ const ProductsPage: React.FC = () => {
                   <th className="px-3 py-5 text-left w-12">S.No</th>
                   <th className="px-2 py-5 text-left w-52">Name</th>
                   <th className="px-2 py-5 text-left w-20">Price</th>
-                  <th className="px-2 py-5 text-left w-20">Cost</th>
+                  {!roleLoading && userRole !== 'cashier' && (
+                    <th className="px-2 py-5 text-left w-20">Cost</th>
+                  )}
                   <th className="px-2 py-5 text-left w-28">Barcode</th>
                   <th className="px-2 py-5 text-left w-20">Discount</th>
                   <th className="px-2 py-5 w-20">Stock</th>
@@ -861,7 +887,9 @@ const ProductsPage: React.FC = () => {
                     <td className="px-3 py-4 text-sm text-gray-900 whitespace-nowrap">{((currentPage - 1) * pageSize) + index + 1}</td>
                     <td className="px-3 py-4">{product.pro_name}</td>
                     <td className="px-2 py-4 whitespace-nowrap">{product.pro_price.toFixed(2)}</td>
-                    <td className="px-2 py-4 whitespace-nowrap">{product.pro_cost.toFixed(2)}</td>
+                    {!roleLoading && userRole !== 'cashier' && (
+                      <td className="px-2 py-4 whitespace-nowrap">{product.pro_cost.toFixed(2)}</td>
+                    )}
                     <td className="px-2 py-4 whitespace-nowrap">{product.pro_barcode || 'N/A'}</td>
                     <td className="px-2 py-4 text-center whitespace-nowrap">{product.pro_dis}%</td>
                     <td className="px-2 py-4 text-center whitespace-nowrap">{product.stock || 0}</td>

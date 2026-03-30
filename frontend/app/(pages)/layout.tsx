@@ -74,9 +74,11 @@ export default function PagesLayout({
                   <SidebarLink href="/salesman" className="text-base py-3 border-b border-gray-200">
                     Salesman
                   </SidebarLink>
+                  {(userRole === 'admin' || userRole === 'employee') && (
                   <SidebarLink href="/stock" className="text-base py-3 border-b border-gray-200">
                     Stock
                   </SidebarLink>
+                   )}
                   <SidebarLink href="/expenses" className="text-base py-3 border-b border-gray-200">
                     Expenses
                   </SidebarLink>

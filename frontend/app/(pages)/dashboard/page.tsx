@@ -593,13 +593,7 @@ const DashboardPage: React.FC = () => {
         )}
 
         {/* Cashier Info - Only for Cashier */}
-        {userRole === 'Cashier' && (
-          <div className="mt-8 bg-green-50 p-4 rounded-lg border border-green-200">
-            <p className="text-sm text-green-800">
-              ℹ️ You are viewing today's data. For detailed reports, please contact your administrator.
-            </p>
-          </div>
-        )}
+        
       </div>
     </div>
   );

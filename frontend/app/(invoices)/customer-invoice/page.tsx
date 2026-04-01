@@ -41,8 +41,6 @@ interface CartItem {
   // Dynamic category fields - stores selected options for each sub-category
   // Example: { "Neck": "Round", "Fabric": "Polyzone" }
   category_fields?: Record<string, string>;
-  // Custom description for Other category
-  custom_description?: string;
 }
 
 // Dynamic Category Fields Component
@@ -164,9 +162,6 @@ const CustomerInvoicePage: React.FC = () => {
   // Dynamic category fields state - stores selected option for each sub-category
   // Example: { "Neck Style": "Round", "Sleeve": "Full" }
   const [dynamicCategoryFields, setDynamicCategoryFields] = useState<Record<string, string>>({});
-  
-  // Other category custom description
-  const [custom_description, setCustom_description] = useState('');
 
   // Fetch customers, salesmans and customer categories
   useEffect(() => {
@@ -380,35 +375,27 @@ const CustomerInvoicePage: React.FC = () => {
       return;
     }
 
-    // Validate "Other" category - requires custom description
-    if (selectedCategory === 'Other') {
-      if (!custom_description || !custom_description.trim()) {
-        showToast('Please enter custom description for Other category', 'error');
+    // Validate dynamic category fields for database categories
+    const categoryData = customerCategories.find(cat => cat.main_category === selectedCategory);
+    
+    if (categoryData && categoryData.sub_categories.length > 0) {
+      // Check if at least one sub-category option is selected
+      const selectedOptions = Object.keys(dynamicCategoryFields);
+      
+      if (selectedOptions.length === 0) {
+        showToast('Please select options for all sub-categories', 'error');
         return;
       }
-    } else {
-      // Validate dynamic category fields for database categories
-      const categoryData = customerCategories.find(cat => cat.main_category === selectedCategory);
-      
-      if (categoryData && categoryData.sub_categories.length > 0) {
-        // Check if at least one sub-category option is selected
-        const selectedOptions = Object.keys(dynamicCategoryFields);
-        
-        if (selectedOptions.length === 0) {
-          showToast('Please select options for all sub-categories', 'error');
-          return;
-        }
 
-        // Validate all sub-categories have selected options
-        const missingFields = categoryData.sub_categories.filter(
-          sc => !dynamicCategoryFields[sc.sub_category] || !dynamicCategoryFields[sc.sub_category].trim()
-        );
+      // Validate all sub-categories have selected options
+      const missingFields = categoryData.sub_categories.filter(
+        sc => !dynamicCategoryFields[sc.sub_category] || !dynamicCategoryFields[sc.sub_category].trim()
+      );
 
-        if (missingFields.length > 0) {
-          const missingNames = missingFields.map(sc => sc.sub_category).join(', ');
-          showToast(`Please select: ${missingNames}`, 'error');
-          return;
-        }
+      if (missingFields.length > 0) {
+        const missingNames = missingFields.map(sc => sc.sub_category).join(', ');
+        showToast(`Please select: ${missingNames}`, 'error');
+        return;
       }
     }
 
@@ -434,8 +421,6 @@ const CustomerInvoicePage: React.FC = () => {
       image3: image3Url,
       // Dynamic category fields - stores selected options for each sub-category
       category_fields: { ...dynamicCategoryFields },
-      // Store custom description for Other category
-      custom_description: selectedCategory === 'Other' ? custom_description : undefined,
     };
 
     setCart([...cart, newItem]);
@@ -460,9 +445,7 @@ const CustomerInvoicePage: React.FC = () => {
     setImage3Key(prev => prev + 1);
     // Clear dynamic category fields
     setDynamicCategoryFields({});
-    // Clear custom description
-    setCustom_description('');
-    
+
     // Show success message
     showToast('Item added to cart', 'success');
   };
@@ -573,11 +556,6 @@ const CustomerInvoicePage: React.FC = () => {
         // Build product name with custom details for display in invoice
         let displayName = item.category;
 
-        // For Other category, show custom description
-        if (item.category === 'Other' && item.custom_description) {
-          displayName = item.custom_description;
-        }
-
         return {
           pro_name: displayName,
           cat_name: item.category,
@@ -589,8 +567,6 @@ const CustomerInvoicePage: React.FC = () => {
           imgfile3: item.image3 || '',
           // Dynamic category fields (sub-categories and options) as JSON string
           category_fields: JSON.stringify(item.category_fields || {}),
-          // Custom description for Other category
-          custom_description: item.custom_description || '',
         };
       });
 
@@ -706,7 +682,6 @@ const CustomerInvoicePage: React.FC = () => {
                           {catGroup.main_category}
                         </option>
                       ))}
-                      <option value="Other">Other (Custom)</option>
                     </select>
                   ) : (
                     <div className="text-center py-4 text-gray-500 bg-gray-50 rounded border border-gray-200">
@@ -733,23 +708,6 @@ const CustomerInvoicePage: React.FC = () => {
                     dynamicCategoryFields={dynamicCategoryFields}
                     setDynamicCategoryFields={setDynamicCategoryFields}
                   />
-                )}
-
-                {/* Other/Custom Category Fields */}
-                {selectedCategory === 'Other' && (
-                  <div className="space-y-3 p-3 bg-regal-yellow rounded">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Custom Description</label>
-                      <input
-                        type="text"
-                        value={custom_description}
-                        onChange={(e) => setCustom_description(e.target.value)}
-                        className="regal-input w-full"
-                        placeholder="Enter custom product details (e.g., Custom Jersey with logo)"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">This will appear on the invoice</p>
-                    </div>
-                  </div>
                 )}
 
                 {/* Rate (Unit Price) */}
@@ -1025,13 +983,6 @@ const CustomerInvoicePage: React.FC = () => {
                         <td className="px-4 py-4 text-sm text-gray-900">{index + 1}</td>
                         <td className="px-4 py-4 text-sm">
                           <div className="font-medium text-gray-900">{item.category}</div>
-                          
-                          {/* Show custom description for Other category */}
-                          {item.custom_description && (
-                            <div className="text-xs text-gray-500 mt-1">
-                              <span className="font-medium">Custom:</span> {item.custom_description}
-                            </div>
-                          )}
                           
                           {/* Show dynamic category fields (sub-categories and options) */}
                           {item.category_fields && Object.keys(item.category_fields).length > 0 && (

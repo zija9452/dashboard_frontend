@@ -85,6 +85,11 @@ const ProductsPage: React.FC = () => {
   const [imagePreview, setImagePreview] = useState<string>('');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [deletingImage, setDeletingImage] = useState(false);
+  
+  // Image modal state
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [modalImages, setModalImages] = useState<string[]>([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   // Predefined branch options
   const branchOptions = [
@@ -777,16 +782,33 @@ const ProductsPage: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Image Preview with Delete Button */}
+                  {/* Image Preview with View/Delete Buttons */}
                   {!uploadingImage && imagePreview && (
                     <div className="flex items-center gap-2">
-                      <CloudinaryImage
-                        src={imagePreview}
-                        alt="Product preview"
-                        size="medium"
-                        className="h-32 w-32 object-cover rounded-lg border"
-                        priority={true}
-                      />
+                      <div className="relative group">
+                        <CloudinaryImage
+                          src={imagePreview}
+                          alt="Product preview"
+                          size="medium"
+                          className="h-32 w-32 object-cover rounded-lg border-2 border-gray-200 hover:border-regal-yellow transition-colors cursor-pointer"
+                          priority={true}
+                        />
+                        {/* View Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalImages([imagePreview]);
+                            setCurrentImageIndex(0);
+                            setShowImageModal(true);
+                          }}
+                          className="absolute top-1 right-1 bg-blue-500 hover:bg-blue-600 text-white rounded-full p-1.5 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="View image"
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                          </svg>
+                        </button>
+                      </div>
                       <button
                         type="button"
                         onClick={handleDeleteImage}
@@ -894,9 +916,9 @@ const ProductsPage: React.FC = () => {
                     <td className="px-2 py-4 text-center whitespace-nowrap">{product.pro_dis}%</td>
                     <td className="px-2 py-4 text-center whitespace-nowrap">{product.stock || 0}</td>
                     <td className="px-5 py-4 text-center whitespace-nowrap">{product.limitedquan || 0}</td>
-                    <td className="px-2 py-4 whitespace-nowrap">{product.cat_id_fk || 'N/A'}</td>
+                    <td className="px-2 py-4">{product.cat_id_fk || 'N/A'}</td>
                     <td className="px-2 py-4">{product.branch || 'N/A'}</td>
-                    <td className="px-2 py-4 whitespace-nowrap">{product.brand || 'N/A'}</td>
+                    <td className="px-2 py-4">{product.brand || 'N/A'}</td>
                     <td className="px-2 py-4 text-center">
                       <div className="flex justify-center items-center gap-3">
                         <button
@@ -961,6 +983,25 @@ const ProductsPage: React.FC = () => {
           baseUrl="/products"
           onPageChange={handlePageChange}
         />
+      )}
+
+      {/* Image Modal */}
+      {showImageModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
+          <button
+            onClick={() => setShowImageModal(false)}
+            className="absolute top-4 right-4 text-white hover:text-gray-300 z-10"
+          >
+            <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <img
+            src={modalImages[currentImageIndex]}
+            alt="Product preview"
+            className="max-h-[80vh] max-w-full object-contain rounded-lg"
+          />
+        </div>
       )}
     </div>
   );

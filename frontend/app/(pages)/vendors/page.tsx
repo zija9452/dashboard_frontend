@@ -64,7 +64,7 @@ const VendorsPage: React.FC = () => {
         params.append('search_string', searchTerm);
       }
 
-      const response = await fetch(`/api/admin/viewvendor?${params.toString()}`, {
+      const response = await fetch(`/api/vendors/viewvendor?${params.toString()}`, {
         method: 'GET',
         credentials: 'include',
       });
@@ -279,11 +279,12 @@ const VendorsPage: React.FC = () => {
           </button>
 
           <button
-            onClick={() => router.push('/vendor-payment')}
+            onClick={() => router.push('/vendor-payment-history')}
             className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
           >
-            Vendor Payment
+            Payments
           </button>
+
 
           <button
             onClick={() => setShowReportModal(true)}

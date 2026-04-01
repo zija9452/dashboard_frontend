@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
+import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/ui/PageHeader';
 import Pagination from '@/components/ui/Pagination';
 
@@ -18,6 +19,7 @@ interface CustomerOrder {
 }
 
 const ViewCustomerOrderPage: React.FC = () => {
+  const router = useRouter();
   const { showToast } = useToast();
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [loading, setLoading] = useState(false);
@@ -191,21 +193,38 @@ const ViewCustomerOrderPage: React.FC = () => {
 
       {/* Search Button & Filters - Left Side */}
       <div className="flex items-start gap-4 mb-4">
-        <div>
-          <button
-            onClick={() => setShowSearch(!showSearch)}
-            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap px-4 py-2 flex items-center gap-2"
-          >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            <button
+              onClick={() => router.push('/customer-category')}
+              className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap px-4 py-2 flex items-center gap-2"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            Search
-          </button>
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7c0-1.105.895-2 2-2z" />
+              </svg>
+              Customer Category
+            </button>
+
+            <button
+              onClick={() => setShowSearch(!showSearch)}
+              className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap px-4 py-2 flex items-center gap-2"
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              Search
+            </button>
+          </div>
           
           {/* Search Bar & Status Filter - Show on button click */}
           {showSearch && (
@@ -304,6 +323,12 @@ const ViewCustomerOrderPage: React.FC = () => {
                     </td>
                     <td className="px-3 py-4 text-center">
                       <div className="flex justify-center items-center gap-3">
+                        <button
+                          onClick={() => router.push(`/view-customer-invoice/${order.orderid}`)}
+                          className="text-green-600 hover:text-green-900 font-medium"
+                        >
+                          View
+                        </button>
                         <button
                           onClick={() => handleEditStatus(order.orderid, order.status)}
                           className="text-blue-600 hover:text-blue-900"

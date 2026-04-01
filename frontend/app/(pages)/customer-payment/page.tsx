@@ -114,7 +114,7 @@ const CustomerPaymentPage: React.FC = () => {
   const fetchCustomers = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/customers/viewcustomer?page=1&limit=1000', {
+      const response = await fetch('/api/customers/viewcustomer?page=1&limit=10000', {
         method: 'GET',
         credentials: 'include',
       });
@@ -549,14 +549,18 @@ const CustomerPaymentPage: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Amount Paid *</label>
                 <input
-                  type="number"
+                  type="text"
                   name="amount_paid"
                   value={formData.amount_paid}
                   onChange={handleInputChange}
+                  onKeyPress={(e) => {
+                    // Allow only digits and decimal point, block minus sign
+                    if (!/[0-9.]/.test(e.key)) {
+                      e.preventDefault();
+                    }
+                  }}
                   className="regal-input w-full"
                   placeholder="0.00"
-                  step="0.01"
-                  min="0"
                   autoComplete="off"
                   required
                 />

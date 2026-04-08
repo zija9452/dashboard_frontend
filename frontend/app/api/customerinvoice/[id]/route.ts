@@ -27,7 +27,7 @@ export async function GET(
 
     if (response.ok) {
       const data = await response.json();
-      
+
       // Transform backend response to frontend format
       const invoice = {
         id: data.orderid,
@@ -43,7 +43,7 @@ export async function GET(
         created_at: new Date().toISOString(),
         items: data.fields?.items || []
       };
-      
+
       return Response.json(invoice, {
         status: response.status,
       });
@@ -51,6 +51,48 @@ export async function GET(
       const errorData = await response.json();
       return Response.json(
         { error: errorData.detail || 'Failed to fetch invoice' },
+        { status: response.status }
+      );
+    }
+  } catch (error) {
+    return Response.json(
+      { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/customerinvoice/[id] - Delete invoice by ID
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const cookieHeader = request.headers.get('cookie') || '';
+    const { id } = await params;
+
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/customerinvoice/Deletecustomorder/${id}`;
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (cookieHeader) {
+      headers['Cookie'] = cookieHeader;
+    }
+
+    const response = await fetch(backendUrl, {
+      method: 'POST',  // Backend uses POST for delete
+      headers,
+      cache: 'no-store'
+    });
+
+    if (response.ok) {
+      return Response.json({ success: true }, { status: 200 });
+    } else {
+      const errorData = await response.json();
+      return Response.json(
+        { error: errorData.detail || errorData.error || 'Failed to delete order' },
         { status: response.status }
       );
     }

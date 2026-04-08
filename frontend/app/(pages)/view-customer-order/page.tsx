@@ -30,6 +30,26 @@ const ViewCustomerOrderPage: React.FC = () => {
   const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
   const pageSize = 8;
   const [showSearch, setShowSearch] = useState(false);
+  const [pendingStats, setPendingStats] = useState({ pending_invoices_count: 0, total_pending_quantity: 0 });
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  // Fetch user role on mount
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      try {
+        const response = await fetch('/api/auth/session', {
+          credentials: 'include',
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setUserRole(data.user?.role || null);
+        }
+      } catch (error) {
+        console.error('Error fetching user role:', error);
+      }
+    };
+    fetchUserRole();
+  }, []);
 
   // Calculate totalPages - limit to max 5 pages (same as products page)
   const totalPages = totalPagesFromApi;
@@ -79,6 +99,11 @@ const ViewCustomerOrderPage: React.FC = () => {
         setOrders(data);
         setTotalItems(total);
         setTotalPagesFromApi(totalPagesApi);
+        
+        // Save pending stats from API response
+        if (result.pending_stats) {
+          setPendingStats(result.pending_stats);
+        }
       } else {
         const errorData = await response.json();
         showToast(errorData.error || 'Failed to fetch orders', 'error');
@@ -192,7 +217,7 @@ const ViewCustomerOrderPage: React.FC = () => {
       <PageHeader title="View Customer Orders" />
 
       {/* Search Button & Filters - Left Side */}
-      <div className="flex items-start gap-4 mb-4">
+      <div className="flex items-start justify-between mb-4">
         <div className="flex flex-col gap-2">
           <div className="flex gap-2">
             <button
@@ -225,7 +250,7 @@ const ViewCustomerOrderPage: React.FC = () => {
               Search
             </button>
           </div>
-          
+
           {/* Search Bar & Status Filter - Show on button click */}
           {showSearch && (
             <div className="flex gap-2 mt-2">
@@ -270,6 +295,18 @@ const ViewCustomerOrderPage: React.FC = () => {
               </select>
             </div>
           )}
+        </div>
+
+        {/* Pending Orders Summary - Right side */}
+        <div className="flex gap-4">
+          <div className="px-4 py-2 bg-yellow-100 border border-yellow-300 rounded-lg">
+            <span className="text-sm font-medium text-yellow-800">Pending Invoices: </span>
+            <span className="text-lg font-bold text-yellow-900">{pendingStats.pending_invoices_count}</span>
+          </div>
+          <div className="px-4 py-2 bg-orange-100 border border-orange-300 rounded-lg">
+            <span className="text-sm font-medium text-orange-800">Pending Pieces: </span>
+            <span className="text-lg font-bold text-orange-900">{pendingStats.total_pending_quantity}</span>
+          </div>
         </div>
       </div>
 
@@ -335,12 +372,14 @@ const ViewCustomerOrderPage: React.FC = () => {
                         >
                           Edit
                         </button>
-                        <button
-                          onClick={() => handleDelete(order.orderid)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          Delete
-                        </button>
+                        {userRole === 'admin' && (
+                          <button
+                            onClick={() => handleDelete(order.orderid)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

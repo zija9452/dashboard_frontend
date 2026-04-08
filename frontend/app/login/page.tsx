@@ -39,8 +39,14 @@ const LoginPage: React.FC = () => {
       setPassword('');
 
       router.push('/dashboard'); // Redirect to dashboard after successful login
-    } catch (err) {
-      setError('Invalid credentials. Please try again.');
+    } catch (err: any) {
+      // Check if error message contains 429 or "too many"
+      const errorMessage = err?.message || '';
+      if (errorMessage.toLowerCase().includes('too many')) {
+        setError('Too many login attempts. Please wait 5 minutes before trying again.');
+      } else {
+        setError('Invalid credentials. Please try again.');
+      }
       console.error('Login error:', err);
     } finally {
       setLoading(false);

@@ -48,6 +48,10 @@ export const signIn = async (provider: string, options: any): Promise<SignInResu
     const data = await response.json();
 
     if (!response.ok) {
+      // Check for 429 Too Many Requests
+      if (response.status === 429) {
+        return { ok: false, error: 'Too many login attempts. Please wait 5 minutes before trying again.' };
+      }
       return { ok: false, error: data.error || data.detail || 'Login failed' };
     }
 

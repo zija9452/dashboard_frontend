@@ -24,8 +24,10 @@ interface SubCategoryOption {
 }
 
 interface CustomerCategoryGrouped {
+  id: string;
   main_category: string;
   sub_categories: SubCategoryOption[];
+  ideal_prices?: Record<string, number>;
 }
 
 interface CartItem {
@@ -43,13 +45,14 @@ interface CartItem {
   category_fields?: Record<string, string>;
 }
 
-// Dynamic Category Fields Component
+// Dynamic Category Fields Component - Shows ideal price when all options selected
 const DynamicCategoryFields: React.FC<{
   selectedCategory: string;
   customerCategories: CustomerCategoryGrouped[];
   dynamicCategoryFields: Record<string, string>;
   setDynamicCategoryFields: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-}> = ({ selectedCategory, customerCategories, dynamicCategoryFields, setDynamicCategoryFields }) => {
+  onIdealPriceChange?: (price: number) => void;
+}> = ({ selectedCategory, customerCategories, dynamicCategoryFields, setDynamicCategoryFields, onIdealPriceChange }) => {
   // Find the selected category in the categories list
   const categoryData = customerCategories.find(cat => cat.main_category === selectedCategory);
 
@@ -63,12 +66,46 @@ const DynamicCategoryFields: React.FC<{
     }));
   };
 
+  // Calculate ideal price based on selected options
+  const calculateIdealPrice = (): number | null => {
+    if (!categoryData.ideal_prices || Object.keys(categoryData.ideal_prices).length === 0) {
+      return null;
+    }
+
+    // Build combination key from selected options
+    // Order must match sub_categories order
+    const selectedOptions = categoryData.sub_categories.map(subCat => 
+      dynamicCategoryFields[subCat.sub_category] || ''
+    );
+
+    // Check if all sub-categories have been selected
+    if (selectedOptions.some(opt => opt === '')) {
+      return null;
+    }
+
+    // Build combination key
+    const combinationKey = selectedOptions.join('|');
+    
+    // Lookup price
+    const price = categoryData.ideal_prices[combinationKey];
+    return price || null;
+  };
+
+  const idealPrice = calculateIdealPrice();
+
+  // Notify parent of ideal price change
+  useEffect(() => {
+    if (onIdealPriceChange && idealPrice !== null) {
+      onIdealPriceChange(idealPrice);
+    }
+  }, [idealPrice, onIdealPriceChange]);
+
   return (
     <div className="space-y-4 p-4 bg-regal-yellow rounded">
       <h3 className="text-md font-semibold text-regal-black border-b-2 border-regal-black pb-2">
         {selectedCategory}
       </h3>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {categoryData.sub_categories.map((subCat, index) => (
           <div key={index} className="space-y-1">
@@ -91,6 +128,21 @@ const DynamicCategoryFields: React.FC<{
           </div>
         ))}
       </div>
+
+      {/* Ideal Price Display */}
+      {idealPrice !== null && (
+        <div className="mt-4 p-4 bg-regal-yellow rounded border-2 border-regal-black">
+          <label className="block text-sm font-semibold text-regal-black mb-2">
+            Ideal Unit Price
+          </label>
+          <input
+            type="text"
+            value={`${idealPrice.toFixed(0)}`}
+            disabled
+            className="w-full px-4 py-3 bg-white border-2 border-regal-black rounded text-regal-black text-lg font-bold cursor-not-allowed"
+          />
+        </div>
+      )}
     </div>
   );
 };
@@ -162,6 +214,9 @@ const CustomerInvoicePage: React.FC = () => {
   // Dynamic category fields state - stores selected option for each sub-category
   // Example: { "Neck Style": "Round", "Sleeve": "Full" }
   const [dynamicCategoryFields, setDynamicCategoryFields] = useState<Record<string, string>>({});
+
+  // Ideal price state - shows when all category fields are selected
+  const [idealPrice, setIdealPrice] = useState<number | null>(null);
 
   // Fetch customers, salesmans and customer categories
   useEffect(() => {
@@ -707,6 +762,7 @@ const CustomerInvoicePage: React.FC = () => {
                     customerCategories={customerCategories}
                     dynamicCategoryFields={dynamicCategoryFields}
                     setDynamicCategoryFields={setDynamicCategoryFields}
+                    onIdealPriceChange={setIdealPrice}
                   />
                 )}
 
@@ -720,7 +776,7 @@ const CustomerInvoicePage: React.FC = () => {
                     className="regal-input w-full h-9"
                     placeholder="Unit Price"
                     min="0"
-                    step="0.01"
+                    step="1"
                   />
                 </div>
 
@@ -1107,7 +1163,7 @@ const CustomerInvoicePage: React.FC = () => {
                     className="regal-input w-full"
                     placeholder="Enter amount (0 for credit)"
                     min="0"
-                    step="0.01"
+                    step="1"
                   />
                 </div>
 

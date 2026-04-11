@@ -307,10 +307,10 @@ const CustomerCategoryPage: React.FC = () => {
           </button>
 
           <button
-            onClick={() => router.push('/view-customer-order')}
-            className="regal-btn bg-gray-900 text-white whitespace-nowrap"
+            onClick={() => router.push('/ideal-pricing')}
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
           >
-            ← Back to Customer Orders
+            ⚡ Ideal Pricing
           </button>
         </div>
 

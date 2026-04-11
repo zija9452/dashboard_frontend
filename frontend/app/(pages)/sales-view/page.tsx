@@ -21,6 +21,18 @@ interface WalkInInvoice {
   total_discount: number;
   cost: number;
   created_at: string;
+  // Refund tracking fields
+  is_refunded?: boolean;
+  refund_date?: string | null;
+  refund_amount?: number;
+  refund_reason?: string;
+  refund_items?: Array<{
+    product_name: string;
+    product_id?: string;
+    quantity_returned: number;
+    unit_price: number;
+    total_amount: number;
+  }>;
 }
 
 // Customized Invoice interface (Cash Basis - Payment-wise)
@@ -86,6 +98,11 @@ const SalesViewPage: React.FC = () => {
   const [walkInInvoices, setWalkInInvoices] = useState<WalkInInvoice[]>([]);
   const [customizedInvoices, setCustomizedInvoices] = useState<CustomizedInvoice[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  
+  // Refund tooltip state - track which invoice row is being hovered
+  const [hoveredInvoiceId, setHoveredInvoiceId] = useState<string | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState<{top: number, left: number} | null>(null);
+  const [activeTooltipInvoice, setActiveTooltipInvoice] = useState<WalkInInvoice | null>(null);
 
   // Summary states
   const [summary, setSummary] = useState<SalesSummary>({
@@ -317,6 +334,13 @@ const SalesViewPage: React.FC = () => {
     fetchSalesData();
   }, []);
 
+  // Hide tooltip on scroll to prevent misalignment
+  useEffect(() => {
+    const handleScroll = () => handleHideTooltip();
+    window.addEventListener('scroll', handleScroll, true);
+    return () => window.removeEventListener('scroll', handleScroll, true);
+  }, []);
+
   // Get status badge color
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
@@ -329,6 +353,21 @@ const SalesViewPage: React.FC = () => {
       default:
         return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  // Handle three dots hover - show tooltip at root level
+  const handleShowTooltip = (e: React.MouseEvent, invoice: WalkInInvoice) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setTooltipPosition({
+      top: rect.bottom + window.scrollY + -75,
+      left: rect.left + window.scrollX - 260 // Position to the left of the three dots
+    });
+    setActiveTooltipInvoice(invoice);
+  };
+
+  const handleHideTooltip = () => {
+    setTooltipPosition(null);
+    setActiveTooltipInvoice(null);
   };
 
   return (
@@ -463,9 +502,28 @@ const SalesViewPage: React.FC = () => {
                     </>
                   ) : (
                     <>
-                      {walkInInvoices.map((invoice, idx) => (
-                        <tr key={`${invoice.id}-${idx}`} className="text-sm text-gray-900 border-b border-gray-200" style={{ height: '70px' }}>
-                          <td className="px-3 py-4 font-mono text-xs">{invoice.invoice_no}</td>
+                      {walkInInvoices.map((invoice, idx) => {
+                        const isRefunded = invoice.is_refunded || false;
+                        const rowBgColor = isRefunded 
+                          ? 'bg-red-100 hover:bg-red-200' 
+                          : 'hover:bg-gray-50';
+                        
+                        return (
+                        <tr 
+                          key={`${invoice.id}-${idx}`} 
+                          className={`text-sm text-gray-900 border-b border-gray-200 ${isRefunded ? rowBgColor : 'hover:bg-gray-50'}`} 
+                          style={{ height: '70px' }}
+                          onMouseEnter={() => isRefunded && setHoveredInvoiceId(invoice.id)}
+                          onMouseLeave={() => setHoveredInvoiceId(null)}
+                        >
+                          <td className="px-3 py-4 font-mono text-xs relative">
+                            <div className="flex items-center gap-1">
+                              {isRefunded && (
+                                <span className="w-2 h-2 bg-red-600 rounded-full inline-block" title="Refunded"></span>
+                              )}
+                              {invoice.invoice_no}
+                            </div>
+                          </td>
                           <td className="px-3 py-4">{invoice.product_name}</td>
                           <td className="px-2 py-4 text-left">{invoice.total_amount}</td>
                           <td className="px-2 py-4 text-center">{invoice.amount_paid}</td>
@@ -473,22 +531,37 @@ const SalesViewPage: React.FC = () => {
                           <td className="px-2 py-4 text-center">{invoice.discount}</td>
                           <td className="px-2 py-4 text-center">{invoice.total_discount}</td>
                           <td className="px-2 py-4 text-left">{invoice.cost}</td>
-                          <td className="px-3 py-4">
-                            {(() => {
-                              const date = new Date(invoice.created_at);
-                              const hours = date.getHours();
-                              const minutes = date.getMinutes();
-                              const seconds = date.getSeconds();
-                              const ampm = hours >= 12 ? 'PM' : 'AM';
-                              const hours12 = hours % 12 || 12;
-                              const minutesStr = minutes.toString().padStart(2, '0');
-                              const secondsStr = seconds.toString().padStart(2, '0');
-                              return `${hours12}:${minutesStr}:${secondsStr} ${ampm}`;
-                            })()}
+                          <td className="px-3 py-4 relative">
+                            <div className="flex items-center gap-2">
+                              {(() => {
+                                const date = new Date(invoice.created_at);
+                                const hours = date.getHours();
+                                const minutes = date.getMinutes();
+                                const seconds = date.getSeconds();
+                                const ampm = hours >= 12 ? 'PM' : 'AM';
+                                const hours12 = hours % 12 || 12;
+                                const minutesStr = minutes.toString().padStart(2, '0');
+                                const secondsStr = seconds.toString().padStart(2, '0');
+                                return `${hours12}:${minutesStr}:${secondsStr} ${ampm}`;
+                              })()}
+                              
+                              {/* Three dots menu - ONLY on first row (has refund_items) */}
+                              {isRefunded && invoice.refund_items && invoice.refund_items.length > 0 && (
+                                <div 
+                                  className="w-6 h-6 flex items-center justify-center cursor-pointer ml-1"
+                                  onMouseEnter={(e) => handleShowTooltip(e, invoice)}
+                                  onMouseLeave={handleHideTooltip}
+                                >
+                                  <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                                  </svg>
+                                </div>
+                              )}
+                            </div>
                           </td>
                         </tr>
-                      ))}
-                    
+                      )})}
+
                     </>
                   )}
                 </tbody>
@@ -643,6 +716,44 @@ const SalesViewPage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Root-level Tooltip for Refund Info - Renders outside scroll container */}
+        {activeTooltipInvoice && tooltipPosition && (
+          <div
+            className="fixed"
+            style={{
+              top: `${tooltipPosition.top}px`,
+              left: `${tooltipPosition.left}px`,
+              zIndex: 999999
+            }}
+          >
+            <div className="bg-gray-900 text-white text-xs rounded-lg py-3 px-4 shadow-2xl min-w-[280px] max-w-[350px] border-2 border-red-500">
+              <div className="font-bold text-red-300 mb-2 text-base">⚠ Refunded</div>
+              <div className="space-y-1">
+                <div><span className="text-gray-400">Refund Date:</span> {activeTooltipInvoice.refund_date ? new Date(activeTooltipInvoice.refund_date).toLocaleDateString('en-PK', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}</div>
+                <div><span className="text-gray-400">Refund Amount:</span> Rs. {activeTooltipInvoice.refund_amount?.toFixed(2) || '0.00'}</div>
+                {activeTooltipInvoice.refund_reason && (
+                  <div><span className="text-gray-400">Reason:</span> {activeTooltipInvoice.refund_reason}</div>
+                )}
+                {activeTooltipInvoice.refund_items && activeTooltipInvoice.refund_items.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-gray-600">
+                    <div className="font-semibold mb-1 text-yellow-300">Refunded Items:</div>
+                    {activeTooltipInvoice.refund_items.map((item, i) => (
+                      <div key={i} className="mb-1">
+                        <span className="text-white">• {item.product_name}</span>
+                        <span className="text-green-400 font-bold ml-2">Qty: {item.quantity_returned}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {/* Arrow */}
+              <div className="absolute -top-2 left-8">
+                <div className="w-3 h-3 bg-gray-900 rotate-45 border-t-2 border-l-2 border-red-500"></div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Report Modal */}
         <ReportModal

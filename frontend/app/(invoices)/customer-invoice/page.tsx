@@ -693,30 +693,30 @@ const CustomerInvoicePage: React.FC = () => {
   return (
     <div className=" bg-white min-h-screen">
       {/* Navbar Header */}
-      <nav className="flex px-6 mb-6 py-1 bg-regal-yellow shadow-lg relative">
+      <nav className="flex px-4 md:px-6 mb-4 md:mb-6 py-2 md:py-1 bg-regal-yellow shadow-lg relative">
         <div className="flex items-center">
-          <div className="h-14 w-14 rounded-full bg-gradient-to-br from-regal-orange via-regal-yellow to-regal-orange p-0.5 shadow-lg">
+          <div className="h-10 w-10 md:h-14 md:w-14 rounded-full bg-gradient-to-br from-regal-orange via-regal-yellow to-regal-orange p-0.5 shadow-lg">
             <div className="h-full w-full rounded-full bg-white flex items-center justify-center overflow-hidden">
-              <img src="/european-logo.svg" alt="European Sports Logo" className="h-9 w-9 object-contain" />
+              <img src="/european-logo.svg" alt="European Sports Logo" className="h-7 w-7 md:h-9 md:w-9 object-contain" />
             </div>
           </div>
-          <span className='text-2xl font-semibold text-regal-black font-serif ml-2'>European <span className='font-bold'>Sports</span></span>
+          <span className='text-lg md:text-2xl font-semibold text-regal-black font-serif ml-2 hidden md:inline'>European <span className='font-bold'>Sports</span></span>
         </div>
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="text-2xl font-bold text-regal-black text-center">CUSTOMER INVOICES</div>
+          <div className="text-lg md:text-2xl font-bold text-regal-black text-center">CUSTOMER INVOICES</div>
         </div>
       </nav>
 
-      <div className="max-w-[95%] mx-auto px-4">
+      <div className="max-w-[98%] md:max-w-[95%] mx-auto px-2 md:px-4">
         {/* Top Section - Add Items (Left) + Items Table (Right Top) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 mb-4 md:mb-6">
+
           {/* Left Side - Add Items Form */}
           <div className="lg:col-span-1">
-            <div className="regal-card sticky top-16">
-              <h2 className="text-xl font-semibold mb-4">Add Item</h2>
+            <div className="regal-card p-3 md:p-6 sticky lg:top-16">
+              <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Add Item</h2>
 
-              <div className="space-y-4">
+              <div className="space-y-3 md:space-y-4">
                 {/* Category - Dynamic from API - Show only main category names */}
                 <div className="mb-4">
                   <label className="block text-sm font-medium mb-1">Category</label>
@@ -773,7 +773,7 @@ const CustomerInvoicePage: React.FC = () => {
                     type="number"
                     value={unitPrice}
                     onChange={(e) => setUnitPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="regal-input w-full h-9"
+                    className="regal-input w-full"
                     placeholder="Unit Price"
                     min="0"
                     step="1"
@@ -809,7 +809,7 @@ const CustomerInvoicePage: React.FC = () => {
                         setQuantity('');
                       }
                     }}
-                    className="regal-input w-full h-9"
+                    className="regal-input w-full"
                     placeholder="Quantity"
                     min="1"
                   />
@@ -821,7 +821,7 @@ const CustomerInvoicePage: React.FC = () => {
                   <input
                     type="number"
                     value={price || ''}
-                    className="regal-input w-full h-9 bg-gray-100"
+                    className="regal-input w-full bg-gray-100"
                     readOnly
                     placeholder="Price"
                   />
@@ -1015,13 +1015,13 @@ const CustomerInvoicePage: React.FC = () => {
           </div>
 
           {/* Right Side - Items Table (Top) + Customer Details (Bottom) */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-4 md:space-y-6">
 
             {/* Items Table (Right Top) */}
-            <div className="regal-card" style={{ minHeight: '320px' }}>
-              <h2 className="text-xl font-semibold mb-4">Items ({cart.length})</h2>
-              <div className="overflow-hidden" style={{ maxHeight: '280px', overflowY: 'auto' }}>
-                <table className="w-full">
+            <div className="regal-card p-3 md:p-6" style={{ minHeight: '320px' }}>
+              <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Items ({cart.length})</h2>
+              <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '280px' }}>
+                <table className="w-full min-w-[600px]">
                   <thead className="bg-gray-100 sticky top-0 z-10">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
@@ -1097,10 +1097,10 @@ const CustomerInvoicePage: React.FC = () => {
             </div>
 
             {/* Customer Details (Right Bottom) */}
-            <div className="regal-card sticky top-4">
-              <h2 className="text-xl font-semibold mb-4">Customer Details</h2>
+            <div className="regal-card p-3 md:p-6 sticky lg:top-4">
+              <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Customer Details</h2>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
                 {/* Customer Name */}
                 <div>
                   <label className="block text-sm font-medium mb-1">Customer Name</label>
@@ -1141,7 +1141,7 @@ const CustomerInvoicePage: React.FC = () => {
               </div>
 
               {/* Amount Fields - 4 in one row */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-3 md:mb-4">
                 {/* Total Amount */}
                 <div>
                   <label className="block text-sm font-medium mb-1">Total Amount</label>
@@ -1220,10 +1220,10 @@ const CustomerInvoicePage: React.FC = () => {
 
       {/* Add Customer Modal */}
       {showAddCustomerModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="regal-card bg-white p-6 rounded-lg max-w-md w-full mx-4">
-            <h3 className="text-xl font-semibold mb-4">Add New Customer</h3>
-            
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="regal-card bg-white p-3 md:p-6 rounded-lg max-w-md w-full">
+            <h3 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Add New Customer</h3>
+
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium mb-1">Customer Name *</label>

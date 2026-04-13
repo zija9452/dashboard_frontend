@@ -475,7 +475,7 @@ const WalkInInvoicePage: React.FC = () => {
 
   // Submit payment
   const submitPayment = async () => {
-    const paidAmount = Number(amountPaid);
+    const paidAmount = finalAmount;
     if (paidAmount <= 0) {
       showToast('Please enter a valid payment amount', 'error');
       return;
@@ -767,23 +767,24 @@ const WalkInInvoicePage: React.FC = () => {
       <style dangerouslySetInnerHTML={{ __html: printStyles }} />
       <div className="bg-white min-h-screen">
       {/* Navbar Header */}
-      <nav className="flex items-center justify-between mb-6 px-6 py-1 bg-regal-yellow shadow-lg relative">
+      <nav className="flex items-center justify-between mb-4 md:mb-6 px-4 md:px-6 py-2 md:py-1 bg-regal-yellow shadow-lg relative">
         <div className="flex items-center">
-          <div className="h-14 w-14 rounded-full bg-gradient-to-br from-regal-orange via-regal-yellow to-regal-orange p-0.5 shadow-lg transform hover:scale-105 transition-transform duration-300">
+          <div className="h-10 w-10 md:h-14 md:w-14 rounded-full bg-gradient-to-br from-regal-orange via-regal-yellow to-regal-orange p-0.5 shadow-lg transform hover:scale-105 transition-transform duration-300">
             <div className="h-full w-full rounded-full bg-white flex items-center justify-center overflow-hidden">
-              <Image width={48} height={48} src="/european-logo.svg" alt="European Sports Logo" className="h-9 w-9 object-contain" />
+              <Image width={48} height={48} src="/european-logo.svg" alt="European Sports Logo" className="h-7 w-7 md:h-9 md:w-9 object-contain" />
             </div>
           </div>
-          <span className='text-2xl font-semibold text-regal-black font-serif ml-2'>European <span className='font-bold'>Sports</span></span>
+          <span className='text-lg md:text-2xl font-semibold text-regal-black font-serif ml-2 hidden md:inline'>European <span className='font-bold'>Sports</span></span>
         </div>
         <div className="absolute left-1/2 transform -translate-x-1/2">
-          <div className="text-2xl font-bold text-regal-black">INVOICES</div>
+          <div className="text-lg md:text-2xl font-bold text-regal-black">INVOICES</div>
         </div>
-        <div className="flex gap-3">
+        {/* Buttons - Hidden on mobile, visible on desktop */}
+        <div className="hidden md:flex gap-2 md:gap-3 flex-wrap justify-end">
           <button
             onClick={() => setShowOpeningModal(true)}
             disabled={isOpeningDone || isSubmitting}
-            className={`px-4 py-2 rounded-md text-sm font-semibold transition shadow-sm ${
+            className={`px-3 py-2 rounded-md text-xs md:text-sm font-semibold transition shadow-sm ${
               isOpeningDone
                 ? 'bg-green-500 text-white cursor-not-allowed'
                 : 'bg-regal-black text-regal-yellow hover:bg-gray-800'
@@ -794,7 +795,7 @@ const WalkInInvoicePage: React.FC = () => {
           <button
             onClick={handleClosing}
             disabled={isClosingDone || isSubmitting}
-            className={`px-4 py-2 rounded-md text-sm font-semibold transition shadow-sm ${
+            className={`px-3 py-2 rounded-md text-xs md:text-sm font-semibold transition shadow-sm ${
               isClosingDone
                 ? 'bg-green-500 text-white cursor-not-allowed'
                 : 'bg-regal-black text-regal-yellow hover:bg-gray-800'
@@ -804,28 +805,66 @@ const WalkInInvoicePage: React.FC = () => {
           </button>
           <button
             onClick={() => fetchStock()}
-            className="bg-regal-black text-regal-yellow px-4 py-2 rounded-md text-sm font-semibold hover:bg-gray-800 transition shadow-sm"
+            className="bg-regal-black text-regal-yellow px-3 py-2 rounded-md text-xs md:text-sm font-semibold hover:bg-gray-800 transition shadow-sm"
           >
             View Stock
           </button>
           <button
             onClick={() => fetchTodaySales()}
-            className="bg-regal-black text-regal-yellow px-4 py-2 rounded-md text-sm font-semibold hover:bg-gray-800 transition shadow-sm"
+            className="bg-regal-black text-regal-yellow px-3 py-2 rounded-md text-xs md:text-sm font-semibold hover:bg-gray-800 transition shadow-sm"
           >
             Today Sales
           </button>
         </div>
       </nav>
 
-      <div className="max-w-[95%] mx-auto px-4">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Mobile Buttons - Visible only on mobile */}
+      <div className="md:hidden flex gap-2 flex-wrap justify-center px-4 mb-4">
+        <button
+          onClick={() => setShowOpeningModal(true)}
+          disabled={isOpeningDone || isSubmitting}
+          className={`px-3 py-2 rounded-md text-xs font-semibold transition shadow-sm flex-1 ${
+            isOpeningDone
+              ? 'bg-green-500 text-white cursor-not-allowed'
+              : 'bg-regal-black text-regal-yellow hover:bg-gray-800'
+          }`}
+        >
+          {isSubmitting ? 'Processing...' : isOpeningDone ? '✓ Opening Done' : 'Opening'}
+        </button>
+        <button
+          onClick={handleClosing}
+          disabled={isClosingDone || isSubmitting}
+          className={`px-3 py-2 rounded-md text-xs font-semibold transition shadow-sm flex-1 ${
+            isClosingDone
+              ? 'bg-green-500 text-white cursor-not-allowed'
+              : 'bg-regal-black text-regal-yellow hover:bg-gray-800'
+          }`}
+        >
+          {isSubmitting ? 'Processing...' : isClosingDone ? '✓ Closing Done' : 'Closing'}
+        </button>
+        <button
+          onClick={() => fetchStock()}
+          className="bg-regal-black text-regal-yellow px-3 py-2 rounded-md text-xs font-semibold hover:bg-gray-800 transition shadow-sm flex-1"
+        >
+          View Stock
+        </button>
+        <button
+          onClick={() => fetchTodaySales()}
+          className="bg-regal-black text-regal-yellow px-3 py-2 rounded-md text-xs font-semibold hover:bg-gray-800 transition shadow-sm flex-1"
+        >
+          Today Sales
+        </button>
+      </div>
+
+      <div className="max-w-[98%] md:max-w-[95%] mx-auto px-2 md:px-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
           {/* Left Side - Product Selection Form (1 column) */}
-          <div className="lg:col-span-1 space-y-3">
-          <div className="regal-card">
-            <h2 className="text-lg font-semibold mb-3">Add Product</h2>
+          <div className="lg:col-span-1 space-y-3 md:space-y-4">
+          <div className="regal-card p-3 md:p-6">
+            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Add Product</h2>
 
             {/* Product Name / Search */}
-            <div className="mb-3">
+            <div className="mb-3 md:mb-4">
               <label className="block text-sm font-medium mb-1">Product Name</label>
               <input
                 type="text"
@@ -840,7 +879,7 @@ const WalkInInvoicePage: React.FC = () => {
             </div>
 
             {/* Unit Price */}
-            <div className="mb-3">
+            <div className="mb-3 md:mb-4">
               <label className="block text-sm font-medium mb-1">Unit Price</label>
               <input
                 type="number"
@@ -852,7 +891,7 @@ const WalkInInvoicePage: React.FC = () => {
             </div>
 
             {/* Quantity */}
-            <div className="mb-3">
+            <div className="mb-3 md:mb-4">
               <label className="block text-sm font-medium mb-1">Quantity</label>
               <input
                 type="number"
@@ -864,7 +903,7 @@ const WalkInInvoicePage: React.FC = () => {
             </div>
 
             {/* Price */}
-            <div className="mb-3">
+            <div className="mb-3 md:mb-4">
               <label className="block text-sm font-medium mb-1">Price</label>
               <input
                 type="number"
@@ -877,7 +916,7 @@ const WalkInInvoicePage: React.FC = () => {
             </div>
 
             {/* Discount */}
-            <div className="mb-3">
+            <div className="mb-3 md:mb-4">
               <label className="block text-sm font-medium mb-1">Discount</label>
               <input
                 type="number"
@@ -932,15 +971,15 @@ const WalkInInvoicePage: React.FC = () => {
           </div>
 
         {/* Right Side - Products List (Top) + Selected Items (Bottom) */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="lg:col-span-2 space-y-4 md:space-y-6">
           {/* Products List (Top) - Shows search results or default products */}
-          <div className="regal-card" style={{ minHeight: '320px' }}>
-            <h2 className="text-xl font-semibold mb-4">
+          <div className="regal-card p-3 md:p-6" style={{ minHeight: '280px' }}>
+            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">
               Products ({searchResults.length > 0 ? searchResults.length : defaultProducts.filter(p => (p.stock_level || p.stock || 0) > 0).length})
             </h2>
-            
+
             {/* Search Bar */}
-            <div className="mb-4">
+            <div className="mb-3 md:mb-4">
               <input
                 type="text"
                 value={searchTerm}
@@ -949,9 +988,9 @@ const WalkInInvoicePage: React.FC = () => {
                 className="regal-input w-full h-10"
               />
             </div>
-            
-            <div className="overflow-hidden" style={{ height: '200px', overflowY: 'auto' }}>
-              <table className="w-full">
+
+            <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '200px' }}>
+              <table className="w-full min-w-[600px]">
                 <thead className="bg-gray-100 sticky top-0 z-10">
                   <tr>
                     <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">#</th>
@@ -989,10 +1028,10 @@ const WalkInInvoicePage: React.FC = () => {
           </div>
 
           {/* Selected Items (Bottom) */}
-          <div className="regal-card" style={{ minHeight: '200px' }}>
-            <h2 className="text-xl font-semibold mb-4">Selected Items ({selectedItems.length})</h2>
-            <div className="overflow-hidden" style={{ height: '200px', overflowY: 'auto' }}>
-              <table className="w-full">
+          <div className="regal-card p-3 md:p-6" style={{ minHeight: '200px' }}>
+            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Selected Items ({selectedItems.length})</h2>
+            <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '200px' }}>
+              <table className="w-full min-w-[700px]">
                 <thead className="bg-gray-100 sticky top-0">
                   <tr>
                     <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
@@ -1039,10 +1078,10 @@ const WalkInInvoicePage: React.FC = () => {
 
       {/* Payment Modal */}
       {showPaymentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Payment</h2>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 md:p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-3 md:p-6">
+            <div className="flex justify-between items-center mb-3 md:mb-4">
+              <h2 className="text-lg md:text-xl font-bold">Payment</h2>
               <button
                 onClick={() => setShowPaymentModal(false)}
                 className="text-gray-500 hover:text-gray-700 text-2xl"
@@ -1052,7 +1091,7 @@ const WalkInInvoicePage: React.FC = () => {
             </div>
 
             {/* Customer and Salesman */}
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Select Customer</label>
                 <select
@@ -1086,7 +1125,7 @@ const WalkInInvoicePage: React.FC = () => {
             </div>
 
             {/* Payment Method and Total Amount */}
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Payment Method</label>
                 <select
@@ -1113,7 +1152,7 @@ const WalkInInvoicePage: React.FC = () => {
             </div>
 
             {/* Total Discount and After Discount */}
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
               <div>
                 <label className="block text-sm font-medium mb-1">
                   Total Discount
@@ -1144,15 +1183,15 @@ const WalkInInvoicePage: React.FC = () => {
             </div>
 
             {/* Amount Paid and Date */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-6">
               <div>
                 <label className="block text-sm font-medium mb-1">Amount Paid</label>
                 <input
                   type="number"
-                  value={amountPaid}
-                  onChange={(e) => setAmountPaid(e.target.value)}
-                  className="regal-input w-full"
-                  placeholder="Enter amount"
+                  value={finalAmount}
+                  onChange={(e) => {}}
+                  className="regal-input w-full bg-gray-100"
+                  readOnly
                 />
               </div>
               <div>
@@ -1187,11 +1226,11 @@ const WalkInInvoicePage: React.FC = () => {
 
       {/* Stock View Modal */}
       {showStockModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg overflow-hidden flex flex-col shadow-2xl">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 md:p-4">
+          <div className="bg-white rounded-lg overflow-hidden flex flex-col shadow-2xl max-h-[90vh] w-full max-w-4xl">
             {/* Header */}
-            <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
-              <h2 className="text-2xl font-bold text-gray-800">Stock Inventory</h2>
+            <div className="flex justify-between items-center px-4 md:px-6 py-3 md:py-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
+              <h2 className="text-lg md:text-2xl font-bold text-gray-800">Stock Inventory</h2>
               <button
                 onClick={() => setShowStockModal(false)}
                 className="text-gray-500 hover:text-gray-700 text-3xl font-light transition"
@@ -1299,10 +1338,10 @@ const WalkInInvoicePage: React.FC = () => {
 
       {/* Opening Modal */}
       {showOpeningModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Opening Balance</h2>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 md:p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-3 md:p-6">
+            <div className="flex justify-between items-center mb-3 md:mb-4">
+              <h2 className="text-lg md:text-xl font-bold">Opening Balance</h2>
               <button
                 onClick={() => setShowOpeningModal(false)}
                 className="text-gray-500 hover:text-gray-700 text-2xl"
@@ -1311,7 +1350,7 @@ const WalkInInvoicePage: React.FC = () => {
               </button>
             </div>
 
-            <div className="mb-4">
+            <div className="mb-3 md:mb-4">
               <label className="block text-sm font-medium mb-1">Date</label>
               <input
                 type="date"
@@ -1321,7 +1360,7 @@ const WalkInInvoicePage: React.FC = () => {
               />
             </div>
 
-            <div className="mb-4">
+            <div className="mb-3 md:mb-4">
               <label className="block text-sm font-medium mb-1">Amount *</label>
               <input
                 type="number"

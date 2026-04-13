@@ -363,38 +363,38 @@ const DashboardPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="p-4">
+      <div className="p-0 md:p-4">
         <PageHeader title="Dashboard" />
 
         {/* Main Content - 85% width, centered */}
-        <div className="max-w-[85%] mx-auto">
+        <div className="max-w-[100%] md:max-w-[85%] mx-auto">
           {/* NO Date Range Picker during loading - prevents UX flicker for Cashier */}
 
           {/* Loading Skeleton for KPI Cards - Row 1 (4 cards) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-4 md:mb-6">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="regal-card" style={{ minHeight: '80px' }}>
-                <div className="animate-pulse flex items-center justify-between h-full p-1">
+              <div key={i} className="regal-card p-3 md:p-4" style={{ minHeight: '80px' }}>
+                <div className="animate-pulse flex items-center justify-between h-full">
                   <div className="flex-1">
-                    <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
-                    <div className="h-8 bg-gray-200 rounded w-32 mb-2"></div>
+                    <div className="h-3 md:h-4 bg-gray-200 rounded w-20 md:w-24 mb-2"></div>
+                    <div className="h-6 md:h-8 bg-gray-200 rounded w-24 md:w-32 mb-2"></div>
                   </div>
-                  <div className="h-10 w-10 bg-gray-200 rounded"></div>
+                  <div className="h-8 md:h-10 w-8 md:w-10 bg-gray-200 rounded"></div>
                 </div>
               </div>
             ))}
           </div>
 
           {/* Loading Skeleton for KPI Cards - Row 2 (3 cards) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-4 md:mb-6">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="regal-card" style={{ minHeight: '80px' }}>
-                <div className="animate-pulse flex items-center justify-between h-full p-1">
+              <div key={i} className="regal-card p-3 md:p-4" style={{ minHeight: '80px' }}>
+                <div className="animate-pulse flex items-center justify-between h-full">
                   <div className="flex-1">
-                    <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
-                    <div className="h-8 bg-gray-200 rounded w-32 mb-2"></div>
+                    <div className="h-3 md:h-4 bg-gray-200 rounded w-20 md:w-24 mb-2"></div>
+                    <div className="h-6 md:h-8 bg-gray-200 rounded w-24 md:w-32 mb-2"></div>
                   </div>
-                  <div className="h-10 w-10 bg-gray-200 rounded"></div>
+                  <div className="h-8 md:h-10 w-8 md:w-10 bg-gray-200 rounded"></div>
                 </div>
               </div>
             ))}
@@ -410,36 +410,67 @@ const DashboardPage: React.FC = () => {
     <div className="p-4">
       <PageHeader title="Dashboard" />
 
-      {/* Main Content - 85% width, centered */}
-      <div className="max-w-[85%] mx-auto">
+      {/* Main Content - Wider on mobile */}
+      <div className="max-w-[100%] md:max-w-[85%] mx-auto">
         {/* Date Range Picker - Hide for Cashier */}
         {userRole !== 'Cashier' && (
-          <div className="mb-6 bg-white p-4">
-            <div className="flex items-center justify-end">
-
-              <div className="flex items-end gap-3">
-                <div>
+          <div className="mb-4 md:mb-6 bg-white p-3 md:p-4">
+            {/* Mobile: dates side by side, fetch button below */}
+            <div className="md:hidden">
+              <div className="flex gap-2 mb-3">
+                <div className="flex-1 min-w-0">
                   <label className="block text-xs font-medium text-gray-600 mb-1">From Date</label>
                   <input
                     type="date"
                     value={fromDate}
                     onChange={(e) => setFromDate(e.target.value)}
-                    className="regal-input text-sm"
+                    className="regal-input text-sm w-full"
                   />
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                   <label className="block text-xs font-medium text-gray-600 mb-1">To Date</label>
                   <input
                     type="date"
                     value={toDate}
                     onChange={(e) => setToDate(e.target.value)}
-                    className="regal-input text-sm"
+                    className="regal-input text-sm w-full"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={handleFetchClick}
+                disabled={loading || !fromDate || !toDate}
+                className="bg-regal-yellow text-regal-black px-4 py-4 rounded-md text-sm font-semibold hover:bg-yellow-400 transition disabled:opacity-50 disabled:cursor-not-allowed w-full"
+              >
+                {loading ? 'Fetching...' : 'Fetch'}
+              </button>
+            </div>
+
+            {/* Desktop: original layout - all in one row */}
+            <div className="hidden md:flex md:flex-col md:items-end">
+              <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3 w-full md:w-auto">
+                <div className="w-full sm:w-auto">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">From Date</label>
+                  <input
+                    type="date"
+                    value={fromDate}
+                    onChange={(e) => setFromDate(e.target.value)}
+                    className="regal-input text-sm w-full"
+                  />
+                </div>
+                <div className="w-full sm:w-auto">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">To Date</label>
+                  <input
+                    type="date"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
+                    className="regal-input text-sm w-full"
                   />
                 </div>
                 <button
                   onClick={handleFetchClick}
                   disabled={loading || !fromDate || !toDate}
-                  className="bg-regal-yellow text-regal-black px-4 py-2 rounded-md text-sm font-semibold hover:bg-yellow-400 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-regal-yellow text-regal-black px-4 py-2 rounded-md text-sm font-semibold hover:bg-yellow-400 transition disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
                 >
                   {loading ? 'Fetching...' : 'Fetch'}
                 </button>
@@ -449,121 +480,121 @@ const DashboardPage: React.FC = () => {
         )}
 
         {/* Top Row - 4 KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-4 md:mb-6">
           {/* Sale */}
-          <div className="regal-card">
+          <div className="regal-card p-3 md:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Sale</p>
-                <p className="text-2xl font-semibold text-gray-900">
+                <p className="text-xs md:text-sm font-medium text-gray-600 mb-1">Sale</p>
+                <p className="text-xl md:text-2xl font-semibold text-gray-900">
                   Rs. {Math.round(dashboardData.totalSales).toLocaleString()}
                 </p>
               </div>
-              <div className="text-4xl">💰</div>
+              <div className="text-3xl md:text-4xl">💰</div>
             </div>
           </div>
 
           {/* Expense */}
-          <div className="regal-card">
+          <div className="regal-card p-3 md:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Expense</p>
-                <p className="text-2xl font-semibold text-gray-900">
+                <p className="text-xs md:text-sm font-medium text-gray-600 mb-1">Expense</p>
+                <p className="text-xl md:text-2xl font-semibold text-gray-900">
                   Rs. {Math.round(dashboardData.totalExpense).toLocaleString()}
                 </p>
               </div>
-              <div className="text-4xl">💸</div>
+              <div className="text-3xl md:text-4xl">💸</div>
             </div>
           </div>
 
           {/* Purchase */}
-          <div className="regal-card">
+          <div className="regal-card p-3 md:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Purchase</p>
-                <p className="text-2xl font-semibold text-gray-900">
+                <p className="text-xs md:text-sm font-medium text-gray-600 mb-1">Purchase</p>
+                <p className="text-xl md:text-2xl font-semibold text-gray-900">
                   Rs. {Math.round(dashboardData.totalPurchase).toLocaleString()}
                 </p>
               </div>
-              <div className="text-4xl">🛒</div>
+              <div className="text-3xl md:text-4xl">🛒</div>
             </div>
           </div>
 
           {/* Out Of Stock */}
-          <div className="regal-card">
+          <div className="regal-card p-3 md:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Out Of Stock</p>
-                <p className="text-2xl font-semibold text-gray-900">
+                <p className="text-xs md:text-sm font-medium text-gray-600 mb-1">Out Of Stock</p>
+                <p className="text-xl md:text-2xl font-semibold text-gray-900">
                   {dashboardData.outOfStock}
                 </p>
               </div>
-              <div className="text-4xl">📦</div>
+              <div className="text-3xl md:text-4xl">📦</div>
             </div>
           </div>
         </div>
 
         {/* Middle Row - 3 Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-4 md:mb-6">
           {/* Short Stock */}
-          <div className="regal-card">
+          <div className="regal-card p-3 md:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Short Stock</p>
-                <p className="text-2xl font-semibold text-gray-900">
+                <p className="text-xs md:text-sm font-medium text-gray-600 mb-1">Short Stock</p>
+                <p className="text-xl md:text-2xl font-semibold text-gray-900">
                   {dashboardData.shortStock}
                 </p>
               </div>
-              <div className="text-4xl">⚠️</div>
+              <div className="text-3xl md:text-4xl">⚠️</div>
             </div>
           </div>
 
           {/* User */}
-          <div className="regal-card">
+          <div className="regal-card p-3 md:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">User</p>
-                <p className="text-xl font-semibold text-gray-900">
+                <p className="text-xs md:text-sm font-medium text-gray-600 mb-1">User</p>
+                <p className="text-lg md:text-xl font-semibold text-gray-900">
                   {dashboardData.adminUser}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
                   {dashboardData.userRole}
                 </p>
               </div>
-              <div className="text-4xl">👤</div>
+              <div className="text-3xl md:text-4xl">👤</div>
             </div>
           </div>
 
           {/* Opening Balance */}
-          <div className="regal-card">
+          <div className="regal-card p-3 md:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Opening</p>
-                <p className="text-2xl font-semibold text-gray-900">
+                <p className="text-xs md:text-sm font-medium text-gray-600 mb-1">Opening</p>
+                <p className="text-xl md:text-2xl font-semibold text-gray-900">
                   Rs. {Math.round(dashboardData.openingBalance).toLocaleString()}
                 </p>
               </div>
-              <div className="text-4xl">💵</div>
+              <div className="text-3xl md:text-4xl">💵</div>
             </div>
           </div>
         </div>
 
         {/* Chart Section - Only for Admin/Employee */}
         {userRole !== 'Cashier' && (
-          <div className="mt-8 regal-card">
+          <div className="mt-4 md:mt-8 regal-card p-3 md:p-6">
             {/* Chart Header */}
             <div className="p-1">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-700">GRAPH</h3>
-              
+                  <h3 className="text-base md:text-lg font-semibold text-gray-700">GRAPH</h3>
+
                 </div>
               </div>
             </div>
 
             {/* Chart Loading State */}
             {chartLoading ? (
-              <div className="h-96 flex items-center justify-center">
+              <div className="h-64 md:h-96 flex items-center justify-center">
                 <div className="animate-pulse flex flex-col items-center">
                   <div className="h-8 w-8 border-4 border-regal-yellow border-t-transparent rounded-full animate-spin mb-4"></div>
                   <p className="text-gray-500 text-sm">Loading chart data...</p>
@@ -572,10 +603,10 @@ const DashboardPage: React.FC = () => {
             ) : hasChartData ? (
               <>
                 {/* Chart */}
-                <div className="h-96">
+                <div className="h-64 md:h-96">
                   <Line data={chartData!} options={chartOptions} />
                 </div>
-                <p className="text-sm text-gray-500 mt-4 text-center">
+                <p className="text-xs md:text-sm text-gray-500 mt-4 text-center">
                   {isSameMonth
                     ? `Daily trend from ${fromDate} to ${toDate}`
                     : isSameYear
@@ -585,7 +616,7 @@ const DashboardPage: React.FC = () => {
                 </p>
               </>
             ) : (
-              <div className="h-96 flex items-center justify-center">
+              <div className="h-64 md:h-96 flex items-center justify-center">
                 <p className="text-gray-500 text-sm">No data available for selected period</p>
               </div>
             )}

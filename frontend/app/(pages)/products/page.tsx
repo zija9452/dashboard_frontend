@@ -517,8 +517,8 @@ const ProductsPage: React.FC = () => {
       <PageHeader title="View Product" />
 
       {/* Controls Section */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
-        {/* Left side - Action Buttons */}
+      <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6">
+        {/* Action Buttons - desktop pe left, mobile pe upar */}
         <div className="flex flex-wrap gap-2">
           <button
             onClick={async () => {
@@ -572,14 +572,14 @@ const ProductsPage: React.FC = () => {
               showAddForm ? 'Cancel' : '+ Add Product'
             )}
           </button>
-          
+
           <button
             onClick={() => router.push('/category')}
             className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
           >
             Category
           </button>
-          
+
           <button
             onClick={() => router.push('/brand')}
             className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
@@ -588,9 +588,9 @@ const ProductsPage: React.FC = () => {
           </button>
         </div>
 
-        {/* Right side - Search */}
-        <div className="w-full sm:w-auto flex gap-2">
-          <div className="relative">
+        {/* Search bar - desktop pe right, mobile pe niche */}
+        <div className="flex gap-2 w-full sm:w-auto">
+          <div className="relative flex-1">
             <input
               id="searchInput"
               type="text"
@@ -883,9 +883,9 @@ const ProductsPage: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div>
-            <table className="w-full table-fixed">
-              <thead className="bg-gray-100">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px]">
+              <thead className="bg-gray-100 sticky top-0 z-10">
                 <tr className='text-black font-semibold text-xs uppercase'>
                   <th className="px-3 py-5 text-left w-12">S.No</th>
                   <th className="px-2 py-5 text-left w-52">Name</th>

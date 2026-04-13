@@ -37,7 +37,7 @@ export default function PagesLayout({
   return (
     <>
       <ToastProvider>
-        <div className="flex h-screen bg-white">
+        <div className="flex  bg-white">
           <PageHamburgerButton />
           <SidebarClientWrapper />
 
@@ -116,11 +116,11 @@ export default function PagesLayout({
           </div>
 
           {/* Main content */}
-          <div id="main-content" className="md:ml-64 flex flex-col flex-1 pt-16 md:pt-0 transition-all duration-300 bg-white">
+          <div id="main-content" className="md:ml-64 flex flex-col flex-1 transition-all duration-300 bg-white overflow-hidden">
             <header className="bg-white shadow-sm sticky top-0 z-20">
 
             </header>
-            <main className="flex-1 p-6 bg-white">
+            <main className="flex-1 md:p-6 bg-white">
               {children}
             </main>
           </div>

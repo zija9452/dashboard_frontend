@@ -534,11 +534,11 @@ const RefundPage: React.FC = () => {
               setSelectedDate(e.target.value);
               setCurrentPage(1);
             }}
-            className="regal-input w-40"
+            className="regal-input w-36 sm:w-40"
           />
           <a
             href="/refund-records"
-            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+            className="regal-btn bg-regal-yellow py-3 text-regal-black whitespace-nowrap"
           >
             Refunds Record
           </a>

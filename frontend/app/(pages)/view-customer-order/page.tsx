@@ -217,7 +217,7 @@ const ViewCustomerOrderPage: React.FC = () => {
       <PageHeader title="View Customer Orders" />
 
       {/* Search Button & Filters - Left Side */}
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-4">
         <div className="flex flex-col gap-2">
           <div className="flex gap-2">
             <button
@@ -254,11 +254,11 @@ const ViewCustomerOrderPage: React.FC = () => {
           {/* Search Bar & Status Filter - Show on button click */}
           {showSearch && (
             <div className="flex gap-2 mt-2">
-              <div className="relative w-72">
+              <div className="relative">
                 <input
                   id="searchInput"
                   type="text"
-                  placeholder="Search by invoice, customer or team..."
+                  placeholder="Search by invoice..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onKeyDown={(e) => {
@@ -285,7 +285,7 @@ const ViewCustomerOrderPage: React.FC = () => {
                   setStatusFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="regal-input w-40"
+                className="regal-input w-32"
               >
                 <option value="">All Statuses</option>
                 <option value="PENDING">PENDING</option>
@@ -297,7 +297,7 @@ const ViewCustomerOrderPage: React.FC = () => {
           )}
         </div>
 
-        {/* Pending Orders Summary - Right side */}
+        {/* Pending Orders Summary - Right side, mobile pe cols */}
         <div className="flex gap-4">
           <div className="px-4 py-2 bg-yellow-100 border border-yellow-300 rounded-lg">
             <span className="text-sm font-medium text-yellow-800">Pending Invoices: </span>

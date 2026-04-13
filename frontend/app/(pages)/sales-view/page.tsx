@@ -405,13 +405,65 @@ const SalesViewPage: React.FC = () => {
   };
 
   return (
-    <div className="bg-white min-h-screen">
+    <div className="p-4 bg-white min-h-screen">
       <PageHeader title="Sales View" />
-
-      <div className="p-4">
         {/* Filters Section */}
         <div className="mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4">
+          {/* Mobile: dates in flex row, fetch & branch below */}
+          <div className="md:hidden">
+            {/* From Date & To Date - side by side on mobile */}
+            <div className="flex gap-2 mb-4">
+              <div className="flex-1 min-w-0">
+                <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  className="regal-input w-full"
+                />
+              </div>
+
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  className="regal-input w-full"
+                />
+              </div>
+            </div>
+
+            {/* Fetch Button - full width on mobile */}
+            <div className="mb-4">
+              <button
+                onClick={fetchSalesData}
+                disabled={loading}
+                className="text-regal-black w-full bg-regal-yellow py-3 rounded-md text-sm font-semibold transition disabled:opacity-50"
+              >
+                {loading ? 'Fetching...' : 'Fetch'}
+              </button>
+            </div>
+
+            {/* Branch */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
+              <select
+                value={selectedBranch}
+                onChange={(e) => setSelectedBranch(e.target.value)}
+                className="regal-input w-full"
+              >
+                {branchOptions.map((branch) => (
+                  <option key={branch} value={branch}>
+                    {branch}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Desktop: keep original layout - all in one row */}
+          <div className="hidden md:grid md:grid-cols-12 gap-4 mb-4">
             {/* From Date */}
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
@@ -715,7 +767,7 @@ const SalesViewPage: React.FC = () => {
 
         {/* Summary Footer - Original UI Style */}
         <div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-gray-600 font-bold text-xl">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-gray-600 font-bold text-xl">
             <div className="flex items-center gap-1">
               <p>Opening:</p>
               <p>{summary?.opening?.toLocaleString() || 0}</p>
@@ -811,7 +863,6 @@ const SalesViewPage: React.FC = () => {
           title={reportTitle}
           pdfData={reportPdfData}
         />
-      </div>
     </div>
   );
 };

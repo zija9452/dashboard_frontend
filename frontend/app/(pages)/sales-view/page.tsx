@@ -23,15 +23,17 @@ interface WalkInInvoice {
   created_at: string;
   // Refund tracking fields
   is_refunded?: boolean;
-  refund_date?: string | null;
-  refund_amount?: number;
-  refund_reason?: string;
-  refund_items?: Array<{
-    product_name: string;
-    product_id?: string;
-    quantity_returned: number;
-    unit_price: number;
-    total_amount: number;
+  refund_records?: Array<{
+    refund_date: string;
+    refund_amount: number;
+    refund_reason?: string;
+    refund_items: Array<{
+      product_name: string;
+      product_id?: string;
+      quantity_returned: number;
+      unit_price: number;
+      total_amount: number;
+    }>;
   }>;
 }
 
@@ -103,6 +105,7 @@ const SalesViewPage: React.FC = () => {
   const [hoveredInvoiceId, setHoveredInvoiceId] = useState<string | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{top: number, left: number} | null>(null);
   const [activeTooltipInvoice, setActiveTooltipInvoice] = useState<WalkInInvoice | null>(null);
+  const tooltipTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // Summary states
   const [summary, setSummary] = useState<SalesSummary>({
@@ -341,6 +344,15 @@ const SalesViewPage: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll, true);
   }, []);
 
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (tooltipTimeoutRef.current) {
+        clearTimeout(tooltipTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Get status badge color
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
@@ -357,6 +369,12 @@ const SalesViewPage: React.FC = () => {
 
   // Handle three dots hover - show tooltip at root level
   const handleShowTooltip = (e: React.MouseEvent, invoice: WalkInInvoice) => {
+    // Clear any pending hide timeout
+    if (tooltipTimeoutRef.current) {
+      clearTimeout(tooltipTimeoutRef.current);
+      tooltipTimeoutRef.current = null;
+    }
+    
     const rect = e.currentTarget.getBoundingClientRect();
     setTooltipPosition({
       top: rect.bottom + window.scrollY + -75,
@@ -366,8 +384,24 @@ const SalesViewPage: React.FC = () => {
   };
 
   const handleHideTooltip = () => {
-    setTooltipPosition(null);
-    setActiveTooltipInvoice(null);
+    // Add delay before hiding to prevent flicker
+    tooltipTimeoutRef.current = setTimeout(() => {
+      setTooltipPosition(null);
+      setActiveTooltipInvoice(null);
+      tooltipTimeoutRef.current = null;
+    }, 200);
+  };
+
+  const handleTooltipMouseEnter = () => {
+    // Cancel hide timeout when hovering over tooltip
+    if (tooltipTimeoutRef.current) {
+      clearTimeout(tooltipTimeoutRef.current);
+      tooltipTimeoutRef.current = null;
+    }
+  };
+
+  const handleTooltipMouseLeave = () => {
+    handleHideTooltip();
   };
 
   return (
@@ -544,10 +578,10 @@ const SalesViewPage: React.FC = () => {
                                 const secondsStr = seconds.toString().padStart(2, '0');
                                 return `${hours12}:${minutesStr}:${secondsStr} ${ampm}`;
                               })()}
-                              
-                              {/* Three dots menu - ONLY on first row (has refund_items) */}
-                              {isRefunded && invoice.refund_items && invoice.refund_items.length > 0 && (
-                                <div 
+
+                              {/* Three dots menu - ONLY on first row (has refund_records) */}
+                              {isRefunded && invoice.refund_records && invoice.refund_records.length > 0 && (
+                                <div
                                   className="w-6 h-6 flex items-center justify-center cursor-pointer ml-1"
                                   onMouseEnter={(e) => handleShowTooltip(e, invoice)}
                                   onMouseLeave={handleHideTooltip}
@@ -726,25 +760,37 @@ const SalesViewPage: React.FC = () => {
               left: `${tooltipPosition.left}px`,
               zIndex: 999999
             }}
+            onMouseEnter={handleTooltipMouseEnter}
+            onMouseLeave={handleTooltipMouseLeave}
           >
             <div className="bg-gray-900 text-white text-xs rounded-lg py-3 px-4 shadow-2xl min-w-[280px] max-w-[350px] border-2 border-red-500">
               <div className="font-bold text-red-300 mb-2 text-base">⚠ Refunded</div>
-              <div className="space-y-1">
-                <div><span className="text-gray-400">Refund Date:</span> {activeTooltipInvoice.refund_date ? new Date(activeTooltipInvoice.refund_date).toLocaleDateString('en-PK', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}</div>
-                <div><span className="text-gray-400">Refund Amount:</span> Rs. {activeTooltipInvoice.refund_amount?.toFixed(2) || '0.00'}</div>
-                {activeTooltipInvoice.refund_reason && (
-                  <div><span className="text-gray-400">Reason:</span> {activeTooltipInvoice.refund_reason}</div>
-                )}
-                {activeTooltipInvoice.refund_items && activeTooltipInvoice.refund_items.length > 0 && (
-                  <div className="mt-2 pt-2 border-t border-gray-600">
-                    <div className="font-semibold mb-1 text-yellow-300">Refunded Items:</div>
-                    {activeTooltipInvoice.refund_items.map((item, i) => (
-                      <div key={i} className="mb-1">
-                        <span className="text-white">• {item.product_name}</span>
-                        <span className="text-green-400 font-bold ml-2">Qty: {item.quantity_returned}</span>
+              <div className="space-y-3">
+                {activeTooltipInvoice.refund_records && activeTooltipInvoice.refund_records.length > 0 ? (
+                  activeTooltipInvoice.refund_records.map((record, idx) => (
+                    <div key={idx} className={idx > 0 ? 'mt-2 pt-2 border-t border-gray-600' : ''}>
+                      <div className="font-semibold text-yellow-300 mb-1">
+                        {new Date(record.refund_date).toLocaleDateString('en-PK', { year: 'numeric', month: 'short', day: 'numeric' })}
                       </div>
-                    ))}
-                  </div>
+                      <div><span className="text-gray-400">Amount:</span> Rs. {record.refund_amount.toFixed(2)}</div>
+                      {record.refund_reason && (
+                        <div><span className="text-gray-400">Reason:</span> {record.refund_reason}</div>
+                      )}
+                      {record.refund_items && record.refund_items.length > 0 && (
+                        <div className="mt-1">
+                          <div className="text-xs text-gray-400 mb-1">Items:</div>
+                          {record.refund_items.map((item, i) => (
+                            <div key={i} className="mb-1">
+                              <span className="text-white">• {item.product_name}</span>
+                              <span className="text-green-400 font-bold ml-2">Qty: {item.quantity_returned}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-gray-400">No refund details available</div>
                 )}
               </div>
               {/* Arrow */}

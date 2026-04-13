@@ -363,7 +363,7 @@ const DashboardPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="p-0 md:p-4">
+      <div className="p-4">
         <PageHeader title="Dashboard" />
 
         {/* Main Content - 85% width, centered */}

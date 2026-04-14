@@ -6,15 +6,13 @@ import { ToastProvider } from "@/components/ui/Toast";
 import SidebarLink from "@/components/SidebarLink";
 import SidebarClientWrapper from "@/components/SidebarClientWrapper";
 import PageHamburgerButton from "@/components/PageHamburgerButton";
+import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 
-export default function PagesLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
   const [userRole, setUserRole] = useState<string | null>(null);
+  const { sidebarOpen, toggleSidebar } = useSidebar();
 
   useEffect(() => {
     // Fetch user role from session
@@ -34,15 +32,20 @@ export default function PagesLayout({
 
     fetchUserRole();
   }, []);
+
   return (
-    <>
-      <ToastProvider>
-        <div className="flex  bg-white">
-          <PageHamburgerButton />
-          <SidebarClientWrapper />
+    <ToastProvider>
+      <div className="flex  bg-white">
+        <PageHamburgerButton sidebarOpen={sidebarOpen} onToggle={toggleSidebar} />
+        <SidebarClientWrapper />
 
           {/* Desktop Sidebar */}
-          <div id="desktop-sidebar" className="flex w-64 flex-col fixed inset-y-0 z-30 border-r border-gray-200 border-b bg-white shadow-lg">
+          <div
+            id="desktop-sidebar"
+            className={`fixed inset-y-0 z-30 border-r border-gray-200 border-b bg-white shadow-lg w-64 flex flex-col transition-transform duration-300 ease-in-out ${
+              sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            }`}
+          >
             <div className="flex flex-col flex-grow pt-5 pb-3">
               <Link href={"/"}>
               <div className="flex-shrink-0 px-6">
@@ -116,7 +119,12 @@ export default function PagesLayout({
           </div>
 
           {/* Main content */}
-          <div id="main-content" className="md:ml-64 flex flex-col flex-1 transition-all duration-300 bg-white overflow-hidden">
+          <div 
+            id="main-content" 
+            className={`flex flex-col flex-1 transition-all duration-300 ease-in-out bg-white overflow-hidden ${
+              sidebarOpen ? 'md:ml-64' : 'ml-0'
+            }`}
+          >
             <header className="bg-white shadow-sm sticky top-0 z-20">
 
             </header>
@@ -126,6 +134,13 @@ export default function PagesLayout({
           </div>
         </div>
       </ToastProvider>
-    </>
+  );
+}
+
+export default function PagesLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <SidebarProvider>
+      <SidebarLayoutContent>{children}</SidebarLayoutContent>
+    </SidebarProvider>
   );
 }

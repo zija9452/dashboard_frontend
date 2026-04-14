@@ -1064,7 +1064,7 @@ const WalkInInvoicePage: React.FC = () => {
                   ))}
                   {selectedItems.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-3 py-8 text-center text-gray-500">
+                      <td colSpan={7} className="px-3 py-8 text-center text-gray-500">
                         No selected items
                       </td>
                     </tr>

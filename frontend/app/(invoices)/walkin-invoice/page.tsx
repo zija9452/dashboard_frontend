@@ -973,7 +973,7 @@ const WalkInInvoicePage: React.FC = () => {
         {/* Right Side - Products List (Top) + Selected Items (Bottom) */}
         <div className="lg:col-span-2 space-y-4 md:space-y-6">
           {/* Products List (Top) - Shows search results or default products */}
-          <div className="regal-card p-3 md:p-6" style={{ minHeight: '280px' }}>
+          <div className="regal-card p-3 md:p-6" style={{ minHeight: '350px' }}>
             <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">
               Products ({searchResults.length > 0 ? searchResults.length : defaultProducts.filter(p => (p.stock_level || p.stock || 0) > 0).length})
             </h2>
@@ -1028,9 +1028,9 @@ const WalkInInvoicePage: React.FC = () => {
           </div>
 
           {/* Selected Items (Bottom) */}
-          <div className="regal-card p-3 md:p-6" style={{ minHeight: '200px' }}>
+          <div className="regal-card p-3 md:p-6" style={{ minHeight: '330px' }}>
             <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Selected Items ({selectedItems.length})</h2>
-            <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '200px' }}>
+            <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '230px' }}>
               <table className="w-full min-w-[700px]">
                 <thead className="bg-gray-100 sticky top-0">
                   <tr>

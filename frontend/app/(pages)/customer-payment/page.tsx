@@ -472,14 +472,14 @@ const CustomerPaymentPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4 bg-white min-h-screen">
+    <div className="md:p-4 pt-4 bg-white min-h-screen">
       {/* Print Styles */}
       <style dangerouslySetInnerHTML={{ __html: printStyles }} />
 
       <PageHeader title="Customer Payment" />
 
       {/* Main Container - 80% width, light yellow background */}
-      <div className="max-w-[80%] mx-auto mt-6 rounded-lg shadow-lg p-6">
+      <div className="md:max-w-[80%] max-w-full mx-auto mt-6 rounded-lg shadow-lg p-6">
           
           {/* Two Column Layout */}
           <div className="grid grid-cols-12 gap-6">

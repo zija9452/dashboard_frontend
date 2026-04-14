@@ -37,6 +37,7 @@ const VendorPaymentHistoryPage: React.FC = () => {
   const [pageSize] = useState(10);
   const [totalItems, setTotalItems] = useState(0);
   const [showSearch, setShowSearch] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Calculate totalPages - limit to max 5 pages
   const totalPagesFromApi = Math.ceil(totalItems / pageSize);
@@ -52,10 +53,11 @@ const VendorPaymentHistoryPage: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
+        // Backend returns: { data: [{ven_id, ven_name, ...}], page, limit, total, totalPages }
         setVendors(data.data || []);
       }
     } catch (error) {
-      console.error('Error fetching vendors:', error);
+      // Silently fail
     }
   };
 
@@ -70,9 +72,6 @@ const VendorPaymentHistoryPage: React.FC = () => {
         url += `&vendor_id=${vendorId}`;
       }
 
-      console.log('Fetching from URL:', url);
-      console.log('Vendor ID:', vendorId);
-
       const response = await fetch(url, {
         method: 'GET',
         credentials: 'include',
@@ -80,7 +79,6 @@ const VendorPaymentHistoryPage: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('Response:', data);
         setPayments(data.payments || []);
         setTotalItems(data.total || 0);
       } else {
@@ -88,7 +86,6 @@ const VendorPaymentHistoryPage: React.FC = () => {
         showToast(errorData.error || 'Failed to fetch payment history', 'error');
       }
     } catch (error) {
-      console.error('Error fetching payment history:', error);
       showToast('Failed to fetch payment history', 'error');
     } finally {
       setLoading(false);
@@ -98,13 +95,12 @@ const VendorPaymentHistoryPage: React.FC = () => {
   // Initial fetch
   useEffect(() => {
     fetchVendors();
-    fetchPaymentHistory();
   }, []);
 
-  // Fetch payment history when page changes
+  // Fetch payment history when page or selected vendor changes
   useEffect(() => {
     fetchPaymentHistory(selectedVendor || undefined);
-  }, [currentPage]);
+  }, [currentPage, selectedVendor]);
 
   // Handle page change
   const handlePageChange = (page: number) => {

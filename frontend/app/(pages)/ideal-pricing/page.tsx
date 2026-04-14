@@ -194,16 +194,16 @@ const IdealPricingPage: React.FC = () => {
 
   return (
     <div className="p-4">
-      <PageHeader title="Ideal Pricing Management" />
+      <PageHeader title="Ideal Pricing" />
 
       {/* Controls Section */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row justify-between gap-4 mb-6">
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => router.push('/customer-category')}
             className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
           >
-            ← Back to Customer Categories
+            ← Back
           </button>
         </div>
       </div>
@@ -256,18 +256,18 @@ const IdealPricingPage: React.FC = () => {
             </button>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full table-fixed">
+          <div className="overflow-x-auto -mx-4 px-4">
+            <table className="w-full min-w-[800px]">
               <thead className="bg-gray-100">
                 <tr className='text-black font-semibold text-xs uppercase'>
                   <th className="px-3 py-5 text-left w-12">#</th>
                   {selectedCategory.sub_categories.map((subCat, index) => (
-                    <th key={index} className="px-2 py-5 text-left">
+                    <th key={index} className="px-2 py-5 text-left whitespace-nowrap">
                       {subCat.sub_category}
                     </th>
                   ))}
-                  <th className="px-2 py-5 text-left w-32">Ideal Price</th>
-                  <th className="px-2 py-5 text-center w-24">Status</th>
+                  <th className="px-2 py-5 text-left w-32 whitespace-nowrap">Ideal Price</th>
+                  <th className="px-2 py-5 text-center w-24 whitespace-nowrap">Status</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -276,15 +276,15 @@ const IdealPricingPage: React.FC = () => {
                   const hasExistingPrice = comb.price !== '';
 
                   return (
-                    <tr 
-                      key={comb.id} 
+                    <tr
+                      key={comb.id}
                       className={`hover:bg-gray-50 text-sm text-gray-900 ${hasExistingPrice ? 'bg-regal-yellow/10' : ''}`}
                     >
                       <td className="px-3 py-4 text-sm text-gray-500 font-medium">
                         {index + 1}
                       </td>
                       {parts.map((part, partIndex) => (
-                        <td key={partIndex} className="px-2 py-4 text-sm text-gray-900">
+                        <td key={partIndex} className="px-2 py-4 text-sm text-gray-900 whitespace-nowrap">
                           <span className="bg-regal-yellow text-black px-2 py-1 rounded text-xs font-medium">
                             {part.trim()}
                           </span>
@@ -295,13 +295,13 @@ const IdealPricingPage: React.FC = () => {
                           type="number"
                           value={comb.price}
                           onChange={(e) => handlePriceChange(comb.id, e.target.value)}
-                          className="regal-input w-full text-right font-semibold"
+                          className="regal-input w-full min-w-[100px] text-right font-semibold"
                           placeholder="0"
                           step="1"
                           min="0"
                         />
                       </td>
-                      <td className="px-2 py-4 text-center">
+                      <td className="px-2 py-4 text-center whitespace-nowrap">
                         {hasExistingPrice ? (
                           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                             ✓ Set

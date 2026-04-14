@@ -53,7 +53,7 @@ const CustomerCategoryPage: React.FC = () => {
       params.append('page', currentPage.toString());
       params.append('limit', pageSize.toString());
       if (searchTerm) {
-        params.append('branch', searchTerm);
+        params.append('search_string', searchTerm);
       }
 
       const response = await fetch(`/api/customer-category/?${params.toString()}`, {
@@ -319,7 +319,7 @@ const CustomerCategoryPage: React.FC = () => {
             <input
               id="categorySearchInput"
               type="text"
-              placeholder="Search by branch..."
+              placeholder="Search by main category..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="regal-input w-full pl-10 pr-4 py-2"

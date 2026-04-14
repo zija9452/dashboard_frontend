@@ -657,7 +657,8 @@ const ProductsPage: React.FC = () => {
                   onChange={handleInputChange}
                   className="regal-input w-full"
                   placeholder="Enter price"
-                  step="0.01"
+                  step="1"
+                  min="0"
                   required
                 />
               </div>
@@ -671,7 +672,8 @@ const ProductsPage: React.FC = () => {
                   onChange={handleInputChange}
                   className="regal-input w-full"
                   placeholder="Enter cost"
-                  step="0.01"
+                  step="1"
+                  min="0"
                   required
                 />
               </div>
@@ -702,6 +704,7 @@ const ProductsPage: React.FC = () => {
                   className="regal-input w-full"
                   placeholder="Enter discount"
                   step="0.01"
+                  min="0"
                 />
               </div>
 
@@ -714,6 +717,8 @@ const ProductsPage: React.FC = () => {
                   onChange={handleInputChange}
                   className="regal-input w-full"
                   placeholder="Enter limited quantity"
+                  step="1"
+                  min="0"
                   required
                 />
               </div>

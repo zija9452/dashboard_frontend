@@ -24,7 +24,7 @@ const ViewCustomerOrderPage: React.FC = () => {
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('PENDING');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
@@ -221,21 +221,6 @@ const ViewCustomerOrderPage: React.FC = () => {
         <div className="flex flex-col gap-2">
           <div className="flex gap-2">
             <button
-              onClick={() => router.push('/customer-category')}
-              className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap px-4 py-2 flex items-center gap-2"
-            >
-              <svg
-                className="h-5 w-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7c0-1.105.895-2 2-2z" />
-              </svg>
-              Customer Category
-            </button>
-
-            <button
               onClick={() => setShowSearch(!showSearch)}
               className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap px-4 py-2 flex items-center gap-2"
             >
@@ -287,11 +272,11 @@ const ViewCustomerOrderPage: React.FC = () => {
                 }}
                 className="regal-input w-32"
               >
-                <option value="">All Statuses</option>
                 <option value="PENDING">PENDING</option>
                 <option value="COMPLETED">COMPLETED</option>
                 <option value="DELIVERED">DELIVERED</option>
                 <option value="CANCEL">CANCEL</option>
+                <option value="">All Statuses</option>
               </select>
             </div>
           )}

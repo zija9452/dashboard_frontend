@@ -13,10 +13,6 @@ export async function PUT(
 
     const body = await request.json();
 
-    console.log('Updating customer:', customerId);
-    console.log('Backend URL:', backendUrl);
-    console.log('Request body:', body);
-
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -33,11 +29,8 @@ export async function PUT(
       signal: AbortSignal.timeout(120000), // 2 minute timeout
     });
 
-    console.log('Backend response status:', response.status);
-
     if (!response.ok) {
       const errorText = await response.text();
-      console.log('Backend error:', errorText);
       let errorMessage = 'Backend request failed';
       try {
         const errorData = JSON.parse(errorText);

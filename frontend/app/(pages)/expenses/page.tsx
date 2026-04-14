@@ -9,7 +9,6 @@ import PageHeader from '@/components/ui/PageHeader';
 
 interface Expense {
   id: string;
-  expense_type: string;
   expense: string;
   amount: number;
   expense_date: string;
@@ -18,17 +17,11 @@ interface Expense {
   created_at: string;
 }
 
-interface ExpenseType {
-  id: string;
-  name: string;
-}
-
 const ExpensesPage: React.FC = () => {
   const router = useRouter();
   const { showToast } = useToast();
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -46,7 +39,6 @@ const ExpensesPage: React.FC = () => {
 
   // Form state
   const [formData, setFormData] = useState({
-    expense_type: '',
     expense: '',
     amount: 0,
     date: '',
@@ -92,27 +84,8 @@ const ExpensesPage: React.FC = () => {
     }
   };
 
-  // Fetch expense types
-  const fetchExpenseTypes = async () => {
-    try {
-      const response = await fetch('/api/expense-type/?page=1&limit=1000', {
-        method: 'GET',
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const expenseTypesList = data.data || [];
-        setExpenseTypes(expenseTypesList);
-      }
-    } catch (error) {
-      console.error('Error fetching expense types:', error);
-    }
-  };
-
   useEffect(() => {
     fetchExpenses();
-    fetchExpenseTypes();
   }, [currentPage, pageSize, searchTerm]);
 
   // Handle form input changes
@@ -127,7 +100,6 @@ const ExpensesPage: React.FC = () => {
   // Reset form
   const resetForm = () => {
     setFormData({
-      expense_type: '',
       expense: '',
       amount: 0,
       date: new Date().toISOString().split('T')[0],
@@ -150,7 +122,6 @@ const ExpensesPage: React.FC = () => {
       const currentUser = await getCurrentUser();
 
       const payload = {
-        expense_type: formData.expense_type,
         expense: formData.expense,
         amount: formData.amount,
         expense_date: formData.date || new Date().toISOString().split('T')[0],
@@ -241,7 +212,6 @@ const ExpensesPage: React.FC = () => {
   const handleEdit = (expense: Expense) => {
     setEditingExpense(expense);
     setFormData({
-      expense_type: expense.expense_type,
       expense: expense.expense,
       amount: expense.amount,
       date: expense.expense_date,
@@ -315,7 +285,6 @@ const ExpensesPage: React.FC = () => {
             onClick={() => {
               if (!showAddForm) {
                 setFormData({
-                  expense_type: '',
                   expense: '',
                   amount: 0,
                   date: new Date().toISOString().split('T')[0],
@@ -330,13 +299,6 @@ const ExpensesPage: React.FC = () => {
             className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
           >
             {showAddForm ? 'Cancel' : 'Add New'}
-          </button>
-
-          <button
-            onClick={() => router.push('/expense-type')}
-            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
-          >
-            Expense Type
           </button>
         </div>
 
@@ -401,22 +363,6 @@ const ExpensesPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Expense Type *</label>
-                <select
-                  name="expense_type"
-                  value={formData.expense_type}
-                  onChange={handleInputChange}
-                  className="regal-input w-full"
-                  required
-                >
-                  <option value="">Select Expense Type</option>
-                  {expenseTypes.map(et => (
-                    <option key={et.id} value={et.name}>{et.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
                 <label className="block text-sm font-medium mb-1">Amount *</label>
                 <input
                   type="number"
@@ -426,6 +372,7 @@ const ExpensesPage: React.FC = () => {
                   className="regal-input w-full"
                   placeholder="Enter amount"
                   step="0.01"
+                  min="0"
                   required
                 />
               </div>
@@ -507,7 +454,6 @@ const ExpensesPage: React.FC = () => {
                 <tr>
                   <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
                   <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">Expense</th>
-                  <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                   <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
                   <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                   <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">Branch</th>
@@ -519,7 +465,6 @@ const ExpensesPage: React.FC = () => {
                   <tr key={expense.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm text-gray-900">{((currentPage - 1) * pageSize) + index + 1}</td>
                     <td className="px-6 py-4 text-sm text-gray-900">{expense.expense}</td>
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{expense.expense_type}</td>
                     <td className="px-6 py-4 text-sm text-gray-900">{expense.amount}</td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {new Date(expense.expense_date).toLocaleDateString()}

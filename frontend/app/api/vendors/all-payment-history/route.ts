@@ -1,14 +1,14 @@
 import { NextRequest } from 'next/server';
 
-// GET /api/customers/viewcustomer - View all customers
+// GET /api/vendors/all-payment-history - Get all vendor payment history
 export async function GET(request: NextRequest) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
     const url = new URL(request.url);
     
-    // Forward query params to backend
+    // Forward all query parameters to backend
     const queryString = url.search;
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/customers/viewcustomer${queryString}`;
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/vendors/all-payment-history${queryString}`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       method: 'GET',
       headers,
       cache: 'no-store',
-      signal: AbortSignal.timeout(120000), // 2 minute timeout
+      signal: AbortSignal.timeout(120000),
     });
 
     if (!response.ok) {
@@ -45,17 +45,6 @@ export async function GET(request: NextRequest) {
       status: response.status,
     });
   } catch (error) {
-    console.error('Error fetching customers:', error);
-
-    // Handle timeout errors
-    if (error instanceof Error && error.name === 'TimeoutError') {
-      return Response.json(
-        { error: 'Request timeout. Please try again.', type: 'TIMEOUT' },
-        { status: 504 }
-      );
-    }
-
-    // Handle other errors
     return Response.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }

@@ -87,25 +87,16 @@ const CustomersPage: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         // Backend returns: { data: [...], page, limit, total, totalPages }
-        console.log('API Response:', data);
-        console.log('Data array length:', data.data?.length);
-        console.log('Total from API:', data.total);
-        console.log('TotalPages from API:', data.totalPages);
-        
+
         const customersList = Array.isArray(data.data) ? data.data : [];
         const total = data.total || customersList.length;
         const totalPages = data.totalPages || Math.ceil(total / pageSize);
 
-        console.log('Setting customers:', customersList.length);
-        console.log('Setting totalItems:', total);
-        console.log('Setting totalPagesFromApi:', totalPages);
-        
         setCustomers(customersList);
         setTotalItems(total);
         setTotalPagesFromApi(totalPages);
       }
     } catch (error: any) {
-      console.error('Error fetching customers:', error);
       showToast(error.message || 'Failed to fetch customers', 'error');
     } finally {
       setLoading(false);
@@ -131,7 +122,6 @@ const CustomersPage: React.FC = () => {
 
   // Fetch customers on page change or initial load
   useEffect(() => {
-    console.log('useEffect triggered - currentPage:', currentPage);
     fetchCustomersWithBalance();
   }, [currentPage, pageSize, searchTerm]);
 
@@ -151,12 +141,10 @@ const CustomersPage: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        console.log(`Balance for ${customerId}:`, data.total_balance);
         return data.total_balance || 0;
       }
       return 0;
     } catch (error) {
-      console.error('Error calculating balance:', error);
       return 0;
     } finally {
       setCalculatingBalance(null);

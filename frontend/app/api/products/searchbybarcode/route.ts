@@ -33,18 +33,31 @@ export async function GET(request: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      let errorMessage = 'Backend request failed';
+      let errorMessage = '';
       try {
         const errorData = JSON.parse(errorText);
-        errorMessage = errorData.detail || errorData.message || errorMessage;
-      } catch {
-        errorMessage = errorText || errorMessage;
-      }
-      return Response.json(
-        { error: errorMessage, status: response.status },
-        { status: response.status }
-      );
+       // Priority order: detail > message > error > first validation error
+    if (errorData?.error?.message) {
+      errorMessage = errorData?.error?.message
+    } else if (errorData?.detail) {
+      // "HTTP Error 400: " prefix clean karein
+      errorMessage = errorData.message.replace(/^HTTP Error \d+: /i, '').trim();
+    } else if (errorData?.error) {
+      errorMessage = errorData.error;
+    } else if (Array.isArray(errorData?.errors)) {
+      errorMessage = errorData.errors[0];
     }
+  } catch (parseErr) {
+    // Agar JSON parse nahi hua (HTML error page, etc.)
+    console.warn('⚠️ Could not parse error response as JSON');
+    errorMessage = errorText?.substring(0, 200) || 'Server returned an error';
+  }
+  
+  return Response.json(
+    { error: errorMessage, status: response.status },
+    { status: response.status }
+  );
+}
 
     const data = await response.json();
     return Response.json(data, {

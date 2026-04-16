@@ -352,7 +352,7 @@ const CustomersPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-2 py-5">
       <PageHeader title="View Customer" />
 
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
@@ -548,7 +548,7 @@ const CustomersPage: React.FC = () => {
                   <th className="px-4 py-5 text-left w-48">Name</th>
                   <th className="px-4 py-5 text-left w-32">Phone</th>
                   <th className="px-4 py-5 text-left w-32">CNIC</th>
-                  <th className="px-4 py-5 text-left">Address</th>
+                  <th className="px-4 py-5 text-left w-28">Address</th>
                   <th className="px-4 py-5 text-left w-24">Balance</th>
                   <th className="px-4 py-5 text-left w-40">Salesman</th>
                   <th className="px-4 py-5 text-left w-40">Branch</th>
@@ -558,16 +558,16 @@ const CustomersPage: React.FC = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {customers.map((customer) => (
                   <tr key={customer.cus_id} className="hover:bg-gray-50 text-sm">
-                    <td className="px-4 py-4 whitespace-nowrap overflow-hidden text-ellipsis">{customer.cus_name}</td>
-                    <td className="px-4 py-4 whitespace-nowrap">{customer.cus_phone}</td>
-                    <td className="px-4 py-4 whitespace-nowrap">{customer.cus_cnic || '-'}</td>
+                    <td className="px-4 py-4 overflow-hidden text-ellipsis">{customer.cus_name}</td>
+                    <td className="px-4 py-4">{customer.cus_phone}</td>
+                    <td className="px-4 py-4">{customer.cus_cnic || '-'}</td>
                     <td className="px-4 py-4">{customer.cus_address || '-'}</td>
-                    <td className="px-4 py-4 whitespace-nowrap">
+                    <td className="px-4 py-4">
                       {calculatingBalance === customer.cus_id ? (
                         <span className="text-gray-500">Calculating...</span>
                       ) : (
                         <span className="font-semibold text-gray-900">
-                          {(customer.total_balance !== undefined ? customer.total_balance : customer.cus_balance)?.toFixed(2)}
+                          {(customer.total_balance !== undefined ? customer.total_balance : customer.cus_balance)}
                         </span>
                       )}
                     </td>
@@ -575,7 +575,7 @@ const CustomersPage: React.FC = () => {
                       {salesmans.find(s => s.sal_id === customer.cus_sal_id_fk)?.sal_name || '-'}
                     </td>
                     <td className="px-4 py-4">{customer.branch || '-'}</td>
-                    <td className="px-4 py-4 whitespace-nowrap">
+                    <td className="px-4 py-4">
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleEdit(customer)}

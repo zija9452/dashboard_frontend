@@ -15,7 +15,11 @@ const protectedRoutes = [
   '/view-custom-order',
   '/sales-view',
   '/duplicate-bill',
-  '/refund'
+  '/refund',
+  '/warehouse-dashboard',
+  '/warehouse-products',
+  '/shop-warehouse-products',
+  '/warehouse-stock'
 ];
 
 export function middleware(request: NextRequest) {

@@ -513,7 +513,7 @@ const ProductsPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-2 py-5">
       <PageHeader title="View Product" />
 
       {/* Controls Section */}

@@ -230,11 +230,11 @@ const CategoryPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4">
-      <PageHeader title="Category Management" />
+    <div className="p-2 py-5">
+      <PageHeader title="Product Category" />
 
       {/* Controls Section */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row justify-between gap-4 mb-6">
         {/* Left side - Add New and Back button */}
         <div className="flex flex-wrap gap-2">
           <button

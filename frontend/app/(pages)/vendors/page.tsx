@@ -262,7 +262,7 @@ const VendorsPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-2 py-5">
       <PageHeader title="View Vendor" />
 
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">

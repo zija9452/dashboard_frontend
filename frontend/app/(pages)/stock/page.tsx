@@ -104,10 +104,10 @@ const StockPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-2 py-5">
       <PageHeader title="View Stock" />
 
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row justify-between gap-4 mb-6">
         {/* Left side - Action Buttons */}
         <div className="flex flex-wrap gap-2">
           <button

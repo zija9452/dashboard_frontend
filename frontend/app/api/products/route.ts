@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
     const limit = url.searchParams.get('limit') || '8';  // 8 items per page
     const search_string = url.searchParams.get('search_string') || '';
     const branches = url.searchParams.get('branches') || '';
+    const warehouse = url.searchParams.get('warehouse') || '';  // Filter for warehouse products
 
     const cookieHeader = request.headers.get('cookie') || '';
 
@@ -16,6 +17,7 @@ export async function GET(request: NextRequest) {
     params.append('limit', limit);
     if (search_string) params.append('search_string', search_string);
     if (branches) params.append('branches', branches);
+    if (warehouse) params.append('warehouse', warehouse);  // Pass warehouse filter to backend
 
     const queryString = params.toString();
     const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/products/viewproduct${queryString ? '?' + queryString : ''}`;

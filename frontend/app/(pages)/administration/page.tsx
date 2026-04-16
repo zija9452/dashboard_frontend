@@ -72,7 +72,8 @@ const AdministrationPage: React.FC = () => {
   const availableRoles = [
     {value: 'admin', label: 'Admin'},
     {value: 'cashier', label: 'Cashier'},
-    {value: 'employee', label: 'Employee'}
+    {value: 'employee', label: 'Employee'},
+    {value: 'warehouse', label: 'Warehouse'}
   ];
 
   // Fetch all users (not just admins)
@@ -182,7 +183,7 @@ const AdministrationPage: React.FC = () => {
         console.log('Updating user with data:', formData);
 
         // Validate role name before sending
-        const validRoles = ['admin', 'cashier', 'employee'];
+        const validRoles = ['admin', 'cashier', 'employee', 'warehouse'];
         if (!validRoles.includes(formData.role_id)) {
           showToast('Invalid role selected', 'error');
           return;
@@ -471,7 +472,7 @@ const AdministrationPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-2 py-5">
       <PageHeader title="View User" />
 
       {/* Controls Section */}
@@ -585,6 +586,7 @@ const AdministrationPage: React.FC = () => {
                   <option value="admin">Admin</option>
                   <option value="cashier">Cashier</option>
                   <option value="employee">Employee</option>
+                  <option value="warehouse">Warehouse</option>
                 </select>
               </div>
               <div>

@@ -38,6 +38,8 @@ interface Product {
   pro_barcode: string;
   pro_price: number;
   stock: number;
+  warehouse_stock: number;
+  is_warehouse_product: boolean;
 }
 
 const StockInPage: React.FC = () => {
@@ -198,6 +200,7 @@ const StockInPage: React.FC = () => {
         }
       } else {
         const errorData = await response.json();
+        console.log('error from search barcode', errorData)
         showToast(errorData.error || 'Error fetching product', 'error');
       }
     } catch (error) {
@@ -232,6 +235,27 @@ const StockInPage: React.FC = () => {
     }
 
     const qty = parseInt(quantity) || 0;
+
+    // Check if product is warehouse product
+    if (selectedProduct.is_warehouse_product) {
+      const warehouseStock = selectedProduct.warehouse_stock || 0;
+      
+      if (warehouseStock < qty) {
+        // Show SweetAlert error for insufficient warehouse stock
+        Swal.fire({
+          title: 'Insufficient Warehouse Stock',
+          html: `
+            <p>This is a warehouse product.</p>
+            <p class="mt-2 text-red-600">Available in warehouse: <strong>${warehouseStock}</strong></p>
+            <p class="mt-1">Requested quantity: <strong>${qty}</strong></p>
+          `,
+          icon: 'error',
+          confirmButtonText: 'OK'
+        });
+        return; // Don't add item to list
+      }
+    }
+
     const newItem: StockInItem = {
       product_id: selectedProduct.pro_id,
       product_name: selectedProduct.pro_name,
@@ -254,7 +278,7 @@ const StockInPage: React.FC = () => {
     setCostPrice(0);
     setSellingPrice(0);
     setSelectedVendor('');
-    
+
     // Focus barcode input for next scan
     setTimeout(() => {
       barcodeInputRef.current?.focus();
@@ -345,19 +369,44 @@ const StockInPage: React.FC = () => {
 
       if (response.ok) {
         const result = await response.json();
-        
-        Swal.fire({
-          title: 'Success!',
-          text: `Stock in completed for ${result.results?.length || 0} products.`,
-          icon: 'success',
-          timer: 2000,
-          timerProgressBar: true,
-          showConfirmButton: false,
-        });
 
-        // Reset
-        setStockInItems([]);
-        router.push('/stock');
+        // Check if any items failed
+        const errors = result.results?.filter((r: any) => r.status === 'error') || [];
+        const successes = result.results?.filter((r: any) => r.status === 'success') || [];
+
+        if (errors.length > 0) {
+          // Show detailed error message
+          const errorMessages = errors.map((e: any) => e.message || `Failed: ${e.product_name}`).join('\n');
+          Swal.fire({
+            title: 'Stock In Partially Failed',
+            html: `
+              <p>Successfully added: ${successes.length} product(s)</p>
+              <p class="mt-2 text-red-600">Failed: ${errors.length} product(s)</p>
+              <div class="mt-2 text-left text-sm">
+                ${errors.map((e: any) => `<p class="mt-1">• ${e.message || e.product_name}</p>`).join('')}
+              </div>
+            `,
+            icon: 'warning',
+            confirmButtonText: 'OK'
+          });
+          
+          // Remove failed items from list
+          const successIds = successes.map((s: any) => s.product_id);
+          setStockInItems(prev => prev.filter(item => successIds.includes(item.product_id)));
+        } else if (successes.length > 0) {
+          Swal.fire({
+            title: 'Success!',
+            text: `Stock in completed for ${successes.length} products.`,
+            icon: 'success',
+            timer: 2000,
+            timerProgressBar: true,
+            showConfirmButton: false,
+          });
+
+          // Reset
+          setStockInItems([]);
+          router.push('/stock');
+        }
       } else {
         const errorData = await response.json();
         showToast(errorData.error || 'Failed to save stock in', 'error');
@@ -402,27 +451,51 @@ const StockInPage: React.FC = () => {
       if (response.ok) {
         const apiResult = await response.json();
 
-        // Show success with barcode info
-        Swal.fire({
-          title: 'Success!',
-          html: `
-            <p>Stock in completed for ${apiResult.results?.length || 0} products.</p>
-            <p>Barcodes generated: ${apiResult.zpl_commands?.length || 0}</p>
-          `,
-          icon: 'success',
-          showCancelButton: true,
-          confirmButtonText: 'Print Barcodes',
-          cancelButtonText: 'Close',
-        }).then((swalResult) => {
-          if (swalResult.isConfirmed && apiResult.zpl_commands && apiResult.zpl_commands.length > 0) {
-            // Send ZPL commands to printer
-            printBarcodes(apiResult.zpl_commands);
-          }
-        });
+        // Check if any items failed
+        const errors = apiResult.results?.filter((r: any) => r.status === 'error') || [];
+        const successes = apiResult.results?.filter((r: any) => r.status === 'success') || [];
 
-        // Reset
-        setStockInItems([]);
-        router.push('/stock');
+        if (errors.length > 0) {
+          // Show detailed error message
+          Swal.fire({
+            title: 'Stock In Partially Failed',
+            html: `
+              <p>Successfully added: ${successes.length} product(s)</p>
+              <p class="mt-2 text-red-600">Failed: ${errors.length} product(s)</p>
+              <div class="mt-2 text-left text-sm">
+                ${errors.map((e: any) => `<p class="mt-1">• ${e.message || e.product_name}</p>`).join('')}
+              </div>
+            `,
+            icon: 'warning',
+            confirmButtonText: 'OK'
+          });
+          
+          // Remove failed items from list
+          const successIds = successes.map((s: any) => s.product_id);
+          setStockInItems(prev => prev.filter(item => successIds.includes(item.product_id)));
+        } else if (successes.length > 0) {
+          // Show success with barcode info
+          Swal.fire({
+            title: 'Success!',
+            html: `
+              <p>Stock in completed for ${successes.length} products.</p>
+              <p>Barcodes generated: ${apiResult.zpl_commands?.length || 0}</p>
+            `,
+            icon: 'success',
+            showCancelButton: true,
+            confirmButtonText: 'Print Barcodes',
+            cancelButtonText: 'Close',
+          }).then((swalResult) => {
+            if (swalResult.isConfirmed && apiResult.zpl_commands && apiResult.zpl_commands.length > 0) {
+              // Send ZPL commands to printer
+              printBarcodes(apiResult.zpl_commands);
+            }
+          });
+
+          // Reset
+          setStockInItems([]);
+          router.push('/stock');
+        }
       } else {
         const errorData = await response.json();
         showToast(errorData.error || 'Failed to save stock in', 'error');
@@ -673,7 +746,7 @@ const StockInPage: React.FC = () => {
   const totalCost = stockInItems.reduce((sum, item) => sum + item.total_cost, 0);
 
   return (
-    <div className="p-6">
+    <div className="p-2 py-5">
       <PageHeader title="Stock In" />
 
       {/* QZ Tray Status Indicator */}
@@ -712,8 +785,8 @@ const StockInPage: React.FC = () => {
       </div>
 
       {/* Barcode Scanner Input */}
-      <div className="regal-card mb-6">
-        <h3 className="text-lg font-semibold mb-4">Scan Product Barcode</h3>
+      <div className="regal-card md:p-4 p-2 mb-6">
+        <h3 className="text-lg font-semibold md:mb-4 mb-2">Scan Product Barcode</h3>
         <form onSubmit={handleBarcodeSubmit} className="flex gap-4">
           <input
             ref={barcodeInputRef}

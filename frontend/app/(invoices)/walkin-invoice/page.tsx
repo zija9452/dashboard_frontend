@@ -415,8 +415,8 @@ const WalkInInvoicePage: React.FC = () => {
     }
 
     // Validate: Check quantity
-    if (!quantity || Number(quantity) <= 0) {
-      showToast('Please enter a valid quantity', 'error');
+    if (!quantity || Number(quantity) < 1) {
+      showToast('Quantity must be at least 1', 'error');
       return;
     }
 
@@ -895,8 +895,10 @@ const WalkInInvoicePage: React.FC = () => {
               <label className="block text-sm font-medium mb-1">Quantity</label>
               <input
                 type="number"
+                min="1"
+                step="1"
                 value={quantity}
-                onChange={(e) => setQuantity(Number(e.target.value))}
+                onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
                 className="regal-input w-full h-9"
                 placeholder="Quantity"
               />

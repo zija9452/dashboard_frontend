@@ -16,6 +16,10 @@ export interface Product {
   brand: string;
   pro_image: string;
   stock: number;
+  is_warehouse_product?: boolean;
+  article_no?: string;
+  warehouse_stock?: number;
+  warehouse_limited_qty?: number;
 }
 
 // Backend request format

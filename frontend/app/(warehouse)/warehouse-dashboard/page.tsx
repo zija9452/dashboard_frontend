@@ -1,0 +1,162 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import PageHeader from '@/components/ui/PageHeader';
+
+interface DashboardStats {
+  totalWarehouseProducts: number;
+  shortInventory: number;
+  lowWarehouseStock: number;
+  userRole: string;
+}
+
+const WarehouseDashboardPage: React.FC = () => {
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<DashboardStats>({
+    totalWarehouseProducts: 0,
+    shortInventory: 0,
+    lowWarehouseStock: 0,
+    userRole: 'Warehouse',
+  });
+
+  useEffect(() => {
+    fetchDashboardStats();
+  }, []);
+
+  const fetchDashboardStats = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch all warehouse products (is_warehouse_product = true)
+      const warehouseResponse = await fetch('/api/products/viewproduct?warehouse=true&page=1&limit=1000', {
+        credentials: 'include',
+      });
+
+      let totalWarehouse = 0;
+      let shortInventory = 0;
+      let lowWarehouseStock = 0;
+
+      if (warehouseResponse.ok) {
+        const warehouseData = await warehouseResponse.json();
+        const products = warehouseData.data || [];
+        totalWarehouse = warehouseData.total || 0;
+
+        // Short Inventory: warehouse products where stock_level <= limited_qty
+        shortInventory = products.filter((p: any) => 
+          (p.stock_level || 0) <= (p.limited_qty || 0)
+        ).length;
+
+        // Low Warehouse Stock: warehouse products where warehouse_stock <= warehouse_limited_qty
+        lowWarehouseStock = products.filter((p: any) => 
+          (p.warehouse_stock || 0) <= (p.warehouse_limited_qty || 0)
+        ).length;
+      }
+
+      setStats({
+        totalWarehouseProducts: totalWarehouse,
+        shortInventory: shortInventory,
+        lowWarehouseStock: lowWarehouseStock,
+        userRole: 'Warehouse',
+      });
+    } catch (error) {
+      console.error('Error fetching warehouse dashboard stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-4">
+        <PageHeader title="Warehouse Dashboard" />
+
+        <div className="max-w-[100%] md:max-w-[85%] mx-auto">
+          {/* Loading Skeleton */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-4 md:mb-6">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="regal-card p-3 md:p-4" style={{ minHeight: '80px' }}>
+                <div className="animate-pulse flex items-center justify-between h-full">
+                  <div className="flex-1">
+                    <div className="h-3 md:h-4 bg-gray-200 rounded w-20 md:w-24 mb-2"></div>
+                    <div className="h-6 md:h-8 bg-gray-200 rounded w-24 md:w-32 mb-2"></div>
+                  </div>
+                  <div className="h-8 md:h-10 w-8 md:w-10 bg-gray-200 rounded"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4">
+      <PageHeader title="Warehouse Dashboard" />
+
+      {/* Main Content - Same width as shop dashboard */}
+      <div className="max-w-[100%] md:max-w-[85%] mx-auto">
+        {/* Top Row - 3 KPI Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-4 md:mb-6">
+          {/* Warehouse Products */}
+          <div className="regal-card p-3 md:p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs md:text-sm font-medium text-gray-600 mb-1">Warehouse Products</p>
+                <p className="text-xl md:text-2xl font-semibold text-gray-900">
+                  {stats.totalWarehouseProducts}
+                </p>
+              </div>
+              <div className="text-3xl md:text-4xl">🏪</div>
+            </div>
+          </div>
+
+          {/* Short Inventory */}
+          <div className="regal-card p-3 md:p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs md:text-sm font-medium text-gray-600 mb-1">Short Inventory</p>
+                <p className="text-xl md:text-2xl font-semibold text-red-600">
+                  {stats.shortInventory}
+                </p>
+              </div>
+              <div className="text-3xl md:text-4xl">📦</div>
+            </div>
+          </div>
+
+          {/* Low Warehouse Stock */}
+          <div className="regal-card p-3 md:p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs md:text-sm font-medium text-gray-600 mb-1">Low Warehouse Stock</p>
+                <p className="text-xl md:text-2xl font-semibold text-orange-600">
+                  {stats.lowWarehouseStock}
+                </p>
+              </div>
+              <div className="text-3xl md:text-4xl">⚠️</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Middle Row - User Card */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4 md:gap-6 mb-4 md:mb-6">
+          {/* User */}
+          <div className="regal-card p-3 md:p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs md:text-sm font-medium text-gray-600 mb-1">User</p>
+                <p className="text-lg md:text-xl font-semibold text-gray-900">Warehouse User</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {stats.userRole}
+                </p>
+              </div>
+              <div className="text-3xl md:text-4xl">👤</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default WarehouseDashboardPage;

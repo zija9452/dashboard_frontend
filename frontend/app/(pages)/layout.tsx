@@ -39,7 +39,6 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
         <PageHamburgerButton sidebarOpen={sidebarOpen} onToggle={toggleSidebar} />
         <SidebarClientWrapper />
 
-          {/* Desktop Sidebar */}
           <div
             id="desktop-sidebar"
             className={`fixed inset-y-0 z-30 border-r border-gray-200 border-b bg-white shadow-lg w-64 flex flex-col transition-transform duration-300 ease-in-out ${
@@ -54,7 +53,7 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
               </div></Link>
 
               <div className="mt-5 flex-1 flex flex-col overflow-hidden">
-                <nav className="h-[70%] overflow-y-auto px-2">
+                <nav className="h-[60%] overflow-y-auto px-2">
                   <SidebarLink href="/dashboard" className="text-base py-3 border-b border-gray-200">
                     Dashboard
                   </SidebarLink>

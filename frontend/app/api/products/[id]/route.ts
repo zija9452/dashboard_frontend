@@ -9,6 +9,58 @@ export async function GET(
     const cookieHeader = request.headers.get('cookie') || '';
     const { id } = await params;
 
+    // Handle "viewproduct" route - forward to correct backend endpoint
+    if (id === 'viewproduct') {
+      const url = new URL(request.url);
+      const page = url.searchParams.get('page') || '1';
+      const limit = url.searchParams.get('limit') || '8';
+      const search_string = url.searchParams.get('search_string') || '';
+      const branches = url.searchParams.get('branches') || '';
+      const warehouse = url.searchParams.get('warehouse') || '';
+
+      const paramsObj = new URLSearchParams();
+      paramsObj.append('page', page);
+      paramsObj.append('limit', limit);
+      if (search_string) paramsObj.append('search_string', search_string);
+      if (branches) paramsObj.append('branches', branches);
+      if (warehouse) paramsObj.append('warehouse', warehouse);
+
+      const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/products/viewproduct?${paramsObj.toString()}`;
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (cookieHeader) {
+        headers['Cookie'] = cookieHeader;
+      }
+
+      const response = await fetch(backendUrl, {
+        method: 'GET',
+        headers,
+        cache: 'no-store',
+        signal: AbortSignal.timeout(120000),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = 'Backend request failed';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        return Response.json(
+          { error: errorMessage, status: response.status },
+          { status: response.status }
+        );
+      }
+
+      const data = await response.json();
+      return Response.json(data);
+    }
+
     const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/products/getproducts/${id}`;
 
     const headers: Record<string, string> = {

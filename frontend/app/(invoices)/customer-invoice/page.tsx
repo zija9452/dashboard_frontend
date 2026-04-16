@@ -13,6 +13,15 @@ interface Customer {
   cus_phone: string;
 }
 
+interface NewCustomerType {
+  cus_name: string;
+  cus_phone: string;
+  cus_cnic: string;
+  cus_address: string;
+  cus_sal_id_fk: string;
+  branch: string;
+}
+
 interface Salesman {
   sal_id: string;
   sal_name: string;
@@ -522,10 +531,29 @@ const CustomerInvoicePage: React.FC = () => {
     setCart(cart.filter(item => item.id !== id));
   };
 
-  // Add new customer
-  const handleAddCustomer = async () => {
-    if (!newCustomer.cus_name) {
-      showToast('Please enter customer name', 'error');
+ const validateCustomerForm = (customer: NewCustomerType) => {
+  const requiredFields = [
+    { key: 'cus_name', label: 'Customer Name' },
+    { key: 'cus_phone', label: 'Phone' },
+    { key: 'cus_cnic', label: 'CNIC' },
+    { key: 'cus_address', label: 'Address' },
+    { key: 'cus_sal_id_fk', label: 'Salesman' },
+  ];
+
+  const missing = requiredFields.filter(field => {
+    const value = customer[field.key as keyof NewCustomerType];
+    return !value || (typeof value === 'string' && !value.trim());
+  });
+
+  return missing;
+};
+
+const handleAddCustomer = async () => {
+  // 🔍 Validate all fields at once
+  const missingFields = validateCustomerForm(newCustomer);
+  
+  if (missingFields.length > 0) {
+    showToast('Please fill all required fields', 'error');
       return;
     }
 
@@ -534,11 +562,11 @@ const CustomerInvoicePage: React.FC = () => {
     try {
       const payload = {
         cus_name: newCustomer.cus_name,
-        cus_phone: newCustomer.cus_phone || '',
-        cus_cnic: newCustomer.cus_cnic || '',
-        cus_address: newCustomer.cus_address || '',
+        cus_phone: newCustomer.cus_phone,
+        cus_cnic: newCustomer.cus_cnic,
+        cus_address: newCustomer.cus_address,
         branch: newCustomer.branch,
-        cus_sal_id_fk: newCustomer.cus_sal_id_fk || '',
+        cus_sal_id_fk: newCustomer.cus_sal_id_fk,
       };
 
       const response = await fetch('/api/customerinvoice/Customers', {
@@ -581,7 +609,8 @@ const CustomerInvoicePage: React.FC = () => {
         });
       } else {
         const errorData = await response.json();
-        console.error('Add customer error:', errorData);
+        console.log("errordata", errorData.error)
+        console.error('Add customer error:', errorData.error);
         showToast(errorData.error || errorData.detail || 'Failed to add customer', 'error');
       }
     } catch (error) {
@@ -1224,7 +1253,7 @@ const CustomerInvoicePage: React.FC = () => {
           <div className="regal-card bg-white p-3 md:p-6 rounded-lg max-w-md w-full">
             <h3 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Add New Customer</h3>
 
-            <div className="space-y-3">
+            <form onSubmit={(e) => { e.preventDefault(); handleAddCustomer(); }} className="space-y-3">
               <div>
                 <label className="block text-sm font-medium mb-1">Customer Name *</label>
                 <input
@@ -1233,6 +1262,7 @@ const CustomerInvoicePage: React.FC = () => {
                   onChange={(e) => setNewCustomer({...newCustomer, cus_name: e.target.value})}
                   className="regal-input w-full"
                   placeholder="Enter customer name"
+                  required 
                 />
               </div>
 
@@ -1244,6 +1274,7 @@ const CustomerInvoicePage: React.FC = () => {
                   onChange={(e) => setNewCustomer({...newCustomer, cus_phone: e.target.value})}
                   className="regal-input w-full"
                   placeholder="Enter phone number"
+                  required
                 />
               </div>
 
@@ -1255,6 +1286,7 @@ const CustomerInvoicePage: React.FC = () => {
                   onChange={(e) => setNewCustomer({...newCustomer, cus_cnic: e.target.value})}
                   className="regal-input w-full"
                   placeholder="Enter CNIC"
+                  required
                 />
               </div>
 
@@ -1266,6 +1298,7 @@ const CustomerInvoicePage: React.FC = () => {
                   className="regal-input w-full"
                   placeholder="Enter address"
                   rows={3}
+                  required
                 />
               </div>
 
@@ -1295,10 +1328,11 @@ const CustomerInvoicePage: React.FC = () => {
                   <option value="European Sports Light House">European Sports Light House</option>
                 </select>
               </div>
-            </div>
+          
 
             <div className="flex gap-2 mt-6">
               <button
+              type='submit'
                 onClick={handleAddCustomer}
                 disabled={addingCustomer}
                 className={`regal-btn bg-regal-yellow text-regal-black flex-1 ${addingCustomer ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -1306,6 +1340,7 @@ const CustomerInvoicePage: React.FC = () => {
                 {addingCustomer ? 'Adding...' : 'Add Customer'}
               </button>
               <button
+              type='button'
                 onClick={() => {
                   setShowAddCustomerModal(false);
                   resetNewCustomerForm();
@@ -1316,6 +1351,7 @@ const CustomerInvoicePage: React.FC = () => {
                 Cancel
               </button>
             </div>
+            </form>
           </div>
         </div>
       )}

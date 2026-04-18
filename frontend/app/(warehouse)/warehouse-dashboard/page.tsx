@@ -164,13 +164,13 @@ const WarehouseDashboardPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={() => setShowReportModal(true)}
-                className="regal-btn bg-regal-yellow text-regal-black text-xs md:text-sm w-full sm:w-auto py-4"
+                className="regal-btn bg-regal-yellow text-regal-black text-sm md:text-base w-full sm:w-auto py-4"
               >
                 Warehouse Requirement Report
               </button>
               <button
                 onClick={() => setShowShopReportModal(true)}
-                className="regal-btn bg-regal-yellow text-regal-black text-xs md:text-sm w-full sm:w-auto py-4"
+                className="regal-btn bg-regal-yellow text-regal-black text-sm md:text-base w-full sm:w-auto py-4"
               >
                 Shop Requirement Report
               </button>

@@ -1,12 +1,11 @@
 import { NextRequest } from 'next/server';
 
-// POST /api/admin/deletevendor/[id] - Delete a vendor by ID
-export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// POST /api/warehouse-stock/requirement-report - Generate warehouse requirement report (PDF base64)
+export async function POST(request: NextRequest) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
-    const { id } = await params;
 
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/vendors/deletevendor/${id}`;
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/warehouse-stock/requirement-report`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -20,7 +19,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       method: 'POST',
       headers,
       cache: 'no-store',
-      signal: AbortSignal.timeout(120000), // 2 minute timeout
+      signal: AbortSignal.timeout(120000),
     });
 
     if (!response.ok) {
@@ -28,9 +27,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       let errorMessage = 'Backend request failed';
       try {
         const errorData = JSON.parse(errorText);
-        // Backend formats error as { "error": { "message": "..." } } 
-        // OR as standard FastAPI { "detail": "..." }
-        errorMessage = errorData.error?.message || errorData.detail || errorData.message || errorMessage;
+        errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         errorMessage = errorText || errorMessage;
       }
@@ -41,21 +38,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const data = await response.json();
-    return Response.json(data, {
-      status: response.status,
-    });
+    // Wrap the base64 string in an object expected by ReportModal
+    return Response.json({ pdf: data });
   } catch (error) {
-    console.error('Error deleting vendor:', error);
-
-    // Handle timeout errors
-    if (error instanceof Error && error.name === 'TimeoutError') {
-      return Response.json(
-        { error: 'Request timeout. Please try again.', type: 'TIMEOUT' },
-        { status: 504 }
-      );
-    }
-
-    // Handle other errors
+    console.error('Error generating warehouse requirement report:', error);
     return Response.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }

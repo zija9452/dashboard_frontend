@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import PageHeader from '@/components/ui/PageHeader';
+import ReportModal from '@/components/ui/ReportModal';
 
 interface DashboardStats {
   totalWarehouseProducts: number;
@@ -18,6 +19,8 @@ const WarehouseDashboardPage: React.FC = () => {
     lowWarehouseStock: 0,
     userRole: 'Warehouse',
   });
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showShopReportModal, setShowShopReportModal] = useState(false);
 
   useEffect(() => {
     fetchDashboardStats();
@@ -41,14 +44,14 @@ const WarehouseDashboardPage: React.FC = () => {
         const products = warehouseData.data || [];
         totalWarehouse = warehouseData.total || 0;
 
-        // Short Inventory: warehouse products where stock_level <= limited_qty
+        // Short Inventory: warehouse products where stock_level is 0 OR < limited_qty
         shortInventory = products.filter((p: any) => 
-          (p.stock_level || 0) <= (p.limited_qty || 0)
+          (p.stock_level || 0) === 0 || (p.stock_level || 0) < (p.limited_qty || 0)
         ).length;
 
-        // Low Warehouse Stock: warehouse products where warehouse_stock <= warehouse_limited_qty
+        // Low Warehouse Stock: warehouse products where warehouse_stock < warehouse_limited_qty
         lowWarehouseStock = products.filter((p: any) => 
-          (p.warehouse_stock || 0) <= (p.warehouse_limited_qty || 0)
+          (p.warehouse_stock || 0) < (p.warehouse_limited_qty || 0)
         ).length;
       }
 
@@ -67,7 +70,7 @@ const WarehouseDashboardPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="p-4">
+      <div className="p-2 py-5 pt-16 sm:pt-4">
         <PageHeader title="Warehouse Dashboard" />
 
         <div className="max-w-[100%] md:max-w-[85%] mx-auto">
@@ -91,7 +94,7 @@ const WarehouseDashboardPage: React.FC = () => {
   }
 
   return (
-    <div className="p-4">
+    <div className="p-2 py-5 pt-16 sm:pt-4">
       <PageHeader title="Warehouse Dashboard" />
 
       {/* Main Content - Same width as shop dashboard */}
@@ -115,7 +118,7 @@ const WarehouseDashboardPage: React.FC = () => {
           <div className="regal-card p-3 md:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs md:text-sm font-medium text-gray-600 mb-1">Short Inventory</p>
+                <p className="text-xs md:text-sm font-medium text-gray-600 mb-1">Short Shop Stock</p>
                 <p className="text-xl md:text-2xl font-semibold text-red-600">
                   {stats.shortInventory}
                 </p>
@@ -128,7 +131,7 @@ const WarehouseDashboardPage: React.FC = () => {
           <div className="regal-card p-3 md:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs md:text-sm font-medium text-gray-600 mb-1">Low Warehouse Stock</p>
+                <p className="text-xs md:text-sm font-medium text-gray-600 mb-1">Short Warehouse Stock</p>
                 <p className="text-xl md:text-2xl font-semibold text-orange-600">
                   {stats.lowWarehouseStock}
                 </p>
@@ -136,10 +139,11 @@ const WarehouseDashboardPage: React.FC = () => {
               <div className="text-3xl md:text-4xl">⚠️</div>
             </div>
           </div>
+
         </div>
 
-        {/* Middle Row - User Card */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4 md:gap-6 mb-4 md:mb-6">
+        {/* Middle Row - User Card & Quick Actions */}
+        <div className="grid grid-cols-1 gap-4 md:gap-6 mb-4 md:mb-6">
           {/* User */}
           <div className="regal-card p-3 md:p-4">
             <div className="flex items-center justify-between">
@@ -153,8 +157,41 @@ const WarehouseDashboardPage: React.FC = () => {
               <div className="text-3xl md:text-4xl">👤</div>
             </div>
           </div>
+
+          {/* Quick Actions */}
+          <div className="regal-card p-3 md:p-4">
+            <p className="text-xs md:text-sm font-medium text-gray-600 mb-3">Quick Actions</p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => setShowReportModal(true)}
+                className="regal-btn bg-regal-yellow text-regal-black text-xs md:text-sm w-full sm:w-auto py-4"
+              >
+                Warehouse Requirement Report
+              </button>
+              <button
+                onClick={() => setShowShopReportModal(true)}
+                className="regal-btn bg-regal-yellow text-regal-black text-xs md:text-sm w-full sm:w-auto py-4"
+              >
+                Shop Requirement Report
+              </button>
+            </div>
+          </div>
         </div>
       </div>
+
+      <ReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        title="Warehouse Requirement Report"
+        reportUrl="/api/warehouse-stock/requirement-report"
+      />
+
+      <ReportModal
+        isOpen={showShopReportModal}
+        onClose={() => setShowShopReportModal(false)}
+        title="Shop Requirement Report"
+        reportUrl="/api/warehouse-stock/shop-requirement-report"
+      />
     </div>
   );
 };

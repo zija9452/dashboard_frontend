@@ -528,6 +528,7 @@ const DashboardPage: React.FC = () => {
                 <p className="text-xl md:text-2xl font-semibold text-gray-900">
                   {dashboardData.outOfStock}
                 </p>
+                <p className="text-[10px] md:text-xs font-medium text-gray-600 mb-1">Products with zero inventory.</p>
               </div>
               <div className="text-3xl md:text-4xl">📦</div>
             </div>
@@ -544,6 +545,7 @@ const DashboardPage: React.FC = () => {
                 <p className="text-xl md:text-2xl font-semibold text-gray-900">
                   {dashboardData.shortStock}
                 </p>
+                <p className="text-[10px] md:text-xs font-medium text-gray-600 mb-1">Products with low inventory.</p>
               </div>
               <div className="text-3xl md:text-4xl">⚠️</div>
             </div>

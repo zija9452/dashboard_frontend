@@ -153,6 +153,18 @@ const ShopWarehouseProductsPage: React.FC = () => {
         setProducts(warehouseProducts);
         setTotalItems(data.total || 0);
         setTotalPagesFromApi(data.total_pages || 0);
+      } else {
+        // Handle non-ok responses
+        if (response.status === 504) {
+          showToast('Request timeout. Please try again.', 'error');
+        } else if (response.status === 500) {
+          showToast('Internal server error', 'error');
+        } else if (response.status === 401 || response.status === 403) {
+          showToast('Session expired. Please login again.', 'error');
+          setTimeout(() => router.push('/login'), 2000);
+        } else {
+          showToast('Failed to fetch warehouse products', 'error');
+        }
       }
     } catch (error: any) {
       console.error('Error fetching warehouse products:', error);
@@ -224,8 +236,8 @@ const ShopWarehouseProductsPage: React.FC = () => {
         limited_qty: Number(formData.limited_qty),
         brand_action: formData.brand_action,
         is_warehouse_product: true, // Auto-set to true
-        article_no: userRole === 'warehouse' ? formData.article_no : undefined,
-        warehouse_limited_qty: userRole === 'warehouse' ? formData.warehouse_limited_qty : undefined
+        article_no: userRole === 'warehouse' || userRole === 'admin' ? formData.article_no : undefined,
+        warehouse_limited_qty: userRole === 'warehouse' || userRole === 'admin' ? formData.warehouse_limited_qty : undefined
       };
 
       if (editingProduct) {
@@ -254,14 +266,27 @@ const ShopWarehouseProductsPage: React.FC = () => {
       resetForm();
       setSubmitting(false);
     } catch (error: any) {
+      // Extract error message from response
       let errorMessage = 'Failed to save warehouse product';
-
-      if (error?.response?.data?.detail) {
+      
+      // Backend returns error in different formats, check all possibilities
+      if (error?.response?.data?.detail?.error?.message) {
+        // Format: { detail: { error: { message: "..." } } }
+        errorMessage = error.response.data.detail.error.message;
+      } else if (error?.response?.data?.detail?.message) {
+        // Format: { detail: { message: "..." } }
+        errorMessage = error.response.data.detail.message;
+      } else if (error?.response?.data?.detail) {
+        // Format: { detail: "..." } (string)
         errorMessage = error.response.data.detail;
       } else if (error?.response?.data?.error) {
+        // Format: { error: "..." }
         errorMessage = error.response.data.error;
+      } else if (error?.response?.data?.message) {
+        // Format: { message: "..." }
+        errorMessage = error.response.data.message;
       }
-
+      
       showToast(errorMessage, 'error');
       setSubmitting(false);
     }
@@ -293,9 +318,11 @@ const ShopWarehouseProductsPage: React.FC = () => {
       setShowAddForm(true);
 
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching product details:', error);
-      showToast('Failed to load product details', 'error');
+      let errorMessage = 'Failed to load product details';
+      if (error?.response?.data?.detail) errorMessage = error.response.data.detail;
+      showToast(errorMessage, 'error');
     } finally {
       setEditingId(null);
     }
@@ -328,10 +355,12 @@ const ShopWarehouseProductsPage: React.FC = () => {
           timerProgressBar: true,
           showConfirmButton: false
         });
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error deleting product:', error);
         setDeletingId(null);
-        showToast('Failed to delete warehouse product', 'error');
+        let errorMessage = 'Failed to delete warehouse product';
+        if (error?.response?.data?.detail) errorMessage = error.response.data.detail;
+        showToast(errorMessage, 'error');
       }
     }
   };
@@ -342,7 +371,7 @@ const ShopWarehouseProductsPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-2 py-5">
       <PageHeader title="Warehouse Products" />
 
       {/* Controls Section */}
@@ -537,12 +566,13 @@ const ShopWarehouseProductsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Category</label>
+                <label className="block text-sm font-medium mb-1">Select Category *</label>
                 <select
                   name="category"
                   value={formData.category}
                   onChange={handleInputChange}
                   className="regal-input w-full"
+                  required
                 >
                   <option value="">Select Category</option>
                   {categories.map(cat => (
@@ -552,12 +582,13 @@ const ShopWarehouseProductsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Branch</label>
+                <label className="block text-sm font-medium mb-1">Select Branch *</label>
                 <select
                   name="branch"
                   value={formData.branch}
                   onChange={handleInputChange}
                   className="regal-input w-full"
+                  required
                 >
                   <option value="">Select Branch</option>
                   {branchOptions.map(branch => (
@@ -567,12 +598,13 @@ const ShopWarehouseProductsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Brand</label>
+                <label className="block text-sm font-medium mb-1">Select Brand *</label>
                 <select
                   name="brand_action"
                   value={formData.brand_action}
                   onChange={handleInputChange}
                   className="regal-input w-full"
+                  required
                 >
                   <option value="">Select Brand</option>
                   {brands.map(brand => (
@@ -604,6 +636,7 @@ const ShopWarehouseProductsPage: React.FC = () => {
                       placeholder="Enter warehouse limited qty"
                       step="1"
                       min="0"
+                      required
                     />
                   </div>
            
@@ -697,8 +730,12 @@ const ShopWarehouseProductsPage: React.FC = () => {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleEdit(product)}
-                          disabled={editingId === product.pro_id}
-                          className="text-blue-600 hover:text-blue-800 disabled:opacity-50"
+                          disabled={editingId === product.pro_id || deletingId === product.pro_id}
+                          className={`${
+                            editingId === product.pro_id || deletingId === product.pro_id
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-blue-600 hover:text-blue-800'
+                          }`}
                         >
                           {editingId === product.pro_id ? (
                             <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
@@ -712,7 +749,11 @@ const ShopWarehouseProductsPage: React.FC = () => {
                         <button
                           onClick={() => handleDelete(product.pro_id)}
                           disabled={deletingId === product.pro_id}
-                          className="text-red-600 hover:text-red-800 disabled:opacity-50"
+                          className={`${
+                            deletingId === product.pro_id
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-red-600 hover:text-red-800'
+                          }`}
                         >
                           {deletingId === product.pro_id ? (
                             <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">

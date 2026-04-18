@@ -108,7 +108,7 @@ const VendorPaymentHistoryPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-2 py-5 pt-14 sm-0">
       <PageHeader title="Vendor Payment History" />
 
       {/* Controls Section */}

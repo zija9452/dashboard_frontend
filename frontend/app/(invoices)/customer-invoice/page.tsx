@@ -1129,119 +1129,126 @@ const handleAddCustomer = async () => {
             <div className="regal-card p-3 md:p-6 sticky lg:top-4">
               <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Customer Details</h2>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
-                {/* Customer Name */}
-                <div>
-                  <label className="block text-sm font-medium mb-1">Customer Name</label>
-                  <div className="flex gap-2">
-                    <select
-                      value={selectedCustomer}
-                      onChange={(e) => setSelectedCustomer(e.target.value)}
+              <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
+                  {/* Customer Name */}
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Customer Name</label>
+                    <div className="flex gap-2">
+                      <select
+                        value={selectedCustomer}
+                        onChange={(e) => setSelectedCustomer(e.target.value)}
+                        className="regal-input w-full"
+                        required
+                      >
+                        <option value="">Select Customer</option>
+                        {customers.map((customer) => (
+                          <option key={customer.cus_id} value={customer.cus_id}>
+                            {customer.cus_name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddCustomerModal(true)}
+                        className="regal-btn bg-regal-yellow text-regal-black px-5"
+                        title="Add New Customer"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Team Name */}
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Team Name</label>
+                    <input
+                      type="text"
+                      value={teamName}
+                      onChange={(e) => setTeamName(e.target.value)}
                       className="regal-input w-full"
-                    >
-                      <option value="">Select Customer</option>
-                      {customers.map((customer) => (
-                        <option key={customer.cus_id} value={customer.cus_id}>
-                          {customer.cus_name}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={() => setShowAddCustomerModal(true)}
-                      className="regal-btn bg-regal-yellow text-regal-black px-5"
-                      title="Add New Customer"
-                    >
-                      +
-                    </button>
+                      placeholder="Team Name"
+                      required
+                    />
                   </div>
                 </div>
 
-                {/* Team Name */}
-                <div>
-                  <label className="block text-sm font-medium mb-1">Team Name</label>
-                  <input
-                    type="text"
-                    value={teamName}
-                    onChange={(e) => setTeamName(e.target.value)}
-                    className="regal-input w-full"
-                    placeholder="Team Name"
-                  />
-                </div>
-              </div>
+                {/* Amount Fields - 4 in one row */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-3 md:mb-4">
+                  {/* Total Amount */}
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Total Amount</label>
+                    <input
+                      type="number"
+                      value={totalAmount.toFixed(2)}
+                      className="regal-input w-full bg-gray-100 font-semibold"
+                      readOnly
+                    />
+                  </div>
 
-              {/* Amount Fields - 4 in one row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-3 md:mb-4">
-                {/* Total Amount */}
-                <div>
-                  <label className="block text-sm font-medium mb-1">Total Amount</label>
-                  <input
-                    type="number"
-                    value={totalAmount.toFixed(2)}
-                    className="regal-input w-full bg-gray-100 font-semibold"
-                    readOnly
-                  />
+                  {/* Amount Paid */}
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Amount Paid</label>
+                    <input
+                      type="number"
+                      value={amountPaid}
+                      onChange={(e) => setAmountPaid(e.target.value)}
+                      className="regal-input w-full"
+                      placeholder="Enter amount"
+                      min="0"
+                      step="1"
+                      required
+                    />
+                  </div>
+
+                  {/* Balance */}
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Balance</label>
+                    <input
+                      type="number"
+                      value={balance.toFixed(2)}
+                      className={`regal-input w-full font-semibold ${balance > 0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}
+                      readOnly
+                    />
+                  </div>
+
+                  {/* Payment Method */}
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Payment Method</label>
+                    <select
+                      value={paymentMethod}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                      className="regal-input w-full"
+                    >
+                      <option value="Cash">Cash</option>
+                      <option value="Easypaisa Zohaib">Easypaisa Zohaib</option>
+                      <option value="Easypaisa Yasir">Easypaisa Yasir</option>
+                      <option value="Faysal Bank">Faysal Bank</option>
+                      <option value="Credit">Credit</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
                 </div>
 
-                {/* Amount Paid */}
-                <div>
-                  <label className="block text-sm font-medium mb-1">Amount Paid</label>
-                  <input
-                    type="number"
-                    value={amountPaid}
-                    onChange={(e) => setAmountPaid(e.target.value)}
-                    className="regal-input w-full"
-                    placeholder="Enter amount (0 for credit)"
-                    min="0"
-                    step="1"
-                  />
-                </div>
-
-                {/* Balance */}
-                <div>
-                  <label className="block text-sm font-medium mb-1">Balance</label>
-                  <input
-                    type="number"
-                    value={balance.toFixed(2)}
-                    className={`regal-input w-full font-semibold ${balance > 0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}
-                    readOnly
-                  />
-                </div>
-
-                {/* Payment Method */}
-                <div>
-                  <label className="block text-sm font-medium mb-1">Payment Method</label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="regal-input w-full"
-                  >
-                    <option value="Cash">Cash</option>
-                    <option value="Easypaisa Zohaib">Easypaisa Zohaib</option>
-                    <option value="Easypaisa Yasir">Easypaisa Yasir</option>
-                    <option value="Faysal Bank">Faysal Bank</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Pay and Bill Button */}
-              <button
-                onClick={handleSubmit}
-                disabled={submitting}
-                className={`regal-btn bg-regal-yellow text-regal-black w-full py-3 text-lg font-semibold ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {submitting ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Processing...
-                  </span>
-                ) : (
-                  'Pay and Bill'
-                )}
-              </button>
+                {/* Pay and Bill Button */}
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className={`regal-btn bg-regal-yellow text-regal-black w-full py-3 text-lg font-semibold ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  {submitting ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Processing...
+                    </span>
+                  ) : (
+                    'Pay and Bill'
+                  )}
+                </button>
+              </form>
             </div>
           </div>
         </div>

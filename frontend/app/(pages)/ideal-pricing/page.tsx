@@ -193,7 +193,7 @@ const IdealPricingPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-2 py-5">
       <PageHeader title="Ideal Pricing" />
 
       {/* Controls Section */}
@@ -238,7 +238,7 @@ const IdealPricingPage: React.FC = () => {
       {/* Combinations Table */}
       {selectedCategory && combinations.length > 0 && (
         <div className="border-0 p-0">
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex justify-between gap-2 items-center mb-4">
             <div>
               <h3 className="text-lg font-semibold text-regal-black">
                 {selectedCategory.main_category} - Ideal Prices

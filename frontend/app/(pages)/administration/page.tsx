@@ -46,6 +46,7 @@ const AdministrationPage: React.FC = () => {
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false); // Prevent duplicate submissions
+  const [deletingId, setDeletingId] = useState<string | null>(null); // Track which user is being deleted
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -387,6 +388,7 @@ const AdministrationPage: React.FC = () => {
     });
 
     if (result.isConfirmed) {
+      setDeletingId(id);
       try {
         console.log('Deleting user with id:', id);
 
@@ -440,6 +442,7 @@ const AdministrationPage: React.FC = () => {
         // Refresh user list from backend
         await fetchAdminUsers();
 
+        setDeletingId(null);
         // Show success alert
         Swal.fire({
           title: 'Deleted!',
@@ -451,6 +454,7 @@ const AdministrationPage: React.FC = () => {
         });
       } catch (error) {
         console.error('Error deleting user:', error);
+        setDeletingId(null);
         const errorMessage = (error as Error).message;
 
         // Check if it's an authentication issue
@@ -494,7 +498,7 @@ const AdministrationPage: React.FC = () => {
             <input
               id="searchInput"
               type="text"
-              placeholder="Search admins..."
+              placeholder="Search users..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="regal-input w-full pl-10 pr-4 py-2"
@@ -581,7 +585,7 @@ const AdministrationPage: React.FC = () => {
                     ...prev,
                     role_id: e.target.value
                   }))}
-                  className="regal-select w-full regal-input"
+                  className="regal-select w-full regal-input !py-[11px]"
                 >
                   <option value="admin">Admin</option>
                   <option value="cashier">Cashier</option>
@@ -613,16 +617,18 @@ const AdministrationPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Branch</label>
-                <input
-                  type="text"
+                <select
                   name="branch"
                   value={formData.branch}
                   onChange={handleInputChange}
-                  className="regal-input w-full"
-                  placeholder="Enter branch"
-                />
+                  className="regal-select w-full regal-input !py-[11px]"
+                  required
+                >
+                  <option value="">Select Branch</option>
+                  <option value="European Sports Light House">European Sports Light House</option>
+                </select>
               </div>
-              <div className="md:col-span-2">
+              <div>
                 <label className="block text-sm font-medium mb-1">Address</label>
                 <input
                   type="text"
@@ -721,15 +727,32 @@ const AdministrationPage: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <button
                         onClick={() => handleEdit(user)}
-                        className="text-indigo-600 hover:text-indigo-900 mr-3"
+                        disabled={deletingId === user.id}
+                        className={`mr-3 ${
+                          deletingId === user.id
+                            ? 'text-gray-400 cursor-not-allowed'
+                            : 'text-indigo-600 hover:text-indigo-900'
+                        }`}
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDelete(user.id)}
-                        className="text-red-600 hover:text-red-900"
+                        disabled={deletingId === user.id}
+                        className={`${
+                          deletingId === user.id
+                            ? 'text-gray-400 cursor-not-allowed'
+                            : 'text-red-600 hover:text-red-900'
+                        }`}
                       >
-                        Delete
+                        {deletingId === user.id ? (
+                          <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                        ) : (
+                          'Delete'
+                        )}
                       </button>
                     </td>
                   </tr>

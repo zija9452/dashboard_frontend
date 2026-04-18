@@ -45,12 +45,22 @@ export async function POST(request: NextRequest) {
 
       return response;
     } else {
-      // Return the error from the backend
-      const errorData = await backendResponse.json().catch(() => ({ error: 'Login failed' }));
-      return NextResponse.json(errorData, { status: backendResponse.status });
+      // Standardized error handling for non-ok responses
+      const errorText = await backendResponse.text();
+      let errorMessage = 'Login failed';
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.error?.message || errorData.detail || errorData.message || errorMessage;
+      } catch {
+        errorMessage = errorText || errorMessage;
+      }
+      return Response.json(
+        { error: errorMessage, status: backendResponse.status },
+        { status: backendResponse.status }
+      );
     }
   } catch (error) {
     console.error('Login error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return Response.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

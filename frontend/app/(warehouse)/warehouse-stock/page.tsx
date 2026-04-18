@@ -5,6 +5,8 @@ import { useToast } from '@/components/ui/Toast';
 import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import PageHeader from '@/components/ui/PageHeader';
+import ReportModal from '@/components/ui/ReportModal';
+import DateRangeModal from '@/components/ui/DateRangeModal';
 import { warehouseStockApi, StockItem } from '@/lib/api/warehouse-stock';
 
 const WarehouseStockPage: React.FC = () => {
@@ -16,10 +18,13 @@ const WarehouseStockPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(8);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
   const totalPages = Math.min(totalPagesFromApi, 5);
+
+  const [showStockInReportModal, setShowStockInReportModal] = useState(false);
+  const [stockInReportUrl, setStockInReportUrl] = useState<string>('');
 
   // Fetch stock on page change or search term change
   useEffect(() => {
@@ -46,8 +51,16 @@ const WarehouseStockPage: React.FC = () => {
     setCurrentPage(page);
   };
 
+  // Handle stock-in report generation
+  const handleStockInReport = async (dateFrom: string, dateTo: string) => {
+    // Build URL with date params for warehouse stock-in report
+    const reportUrl = `/api/warehouse-stock/stockinreport?date_from=${dateFrom}&date_to=${dateTo}`;
+    setStockInReportUrl(reportUrl);
+    setShowStockInReportModal(false);
+  };
+
   return (
-    <div className="p-6">
+    <div className="p-2 py-5">
       <PageHeader title="Warehouse Stock" />
 
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
@@ -58,6 +71,13 @@ const WarehouseStockPage: React.FC = () => {
             className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
           >
             + Stock In
+          </button>
+
+          <button
+            onClick={() => setShowStockInReportModal(true)}
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+          >
+            Stock In Report
           </button>
 
           <button
@@ -181,6 +201,25 @@ const WarehouseStockPage: React.FC = () => {
           />
         </div>
       )}
+
+      {/* Stock In Report Date Range Modal */}
+      <DateRangeModal
+        isOpen={showStockInReportModal}
+        onClose={() => setShowStockInReportModal(false)}
+        onSubmit={handleStockInReport}
+        title="Warehouse Stock In Report"
+      />
+
+      {/* Stock In Report PDF Display Modal */}
+      <ReportModal
+        isOpen={!!stockInReportUrl}
+        onClose={() => {
+          setStockInReportUrl('');
+          setShowStockInReportModal(true);
+        }}
+        title="Warehouse Stock In Report"
+        reportUrl={stockInReportUrl}
+      />
     </div>
   );
 };

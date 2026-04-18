@@ -81,12 +81,12 @@ const Pagination: React.FC<PaginationProps> = ({
 
   return (
     <div className="regal-pagination">
-      <div className="flex items-center justify-center space-x-2 w-full">
+      <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-2 w-full">
         {/* First button */}
         <Link
           href={getPageHref(1)}
           onClick={() => handlePageChange(1)}
-          className={`regal-pagination-prev-next ${
+          className={`regal-pagination-prev-next px-2 sm:px-4 ${
             currentPage === 1
               ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
               : 'bg-white text-gray-700 hover:bg-gray-50'
@@ -100,7 +100,7 @@ const Pagination: React.FC<PaginationProps> = ({
         <Link
           href={getPageHref(Math.max(1, currentPage - 1))}
           onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-          className={`regal-pagination-prev-next ${
+          className={`regal-pagination-prev-next px-2 sm:px-4 ${
             currentPage === 1
               ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
               : 'bg-white text-gray-700 hover:bg-gray-50'
@@ -114,7 +114,7 @@ const Pagination: React.FC<PaginationProps> = ({
         {pageNumbers.map((page, index) => (
           <React.Fragment key={index}>
             {page === '...' ? (
-              <span className="px-3 py-1">...</span>
+              <span className="px-2 sm:px-3 py-1">...</span>
             ) : (
               <Link
                 href={getPageHref(page as number)}
@@ -123,7 +123,7 @@ const Pagination: React.FC<PaginationProps> = ({
                   currentPage === page
                     ? 'regal-pagination-current'
                     : 'regal-pagination-default'
-                }`}
+                } px-3 sm:px-4`}
                 aria-current={currentPage === page ? 'page' : undefined}
               >
                 {page}
@@ -136,7 +136,7 @@ const Pagination: React.FC<PaginationProps> = ({
         <Link
           href={getPageHref(Math.min(totalPages, currentPage + 1))}
           onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
-          className={`regal-pagination-prev-next ${
+          className={`regal-pagination-prev-next px-2 sm:px-4 ${
             currentPage === totalPages
               ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
               : 'bg-white text-gray-700 hover:bg-gray-50'
@@ -150,7 +150,7 @@ const Pagination: React.FC<PaginationProps> = ({
         <Link
           href={getPageHref(totalPages)}
           onClick={() => handlePageChange(totalPages)}
-          className={`regal-pagination-prev-next ${
+          className={`regal-pagination-prev-next px-2 sm:px-4 ${
             currentPage === totalPages
               ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
               : 'bg-white text-gray-700 hover:bg-gray-50'

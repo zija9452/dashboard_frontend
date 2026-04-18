@@ -172,11 +172,11 @@ const ViewCustomerInvoicePage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="p-4">
+      <div className="p-2 py-5">
         <PageHeader title="Invoice Details" />
         <div className="text-center py-12">
           <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded mb-4"></div>
+            <div className="h-12 bg-gray-200 rounded mb-4"></div>
             <div className="h-64 bg-gray-200 rounded"></div>
           </div>
         </div>
@@ -196,7 +196,7 @@ const ViewCustomerInvoicePage: React.FC = () => {
   }
 
   return (
-    <div className="p-4 bg-white">
+    <div className="p-2 py-5 bg-white">
       <PageHeader title="Invoice Details" />
 
       {/* Back Button and Order ID */}
@@ -208,28 +208,28 @@ const ViewCustomerInvoicePage: React.FC = () => {
           ← Back to Orders
         </button>
         <div className="text-right">
-          <h2 className="text-3xl font-bold text-gray-900">{invoice.invoice_no}</h2>
+          <h2 className="md:text-3xl text-xl font-bold text-gray-900">{invoice.invoice_no}</h2>
           <p className="text-sm text-gray-500">ORDER ID</p>
         </div>
       </div>
 
       {/* Invoice Items */}
-      <div className="regal-card">
+      <div className="">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Order Items</h3>
         
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-100">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ORDER ID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product Details</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Images</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subtotal</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Discount</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">ORDER ID</th>
+                <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Product Details</th>
+                <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Images</th>
+                <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
+                <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
+                <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Subtotal</th>
+                <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Discount</th>
+                <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">

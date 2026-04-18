@@ -493,11 +493,11 @@ const RefundPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-2 py-5">
       <PageHeader title="Refund" />
 
       {/* Controls Section */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row justify-between gap-4 mb-6">
         {/* Left side - Search by Order ID */}
         <div className="w-full sm:w-auto flex items-center gap-2">
           <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
@@ -523,7 +523,7 @@ const RefundPage: React.FC = () => {
         </div>
 
         {/* Right side - Date filter and View Refunded button */}
-        <div className="w-full sm:w-auto flex items-center gap-2">
+        <div className="w-full sm:w-auto flex items-center gap-1">
           <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
             Date:
           </label>

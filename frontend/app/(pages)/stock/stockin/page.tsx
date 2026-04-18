@@ -808,7 +808,7 @@ const StockInPage: React.FC = () => {
 
       {/* Product Details Form */}
       {selectedProduct && (
-        <div className="regal-card mb-6">
+        <div className="regal-card mb-6 !p-2 md:!p-6">
           <h3 className="text-lg font-semibold mb-4">Product Details</h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -932,7 +932,7 @@ const StockInPage: React.FC = () => {
 
       {/* Temporary Items Table */}
       {stockInItems.length > 0 && (
-        <div className="regal-card mb-6">
+        <div className="regal-card mb-6 !p-2 md:!p-6">
           <h3 className="text-lg font-semibold mb-4">Items to Stock In ({stockInItems.length})</h3>
           
           <div className="overflow-x-auto">
@@ -956,10 +956,10 @@ const StockInPage: React.FC = () => {
                       <div className="text-xs text-gray-500">{item.barcode}</div>
                     </td>
                     <td className="px-4 py-3">{item.vendor_name}</td>
-                    <td className="px-4 py-3 text-right">{item.quantity}</td>
-                    <td className="px-4 py-3 text-right">Rs. {item.cost_price.toFixed(2)}</td>
-                    <td className="px-4 py-3 text-right">Rs. {item.selling_price.toFixed(2)}</td>
-                    <td className="px-4 py-3 text-right">Rs. {item.total_cost.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-center">{item.quantity}</td>
+                    <td className="px-4 py-3 text-right">Rs. {item.cost_price}</td>
+                    <td className="px-4 py-3 text-right">Rs. {item.selling_price}</td>
+                    <td className="px-4 py-3 text-right">Rs. {item.total_cost}</td>
                     <td className="px-4 py-3 text-center">
                       <button
                         onClick={() => handleRemoveItem(index)}
@@ -983,24 +983,24 @@ const StockInPage: React.FC = () => {
             </table>
           </div>
 
-          <div className="mt-4 flex gap-2">
+          <div className="mt-4 flex flex-wrap-reverse gap-2">
             <button
               onClick={handlePrintBarcodesOnly}
               disabled={submitting || stockInItems.length === 0}
-              className="regal-btn bg-orange text-black disabled:opacity-50 disabled:cursor-not-allowed"
+              className="regal-btn bg-orange text-black disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
             >
               {submitting ? 'Processing...' : 'Print Barcodes'}
             </button>
             <button
               onClick={handleStockInWithBarcode}
               disabled={submitting || stockInItems.length === 0}
-              className="regal-btn bg-green-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              className="regal-btn bg-green-600 text-white disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
             >
               {submitting ? 'Processing...' : 'Stock In + Print Barcodes'}
             </button>
             <button
               onClick={() => setStockInItems([])}
-              className="regal-btn bg-gray-300 text-black"
+              className="regal-btn bg-gray-300 text-black w-full sm:w-auto"
             >
               Clear All
             </button>

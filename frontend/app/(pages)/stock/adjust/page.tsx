@@ -169,12 +169,12 @@ const AdjustStockPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-2 py-5">
       <PageHeader title="Adjust Stock" />
 
       {/* Barcode Scanner Input */}
-      <div className="regal-card mb-6">
-        <h3 className="text-lg font-semibold mb-4">Search Product by Barcode</h3>
+      <div className="regal-card mb-6 md:p-4 p-2">
+        <h3 className="text-lg font-semibold md:mb-4 mb-2">Search Product by Barcode</h3>
         <form onSubmit={handleBarcodeSubmit} className="flex gap-4">
           <input
             ref={barcodeInputRef}
@@ -196,7 +196,7 @@ const AdjustStockPage: React.FC = () => {
 
       {/* Adjustment Items Table */}
       {adjustItems.length > 0 && (
-        <div className="regal-card mb-6">
+        <div className="regal-card mb-6 !p-2 md:!p-6">
           <h3 className="text-lg font-semibold mb-4">Products to Adjust ({adjustItems.length})</h3>
 
           <div className="overflow-x-auto">
@@ -267,11 +267,11 @@ const AdjustStockPage: React.FC = () => {
             </table>
           </div>
 
-          <div className="mt-4 flex gap-2">
+          <div className="mt-4 flex flex-wrap-reverse gap-2">
             <button
               onClick={handleSubmit}
               disabled={submitting || adjustItems.length === 0}
-              className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed"
+              className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
             >
               {submitting ? 'Processing...' : 'Submit Adjustments'}
             </button>

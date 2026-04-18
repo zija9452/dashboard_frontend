@@ -27,6 +27,7 @@ const CustomerCategoryPage: React.FC = () => {
   const [categories, setCategories] = useState<CustomerCategory[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null); // Track which category is being deleted
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<CustomerCategory | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -257,6 +258,7 @@ const CustomerCategoryPage: React.FC = () => {
     });
 
     if (result.isConfirmed) {
+      setDeletingId(id);
       try {
         const response = await fetch(`/api/customer-category/${id}`, {
           method: 'DELETE',
@@ -280,6 +282,8 @@ const CustomerCategoryPage: React.FC = () => {
       } catch (error) {
         console.error('Error deleting customer category:', error);
         showToast('Failed to delete customer category', 'error');
+      } finally {
+        setDeletingId(null);
       }
     }
   };
@@ -290,11 +294,11 @@ const CustomerCategoryPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-2 py-5">
       <PageHeader title="Customer Category Management" />
 
       {/* Controls Section */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row justify-between gap-4 mb-6">
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => {
@@ -524,18 +528,35 @@ const CustomerCategoryPage: React.FC = () => {
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {new Date(category.created_at).toLocaleDateString()}
                     </td>
-                    <td className="px-6 py-4 text-sm">
+                    <td className="px-6 py-4 text-sm flex">
                       <button
                         onClick={() => handleEdit(category)}
-                        className="text-blue-600 hover:text-blue-900 mr-3"
+                        disabled={deletingId === category.id}
+                        className={`mr-3 ${
+                          deletingId === category.id
+                            ? 'text-gray-400 cursor-not-allowed'
+                            : 'text-blue-600 hover:text-blue-900'
+                        }`}
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDelete(category.id)}
-                        className="text-red-600 hover:text-red-900"
+                        disabled={deletingId === category.id}
+                        className={`${
+                          deletingId === category.id
+                            ? 'text-gray-400 cursor-not-allowed'
+                            : 'text-red-600 hover:text-red-900'
+                        }`}
                       >
-                        Delete
+                        {deletingId === category.id ? (
+                          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                        ) : (
+                          'Delete'
+                        )}
                       </button>
                     </td>
                   </tr>

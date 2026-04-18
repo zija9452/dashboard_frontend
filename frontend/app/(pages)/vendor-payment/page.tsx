@@ -217,11 +217,11 @@ const VendorPaymentPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4 bg-white min-h-screen">
+    <div className="p-2 py-5 bg-white min-h-screen">
       <PageHeader title="Vendor Payment" />
 
       {/* Main Container - 80% width, centered */}
-      <div className="max-w-[60%] mx-auto mt-6 rounded-lg shadow-lg p-6">
+      <div className="md:max-w-[60%] max-w-full mx-auto mt-6 rounded-lg shadow-lg p-2 py-5">
         <form onSubmit={handleSubmit} className="space-y-5">
 
           {/* Payment Type Dropdown */}

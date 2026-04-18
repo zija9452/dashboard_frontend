@@ -1,12 +1,23 @@
 import { NextRequest } from 'next/server';
 
-// POST /api/admin/deletevendor/[id] - Delete a vendor by ID
-export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// POST /api/warehouse-stock/stockinreport - Generate date-wise warehouse stock-in report (PDF base64)
+export async function POST(request: NextRequest) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
-    const { id } = await params;
+    
+    // Extract date_from and date_to from query params
+    const searchParams = request.nextUrl.searchParams;
+    const dateFrom = searchParams.get('date_from');
+    const dateTo = searchParams.get('date_to');
 
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/vendors/deletevendor/${id}`;
+    if (!dateFrom || !dateTo) {
+      return Response.json(
+        { error: 'date_from and date_to are required' },
+        { status: 400 }
+      );
+    }
+
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/stock/warehousestockinreport?date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -20,7 +31,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       method: 'POST',
       headers,
       cache: 'no-store',
-      signal: AbortSignal.timeout(120000), // 2 minute timeout
+      signal: AbortSignal.timeout(120000),
     });
 
     if (!response.ok) {
@@ -28,9 +39,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       let errorMessage = 'Backend request failed';
       try {
         const errorData = JSON.parse(errorText);
-        // Backend formats error as { "error": { "message": "..." } } 
-        // OR as standard FastAPI { "detail": "..." }
-        errorMessage = errorData.error?.message || errorData.detail || errorData.message || errorMessage;
+        errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         errorMessage = errorText || errorMessage;
       }
@@ -41,21 +50,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const data = await response.json();
-    return Response.json(data, {
-      status: response.status,
-    });
+    return Response.json({ pdf: data });
   } catch (error) {
-    console.error('Error deleting vendor:', error);
-
-    // Handle timeout errors
-    if (error instanceof Error && error.name === 'TimeoutError') {
-      return Response.json(
-        { error: 'Request timeout. Please try again.', type: 'TIMEOUT' },
-        { status: 504 }
-      );
-    }
-
-    // Handle other errors
+    console.error('Error generating warehouse stock-in report:', error);
     return Response.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }

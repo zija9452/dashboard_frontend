@@ -60,7 +60,7 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-regal-yellow/10 via-white to-regal-black/10 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
+      <div className="max-w-md w-full space-y-4">
         {/* Logo and Header */}
         <div className="text-center">
           <div className="mx-auto h-16 w-16 rounded-full bg-gradient-to-r from-regal-orange to-regal-yellow flex items-center justify-center">
@@ -75,7 +75,7 @@ const LoginPage: React.FC = () => {
         </div>
 
         {/* Login Form */}
-        <div className="mt-8 bg-white shadow-xl rounded-2xl p-8 border border-regal-yellow/20">
+        <div className="mt-8 bg-white shadow-xl rounded-2xl p-4 py-6 border border-regal-yellow/20">
           <form className="space-y-6" onSubmit={handleSubmit}>
             {error && (
               <div className="rounded-lg bg-red-50 p-4 border border-red-200">

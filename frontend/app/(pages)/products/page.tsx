@@ -980,14 +980,16 @@ const ProductsPage: React.FC = () => {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          totalItems={totalItems}
-          pageSize={pageSize}
-          baseUrl="/products"
-          onPageChange={handlePageChange}
-        />
+        <div className="mt-6">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            baseUrl="/products"
+            onPageChange={handlePageChange}
+          />
+        </div>
       )}
 
       {/* Image Modal */}

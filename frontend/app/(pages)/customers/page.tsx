@@ -36,6 +36,7 @@ const CustomersPage: React.FC = () => {
   const [salesmans, setSalesmans] = useState<Salesman[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false); // Prevent duplicate submissions
+  const [deletingId, setDeletingId] = useState<string | null>(null); // Track which customer is being deleted
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -319,6 +320,7 @@ const CustomersPage: React.FC = () => {
     });
 
     if (result.isConfirmed) {
+      setDeletingId(id);
       try {
         const response = await fetch('/api/customers/' + id, {
           method: 'DELETE',
@@ -335,11 +337,14 @@ const CustomersPage: React.FC = () => {
             showConfirmButton: false
           });
           await fetchCustomers();
+          setDeletingId(null);
         } else {
           const errorData = await response.json();
+          setDeletingId(null);
           throw new Error(errorData.error || errorData.detail || 'Failed to delete customer');
         }
       } catch (error: any) {
+        setDeletingId(null);
         console.error('Error deleting customer:', error);
         showToast(error.message || 'Failed to delete customer', 'error');
       }
@@ -482,6 +487,7 @@ const CustomersPage: React.FC = () => {
                   value={formData.cus_sal_id_fk}
                   onChange={handleInputChange}
                   className="regal-input w-full"
+                  required
                 >
                   <option value="">Select Salesman</option>
                   {salesmans.map((salesman) => (
@@ -499,6 +505,7 @@ const CustomersPage: React.FC = () => {
                   value={formData.branch}
                   onChange={handleInputChange}
                   className="regal-input w-full"
+                  required
                 >
                   <option value="">Select Branch</option>
                   {branchOptions.map((branch) => (
@@ -579,15 +586,32 @@ const CustomersPage: React.FC = () => {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleEdit(customer)}
-                          className="text-blue-600 hover:text-blue-800"
+                          disabled={deletingId === customer.cus_id}
+                          className={`${
+                            deletingId === customer.cus_id
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-blue-600 hover:text-blue-800'
+                          }`}
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => handleDelete(customer.cus_id)}
-                          className="text-red-600 hover:text-red-800"
+                          disabled={deletingId === customer.cus_id}
+                          className={`${
+                            deletingId === customer.cus_id
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-red-600 hover:text-red-800'
+                          }`}
                         >
-                          Delete
+                          {deletingId === customer.cus_id ? (
+                            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          ) : (
+                            'Delete'
+                          )}
                         </button>
                       </div>
                     </td>

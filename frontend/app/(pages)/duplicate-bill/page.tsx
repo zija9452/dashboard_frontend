@@ -186,7 +186,7 @@ const DuplicateBillPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4 bg-white min-h-screen">
+    <div className="p-2 py-5 bg-white min-h-screen">
       <PageHeader title="Duplicate Bill" />
 
       {/* Search Bar */}

@@ -21,6 +21,7 @@ const CategoryPage: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false); // Prevent duplicate submissions
+  const [deletingId, setDeletingId] = useState<string | null>(null); // Track which category is being deleted
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -48,7 +49,7 @@ const CategoryPage: React.FC = () => {
       params.append('page', currentPage.toString());
       params.append('limit', pageSize.toString());
       if (searchTerm) {
-        params.append('branch', searchTerm);
+        params.append('search', searchTerm);
       }
 
       const response = await fetch(`/api/category/?${params.toString()}`, {
@@ -194,6 +195,7 @@ const CategoryPage: React.FC = () => {
     });
 
     if (result.isConfirmed) {
+      setDeletingId(id);
       try {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/category/${id}`,
@@ -208,6 +210,7 @@ const CategoryPage: React.FC = () => {
         }
 
         setCategories(categories.filter(c => c.id !== id));
+        setDeletingId(null);
 
         Swal.fire({
           title: 'Deleted!',
@@ -218,6 +221,7 @@ const CategoryPage: React.FC = () => {
           showConfirmButton: false
         });
       } catch (error) {
+        setDeletingId(null);
         console.error('Error deleting category:', error);
         showToast('Failed to delete category', 'error');
       }
@@ -234,7 +238,7 @@ const CategoryPage: React.FC = () => {
       <PageHeader title="Product Category" />
 
       {/* Controls Section */}
-      <div className="flex flex-col sm:flex-row justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6">
         {/* Left side - Add New and Back button */}
         <div className="flex flex-wrap gap-2">
           <button
@@ -256,14 +260,20 @@ const CategoryPage: React.FC = () => {
         </div>
 
         {/* Right side - Search */}
-        <div className="w-full sm:w-auto flex gap-2">
-          <div className="relative">
+        <div className="flex gap-2 w-full sm:w-auto">
+          <div className="relative flex-1">
             <input
               id="categorySearchInput"
               type="text"
               placeholder="Search categories..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  setCurrentPage(1);
+                }
+              }}
               className="regal-input w-full pl-10 pr-4 py-2"
             />
             <svg
@@ -279,10 +289,11 @@ const CategoryPage: React.FC = () => {
             className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
             onClick={() => {
               setSearchTerm('');
+              setCurrentPage(1);
               document.getElementById('categorySearchInput')?.focus();
             }}
           >
-            Search
+            Clear
           </button>
         </div>
       </div>
@@ -374,15 +385,32 @@ const CategoryPage: React.FC = () => {
                     <td className="px-6 py-4 text-sm">
                       <button
                         onClick={() => handleEdit(category)}
-                        className="text-blue-600 hover:text-blue-900 mr-3"
+                        disabled={deletingId === category.id}
+                        className={`${
+                          deletingId === category.id
+                            ? 'text-gray-400 cursor-not-allowed'
+                            : 'text-blue-600 hover:text-blue-900 mr-3'
+                        }`}
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDelete(category.id)}
-                        className="text-red-600 hover:text-red-900"
+                        disabled={deletingId === category.id}
+                        className={`${
+                          deletingId === category.id
+                            ? 'text-gray-400 cursor-not-allowed'
+                            : 'text-red-600 hover:text-red-900'
+                        }`}
                       >
-                        Delete
+                        {deletingId === category.id ? (
+                          <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                        ) : (
+                          'Delete'
+                        )}
                       </button>
                     </td>
                   </tr>

@@ -9,13 +9,12 @@ import PageHamburgerButton from "@/components/PageHamburgerButton";
 import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-
 function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const { sidebarOpen, toggleSidebar } = useSidebar();
 
   useEffect(() => {
-    // Fetch user role from session
     const fetchUserRole = async () => {
       try {
         const response = await fetch('/api/auth/session', {
@@ -23,18 +22,35 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
         });
         if (response.ok) {
           const data = await response.json();
-          setUserRole(data.user?.role || null);
+          const role = data.user?.role || null;
+          setUserRole(role);
+
+          if (role === 'warehouse') {
+            window.location.href = '/warehouse-dashboard';
+            return;
+          }
         }
+        setLoading(false);
       } catch (error) {
         console.error('Error fetching user role:', error);
+        setLoading(false);
       }
     };
 
     fetchUserRole();
   }, []);
 
+  if (loading || userRole === 'warehouse') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-regal-yellow"></div>
+      </div>
+    );
+  }
+
   return (
     <ToastProvider>
+...
       <div className="flex  bg-white">
         <PageHamburgerButton sidebarOpen={sidebarOpen} onToggle={toggleSidebar} />
         <SidebarClientWrapper />

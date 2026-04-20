@@ -19,8 +19,15 @@ export async function fetchWithAuth(
 
   const response = await fetch(url, defaultOptions);
 
-  // Check for 401 Unauthorized
-  if (response.status === 401) {
+  // Check for 401 Unauthorized or 403 Forbidden
+  if (response.status === 401 || response.status === 403) {
+    // Attempt to call logout API to clear server-side cookies
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    } catch (e) {
+      // Ignore errors if logout fails
+    }
+    
     // Clear any local storage if needed
     localStorage.clear();
     

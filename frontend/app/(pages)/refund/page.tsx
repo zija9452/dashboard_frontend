@@ -447,7 +447,6 @@ const RefundPage: React.FC = () => {
           errorData?.message ||
           (typeof errorData === 'string' ? errorData : 'Backend request failed');
         
-        console.log('Extracted error message:', errorMessage);
         
         // Check if it's an already refunded error
         if (errorMessage.includes('Already refunded') || errorMessage.includes('already been fully refunded')) {

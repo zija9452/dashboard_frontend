@@ -107,11 +107,6 @@ export class ProductsApi {
 
     const result = response.data;
 
-    console.log('Backend response:', result);
-    console.log('Products on page:', result.data?.length || 0);
-    console.log('Total count:', result.total);
-    console.log('Total pages:', result.total_pages);
-
     // Check for error responses from backend
     if (result.error) {
       throw new Error(result.error);

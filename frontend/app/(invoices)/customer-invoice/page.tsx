@@ -260,10 +260,8 @@ const CustomerInvoicePage: React.FC = () => {
       });
       if (response.ok) {
         const data = await response.json();
-        console.log('Customers API Response:', data);
         // Backend returns: { data: [...] }
         const customerList = Array.isArray(data.data) ? data.data : [];
-        console.log('Customers:', customerList);
         setCustomers(customerList);
       }
     } catch (error) {
@@ -281,7 +279,6 @@ const CustomerInvoicePage: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         setSalesmans(data.salesmans || []);
-        console.log('Salesmans:', data.salesmans);
       }
     } catch (error) {
       console.error('Error fetching salesmans:', error);
@@ -580,7 +577,6 @@ const handleAddCustomer = async () => {
 
       if (response.ok) {
         const addedCustomer = await response.json();
-        console.log('Customer added:', addedCustomer);
         
         // Refresh customer list immediately
         await fetchCustomers();
@@ -609,7 +605,6 @@ const handleAddCustomer = async () => {
         });
       } else {
         const errorData = await response.json();
-        console.log("errordata", errorData.error)
         console.error('Add customer error:', errorData.error);
         showToast(errorData.error || errorData.detail || 'Failed to add customer', 'error');
       }
@@ -681,8 +676,6 @@ const handleAddCustomer = async () => {
 
       if (response.ok) {
         const result = await response.json();
-        console.log('Invoice created:', result);
-        console.log('Invoice ID:', result.invoice_id);
 
         // Reset form
         setCart([]);
@@ -693,9 +686,8 @@ const handleAddCustomer = async () => {
 
         // Show receipt modal using report URL (consistent with customer details)
         if (result.invoice_id) {
-          console.log('Setting invoice ID for receipt:', result.invoice_id);
           setInvoiceIdForReceipt(result.invoice_id);
-          console.log('Opening modal...');
+
           setShowReceiptModal(true);
         } else {
           Swal.fire({

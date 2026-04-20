@@ -103,10 +103,6 @@ const ProductsPage: React.FC = () => {
 
       const response = await productsApi.getProducts(currentPage, pageSize, searchTerm || undefined);
 
-      console.log('Products fetched:', response.data.length);
-      console.log('Total items:', response.total);
-      console.log('Total pages:', response.totalPages);
-      console.log('Current page:', currentPage);
       setProducts(response.data);
       setTotalItems(response.total);
       setTotalPagesFromApi(response.totalPages);
@@ -145,7 +141,6 @@ const ProductsPage: React.FC = () => {
         // Handle paginated response format: { data: [...], page, limit, total, totalPages }
         const categoryList = data?.data || data?.categories || (Array.isArray(data) ? data : []);
         setCategories(categoryList);
-        console.log('Categories fetched:', categoryList.length);
       }
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -166,7 +161,6 @@ const ProductsPage: React.FC = () => {
         // Handle paginated response format: { data: [...], page, limit, total, totalPages }
         const brandList = data?.data || data?.brands || (Array.isArray(data) ? data : []);
         setBrands(brandList);
-        console.log('Brands fetched:', brandList.length);
       }
     } catch (error) {
       console.error('Error fetching brands:', error);
@@ -427,9 +421,6 @@ const ProductsPage: React.FC = () => {
     try {
       // Fetch full product details from backend (includes image data)
       const fullProduct = await productsApi.getProductById(product.pro_id);
-
-      console.log('📝 Editing product:', fullProduct);
-      console.log('🖼️ Product image:', fullProduct.pro_image);
 
       setEditingProduct(fullProduct);
       setFormData({

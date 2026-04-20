@@ -110,7 +110,6 @@ export const getSession = async (): Promise<SessionData | null> => {
       // Don't throw error for 401/403/404/500 - just return null
       // This prevents the error from breaking the UI
       if (response.status === 401 || response.status === 403 || response.status === 404 || response.status === 500) {
-        console.log(`Session invalid or backend error (${response.status}) - clearing session`);
         return null;
       }
       

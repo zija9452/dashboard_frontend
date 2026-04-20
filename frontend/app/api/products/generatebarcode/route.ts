@@ -15,7 +15,6 @@ export async function GET(request: NextRequest) {
       headers['Cookie'] = cookieHeader;
     }
 
-    console.log('🔗 Generating barcode from backend:', backendUrl);
 
     const response = await fetch(backendUrl, {
       method: 'GET',
@@ -25,7 +24,6 @@ export async function GET(request: NextRequest) {
       signal: AbortSignal.timeout(60000),  // 60 seconds timeout
     });
 
-    console.log('📊 Backend response status:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -44,7 +42,6 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
-    console.log('✅ Barcode generated successfully:', data);
     return Response.json(data, {
       status: response.status,
     });

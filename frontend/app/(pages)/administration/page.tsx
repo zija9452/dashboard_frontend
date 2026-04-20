@@ -81,7 +81,6 @@ const AdministrationPage: React.FC = () => {
   const fetchAdminUsers = async () => {
     try {
       setLoading(true);
-      console.log('Fetching all users with search term:', searchTerm);
 
       const response = await fetch(`/api/users/?search_string=${encodeURIComponent(searchTerm)}&skip=0&limit=1000`, {
         method: 'GET',
@@ -91,9 +90,7 @@ const AdministrationPage: React.FC = () => {
         credentials: 'include',
       });
 
-      console.log('Response status:', response.status);
       const contentType = response.headers.get('content-type');
-      console.log('Response content-type:', contentType);
 
       if (!response.ok) {
         // Try to get error details from response
@@ -120,7 +117,6 @@ const AdministrationPage: React.FC = () => {
 
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
-        console.log('Fetched users:', data);
         
         // Backend now returns role_name directly, no need to convert
         setAdminUsers(data);
@@ -181,7 +177,6 @@ const AdministrationPage: React.FC = () => {
     try {
       if (editingUser) {
         // Update existing user using /users/ endpoint
-        console.log('Updating user with data:', formData);
 
         // Validate role name before sending
         const validRoles = ['admin', 'cashier', 'employee', 'warehouse'];
@@ -245,7 +240,6 @@ const AdministrationPage: React.FC = () => {
         }
 
         const result = await response.json();
-        console.log('Update result:', result);
 
         // Update user in local state
         setAdminUsers(adminUsers.map(user => user.id === editingUser.id ? result : user));
@@ -261,7 +255,6 @@ const AdministrationPage: React.FC = () => {
         });
       } else {
         // Create new user using /users/ endpoint
-        console.log('Creating user with data:', formData);
 
         const response = await fetch(`/api/users`, {
           method: 'POST',
@@ -318,7 +311,6 @@ const AdministrationPage: React.FC = () => {
         }
 
         const result = await response.json();
-        console.log('Create result:', result);
 
         // Add new user to local state
         setAdminUsers([...adminUsers, result]);
@@ -390,7 +382,6 @@ const AdministrationPage: React.FC = () => {
     if (result.isConfirmed) {
       setDeletingId(id);
       try {
-        console.log('Deleting user with id:', id);
 
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/users/${id}`, {
           method: 'DELETE',
@@ -437,7 +428,6 @@ const AdministrationPage: React.FC = () => {
         }
 
         const result = await response.json();
-        console.log('Delete result:', result);
 
         // Refresh user list from backend
         await fetchAdminUsers();

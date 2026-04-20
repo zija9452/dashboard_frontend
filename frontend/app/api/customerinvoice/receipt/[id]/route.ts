@@ -41,8 +41,6 @@ export async function POST(
     }
 
     const data = await response.json();
-    console.log('Receipt PDF data:', data);
-    console.log('PDF length:', data.pdf?.length || 0);
     return Response.json(data, {
       status: response.status,
     });

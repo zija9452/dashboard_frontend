@@ -76,7 +76,6 @@ const VendorsPage: React.FC = () => {
       }
 
       const data = await response.json();
-      console.log('API Response:', data);
 
       const vendorsList = data.data || [];
       const total = data.total || vendorsList.length;

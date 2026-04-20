@@ -60,6 +60,7 @@ const StockInPage: React.FC = () => {
   // Temporary table for multi-product stock in
   const [stockInItems, setStockInItems] = useState<StockInItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [searching, setSearching] = useState(false);
   const [qzStatus, setQzStatus] = useState<'checking' | 'connected' | 'error'>('checking');
 
   // Fetch vendors on mount
@@ -139,11 +140,9 @@ const StockInPage: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('Vendors API response:', data);
         
         // Handle both array response and object with vendors property
         const vendorList = Array.isArray(data) ? data : (data.vendors || []);
-        console.log('Vendor list:', vendorList);
         
         // Map backend fields (id, name) to frontend fields (ven_id, ven_name)
         const mappedVendors: Vendor[] = vendorList.map((v: VendorAPI) => ({
@@ -151,7 +150,6 @@ const StockInPage: React.FC = () => {
           ven_name: v.name,
         }));
         
-        console.log('Mapped vendors:', mappedVendors);
         setVendors(mappedVendors);
         
         if (mappedVendors.length === 0) {
@@ -174,6 +172,9 @@ const StockInPage: React.FC = () => {
       showToast('Please enter a barcode', 'error');
       return;
     }
+
+    if (searching) return;
+    setSearching(true);
 
     try {
       const response = await fetch(`/api/products/searchbybarcode?barcode=${encodeURIComponent(barcode)}`, {
@@ -200,15 +201,15 @@ const StockInPage: React.FC = () => {
         }
       } else {
         const errorData = await response.json();
-        console.log('error from search barcode', errorData)
         showToast(errorData.error || 'Error fetching product', 'error');
       }
     } catch (error) {
       console.error('Error fetching product:', error);
       showToast('Error fetching product', 'error');
+    } finally {
+      setSearching(false);
+      setBarcode('');
     }
-
-    setBarcode('');
   };
 
   // Add item to temporary table
@@ -799,9 +800,19 @@ const StockInPage: React.FC = () => {
           />
           <button
             type="submit"
-            className="regal-btn bg-regal-yellow text-regal-black"
+            disabled={searching}
+            className={`regal-btn flex items-center justify-center min-w-[130px] transition-all ${
+              searching ? 'bg-regal-yellow/50 cursor-not-allowed text-regal-black/60' : 'bg-regal-yellow text-regal-black'
+            }`}
           >
-            Search
+            {searching ? (
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-regal-black/30 border-t-regal-black rounded-full animate-spin"></div>
+                <span>Search</span>
+              </div>
+            ) : (
+              'Search'
+            )}
           </button>
         </form>
       </div>

@@ -183,11 +183,6 @@ const SalesViewPage: React.FC = () => {
       const summaryData = await summaryResponse.json();
       const customizedSummaryData = await customizedSummaryResponse.json();
 
-      console.log('Walk-in invoices data:', walkinData);
-      console.log('Customized invoices data:', customizedData);
-      console.log('Summary data:', summaryData);
-      console.log('Total Refund:', summaryData?.totalRefund);
-
       setWalkInInvoices(walkinData.invoices || []);
       setCustomizedInvoices(customizedData.invoices || []);
       setSummary(summaryData);

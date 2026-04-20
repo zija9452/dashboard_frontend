@@ -53,7 +53,6 @@ const RefundRecordsPage: React.FC = () => {
 
       if (response.ok) {
         const result = await response.json();
-        console.log('Refund records API response:', result); // Debug log
         
         // Handle paginated response format: { data: [...], page, limit, total, totalPages, has_more }
         const data = result.data || [];
@@ -84,7 +83,6 @@ const RefundRecordsPage: React.FC = () => {
         });
 
         setRefundRecords(records);
-        console.log('Transformed refund records:', records); // Debug log
       } else {
         showToast('Failed to fetch refund records', 'error');
       }
@@ -127,8 +125,6 @@ const RefundRecordsPage: React.FC = () => {
           created_at: naiveDatetimeStr
         }),
       });
-
-      console.log('Update refund response status:', response.status); // Debug log
 
       if (response.ok) {
         await Swal.fire({

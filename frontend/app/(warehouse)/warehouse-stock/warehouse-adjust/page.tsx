@@ -35,6 +35,7 @@ const WarehouseAdjustStockPage: React.FC = () => {
   const [barcode, setBarcode] = useState('');
   const [adjustItems, setAdjustItems] = useState<WarehouseAdjustItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [searching, setSearching] = useState(false);
 
   // Focus barcode input on mount
   useEffect(() => {
@@ -49,6 +50,9 @@ const WarehouseAdjustStockPage: React.FC = () => {
       showToast('Please enter a barcode', 'error');
       return;
     }
+
+    if (searching) return;
+    setSearching(true);
 
     try {
       const response = await fetch(`/api/products/searchbybarcode?barcode=${encodeURIComponent(barcode)}`, {
@@ -66,6 +70,7 @@ const WarehouseAdjustStockPage: React.FC = () => {
           } else {
             if (!product.is_warehouse_product) {
               showToast('This is not a warehouse product', 'error');
+              setSearching(false);
               return;
             }
             
@@ -91,10 +96,11 @@ const WarehouseAdjustStockPage: React.FC = () => {
     } catch (error) {
       console.error('Error fetching product:', error);
       showToast('Error fetching product', 'error');
+    } finally {
+      setSearching(false);
+      setBarcode('');
+      barcodeInputRef.current?.focus();
     }
-
-    setBarcode('');
-    barcodeInputRef.current?.focus();
   };
 
   // Update item field
@@ -236,9 +242,19 @@ const WarehouseAdjustStockPage: React.FC = () => {
           />
           <button
             type="submit"
-            className="regal-btn bg-regal-yellow text-regal-black"
+            disabled={searching}
+            className={`regal-btn flex items-center justify-center min-w-[130px] transition-all ${
+              searching ? 'bg-regal-yellow/50 cursor-not-allowed text-regal-black/60' : 'bg-regal-yellow text-regal-black'
+            }`}
           >
-            Search
+            {searching ? (
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-regal-black/30 border-t-regal-black rounded-full animate-spin"></div>
+                <span>Search</span>
+              </div>
+            ) : (
+              'Search'
+            )}
           </button>
         </form>
       </div>

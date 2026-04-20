@@ -254,15 +254,12 @@ const WalkInInvoicePage: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('Opening status check:', data);
         if (data.found && data.cash_opening > 0) {
           setIsOpeningDone(true);
           setOpeningData(data);
-          console.log('Opening done set to true, cash_opening:', data.cash_opening);
         } else {
           setIsOpeningDone(false);
           setOpeningData(null);
-          console.log('Opening done set to false, found:', data.found, 'cash_opening:', data.cash_opening);
         }
       } else {
         setIsOpeningDone(false);

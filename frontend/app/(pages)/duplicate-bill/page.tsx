@@ -144,11 +144,11 @@ const DuplicateBillPage: React.FC = () => {
       setShowPdfModal(true);
 
       // Show cache source
-      if (data.source === 'cache') {
-        console.log('PDF loaded from Redis cache');
-      } else {
-        console.log('PDF generated fresh and cached for 7 days');
-      }
+      // if (data.source === 'cache') {
+      //   console.log('PDF loaded from Redis cache');
+      // } else {
+      //   console.log('PDF generated fresh and cached for 7 days');
+      // }
     } catch (error: any) {
       console.error('Error printing invoice:', error);
       showToast(error.message || 'Failed to print invoice', 'error');

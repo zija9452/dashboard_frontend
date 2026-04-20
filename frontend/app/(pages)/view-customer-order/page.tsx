@@ -92,11 +92,6 @@ const ViewCustomerOrderPage: React.FC = () => {
         const total = result.total || 0;
         const totalPagesApi = result.total_pages || Math.ceil(total / pageSize);
         
-        console.log('Orders fetched:', data.length);
-        console.log('Total items:', total);
-        console.log('Total pages:', totalPagesApi);
-        console.log('Current page:', currentPage);
-        
         setOrders(data);
         setTotalItems(total);
         setTotalPagesFromApi(totalPagesApi);

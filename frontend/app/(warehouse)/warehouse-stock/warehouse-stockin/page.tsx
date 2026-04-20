@@ -42,6 +42,7 @@ const WarehouseStockInPage: React.FC = () => {
   // Temporary table for multi-product stock in
   const [stockInItems, setStockInItems] = useState<WarehouseStockInItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [searching, setSearching] = useState(false);
 
   // Focus barcode input on mount
   useEffect(() => {
@@ -56,6 +57,9 @@ const WarehouseStockInPage: React.FC = () => {
       showToast('Please enter a barcode', 'error');
       return;
     }
+
+    if (searching) return;
+    setSearching(true);
 
     try {
       const response = await fetch(`/api/products/searchbybarcode?barcode=${encodeURIComponent(barcode)}`, {
@@ -93,9 +97,11 @@ const WarehouseStockInPage: React.FC = () => {
                 product.is_warehouse_product = true;
               } else {
                 showToast('Failed to update product', 'error');
+                setSearching(false);
                 return;
               }
             } else {
+              setSearching(false);
               return;
             }
           }
@@ -118,9 +124,10 @@ const WarehouseStockInPage: React.FC = () => {
     } catch (error) {
       console.error('Error fetching product:', error);
       showToast('Error fetching product', 'error');
+    } finally {
+      setSearching(false);
+      setBarcode('');
     }
-
-    setBarcode('');
   };
 
   // Add item to temporary table
@@ -283,9 +290,19 @@ const WarehouseStockInPage: React.FC = () => {
           />
           <button
             type="submit"
-            className="regal-btn bg-regal-yellow text-regal-black"
+            disabled={searching}
+            className={`regal-btn flex items-center justify-center min-w-[130px] transition-all ${
+              searching ? 'bg-regal-yellow/50 cursor-not-allowed text-regal-black/60' : 'bg-regal-yellow text-regal-black'
+            }`}
           >
-            Search
+            {searching ? (
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-regal-black/30 border-t-regal-black rounded-full animate-spin"></div>
+                <span>Search</span>
+              </div>
+            ) : (
+              'Search'
+            )}
           </button>
         </form>
       </div>

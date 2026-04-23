@@ -185,7 +185,7 @@ const AdministrationPage: React.FC = () => {
           return;
         }
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/users/${editingUser.id}`, {
+        const response = await fetch(`/api/users/${editingUser.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -383,7 +383,7 @@ const AdministrationPage: React.FC = () => {
       setDeletingId(id);
       try {
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/users/${id}`, {
+        const response = await fetch(`/api/users/${id}`, {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',

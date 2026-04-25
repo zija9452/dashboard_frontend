@@ -453,12 +453,11 @@ const AdministrationPage: React.FC = () => {
         } else {
           // Show error alert
           Swal.fire({
-            title: 'Error!',
+            title: 'Cannot be deleted!',
             text: error instanceof Error ? error.message : 'Failed to delete user',
             icon: 'error',
-            timer: 3000,
-            timerProgressBar: true,
-            showConfirmButton: false
+            timerProgressBar: false,
+            showConfirmButton: true
           });
         }
       }

@@ -50,8 +50,9 @@ interface CustomizedInvoice {
   payment_status: 'paid' | 'partial' | 'unpaid';
   payment_methods_used: string[];      // Methods used in selected date(s)
   quantity: number;
-  invoice_created_at: string;
-  payment_time: string;                // Time of payment on selected date
+  created_at: string;
+  payment_time: string;                // Time of payment on selected date (backend formatted)
+  payment_at: string;                  // ISO timestamp of payment
   payments_in_range: Array<{
     date: string;
     amount: number;
@@ -727,7 +728,24 @@ const SalesViewPage: React.FC = () => {
                             </div>
                           </td>
                           <td className="px-3 py-4 text-sm text-gray-700">
-                            {invoice.payment_time || '-'}
+                            {(() => {
+                              // Prefer payment_at (actual transaction time) then created_at
+                              const timestamp = invoice.payment_at || invoice.created_at;
+                              if (!timestamp) return '-';
+                              
+                              const date = new Date(timestamp);
+                              // If date is invalid (e.g. just YYYY-MM-DD without T), fallback to backend payment_time or '-'
+                              if (isNaN(date.getTime())) return invoice.payment_time || '-';
+                              
+                              const hours = date.getHours();
+                              const minutes = date.getMinutes();
+                              const seconds = date.getSeconds();
+                              const ampm = hours >= 12 ? 'PM' : 'AM';
+                              const hours12 = hours % 12 || 12;
+                              const minutesStr = minutes.toString().padStart(2, '0');
+                              const secondsStr = seconds.toString().padStart(2, '0');
+                              return `${hours12}:${minutesStr}:${secondsStr} ${ampm}`;
+                            })()}
                           </td>
                         </tr>
                       ))}

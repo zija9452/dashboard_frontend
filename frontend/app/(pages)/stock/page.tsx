@@ -193,8 +193,8 @@ const StockPage: React.FC = () => {
               <thead className="bg-gray-100 border-b">
                 <tr className='text-xs text-gray-900 uppercase tracking-wider font-semibold'>
                   <th className="px-3 py-5 text-left w-12">S.No</th>
-                  <th className="px-2 py-5 text-left w-32">Vendor</th>
-                  <th className="px-2 py-5 text-left w-40">Product</th>
+                  <th className="px-2 py-5 text-left w-24">Vendor</th>
+                  <th className="px-2 py-5 text-left w-44">Product</th>
                   <th className="px-2 py-5 text-left w-28">Category</th>
                   <th className="px-2 py-5 w-20">Stock</th>
                   <th className="px-2 py-5 w-24">Price</th>

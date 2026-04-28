@@ -67,9 +67,9 @@ const Pagination: React.FC<PaginationProps> = ({
       }
       
       // Add dots if there are more pages ahead
-      if (endPage < totalPages) {
-        range.push('...');
-      }
+      // if (endPage < totalPages) {
+      //   range.push('...');
+      // }
     }
     
     return range;
@@ -113,9 +113,9 @@ const Pagination: React.FC<PaginationProps> = ({
         {/* Page numbers */}
         {pageNumbers.map((page, index) => (
           <React.Fragment key={index}>
-            {page === '...' ? (
+            {/* {page === '...' ? (
               <span className="px-2 sm:px-3 py-1">...</span>
-            ) : (
+            ) : ( */}
               <Link
                 href={getPageHref(page as number)}
                 onClick={() => handlePageChange(page as number)}
@@ -128,7 +128,7 @@ const Pagination: React.FC<PaginationProps> = ({
               >
                 {page}
               </Link>
-            )}
+            {/* )} */}
           </React.Fragment>
         ))}
 

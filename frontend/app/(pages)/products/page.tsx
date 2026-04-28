@@ -63,8 +63,8 @@ const ProductsPage: React.FC = () => {
   const [totalItems, setTotalItems] = useState(0);
   const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
 
-  // Calculate totalPages - limit to max 5 pages
-  const totalPages = Math.min(totalPagesFromApi, 5);
+  // Calculate totalPages
+  const totalPages = totalPagesFromApi;
 
   // Form state - barcode will be set when form is shown
   const [formData, setFormData] = useState({

@@ -50,7 +50,6 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
 
   return (
     <ToastProvider>
-...
       <div className="flex  bg-white">
         <PageHamburgerButton sidebarOpen={sidebarOpen} onToggle={toggleSidebar} />
         <SidebarClientWrapper />
@@ -78,9 +77,11 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
                       Administration
                     </SidebarLink>
                   )}
+                  {userRole === 'admin' && (
                   <SidebarLink href="/products" className="text-base py-3 border-b border-gray-200">
                     Products
                   </SidebarLink>
+                  )}
                   <SidebarLink href="/customers" className="text-base py-3 border-b border-gray-200">
                     Customers
                   </SidebarLink>
@@ -89,17 +90,21 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
                     Vendors
                   </SidebarLink>
                   )}
+                  {userRole === 'admin' && (
                   <SidebarLink href="/salesman" className="text-base py-3 border-b border-gray-200">
                     Salesman
                   </SidebarLink>
+                  )}
                   {(userRole === 'admin' || userRole === 'employee') && (
                   <SidebarLink href="/stock" className="text-base py-3 border-b border-gray-200">
                     Stock
                   </SidebarLink>
                    )}
+                   {(userRole === 'admin' || userRole === 'employee') && (
                   <SidebarLink href="/expenses" className="text-base py-3 border-b border-gray-200">
                     Expenses
                   </SidebarLink>
+                  )}
                   <SidebarLink href="/customer-invoice" className="text-base py-3 border-b border-gray-200" target="_blank" rel="noopener noreferrer">
                     Customer Invoice
                   </SidebarLink>
@@ -111,20 +116,26 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
                   <SidebarLink href="/view-customer-order" className="text-base py-3 border-b border-gray-200">
                     View Customer Order
                   </SidebarLink>
+                  {(userRole === 'admin' || userRole === 'employee') && (
                   <SidebarLink href="/walkin-invoice" className="text-base py-3 border-b border-gray-200" target="_blank" rel="noopener noreferrer">
                     Walk-in Invoice
                   </SidebarLink>
+                   )}
                   {(userRole === 'admin' || userRole === 'employee') && (
                     <SidebarLink href="/sales-view" className="text-base py-3 border-b border-gray-200">
                       Sales View
                     </SidebarLink>
                   )}
+                  {(userRole === 'admin' || userRole === 'employee') && (
                   <SidebarLink href="/duplicate-bill" className="text-base py-3 border-b border-gray-200">
                     Duplicate Bill
                   </SidebarLink>
+                   )}
+                  {(userRole === 'admin' || userRole === 'employee') && (
                   <SidebarLink href="/refund" className="text-base py-3 border-b border-gray-200">
                     Refund
                   </SidebarLink>
+                   )}
                   <SidebarLink href="/logout" className="text-base py-3">
                     Logout
                   </SidebarLink>

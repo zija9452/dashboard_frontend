@@ -49,8 +49,8 @@ const CustomersPage: React.FC = () => {
   const [totalItems, setTotalItems] = useState(0);
   const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
 
-  // Calculate totalPages - limit to max 5 pages
-  const totalPages = Math.min(totalPagesFromApi, 5);
+  // Calculate totalPages
+  const totalPages = totalPagesFromApi;
 
   // Form state
   const [formData, setFormData] = useState({
@@ -555,9 +555,9 @@ const CustomersPage: React.FC = () => {
                   <th className="px-4 py-5 text-left w-48">Name</th>
                   <th className="px-4 py-5 text-left w-32">Phone</th>
                   <th className="px-4 py-5 text-left w-32">CNIC</th>
-                  <th className="px-4 py-5 text-left w-28">Address</th>
+                  <th className="px-4 py-5 text-left w-36">Address</th>
                   <th className="px-4 py-5 text-left w-24">Balance</th>
-                  <th className="px-4 py-5 text-left w-40">Salesman</th>
+                  <th className="px-4 py-5 text-left w-36">Salesman</th>
                   <th className="px-4 py-5 text-left w-40">Branch</th>
                   <th className="px-4 py-5 text-left w-32">Actions</th>
                 </tr>
@@ -567,7 +567,7 @@ const CustomersPage: React.FC = () => {
                   <tr key={customer.cus_id} className="hover:bg-gray-50 text-sm">
                     <td className="px-4 py-4 overflow-hidden text-ellipsis">{customer.cus_name}</td>
                     <td className="px-4 py-4">{customer.cus_phone}</td>
-                    <td className="px-4 py-4">{customer.cus_cnic || '-'}</td>
+                    <td className="px-4 py-4 ">{customer.cus_cnic || '-'}</td>
                     <td className="px-4 py-4">{customer.cus_address || '-'}</td>
                     <td className="px-4 py-4">
                       {calculatingBalance === customer.cus_id ? (

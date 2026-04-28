@@ -39,9 +39,8 @@ const VendorPaymentHistoryPage: React.FC = () => {
   const [showSearch, setShowSearch] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Calculate totalPages - limit to max 5 pages
-  const totalPagesFromApi = Math.ceil(totalItems / pageSize);
-  const totalPages = Math.min(totalPagesFromApi, 5);
+  // Calculate totalPages
+  const totalPages = Math.ceil(totalItems / pageSize);
 
   // Fetch all vendors for dropdown
   const fetchVendors = async () => {

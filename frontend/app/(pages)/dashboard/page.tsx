@@ -14,6 +14,7 @@ import {
   Filler,
 } from 'chart.js';
 import PageHeader from '@/components/ui/PageHeader';
+import ReportModal from '@/components/ui/ReportModal';
 
 ChartJS.register(
   CategoryScale,
@@ -53,6 +54,7 @@ const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState(false);
   const [userRole, setUserRole] = useState<string>('Admin');
+  const [showShopReportModal, setShowShopReportModal] = useState(false);
 
   // Single Date Range for both KPI cards and Chart - defaults to TODAY (daily view)
   const today = new Date();
@@ -581,6 +583,23 @@ const DashboardPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Quick Actions - Only for Admin and Employee */}
+        {(userRole === 'Admin' || userRole === 'Employee') && (
+          <div className="grid grid-cols-1 gap-4 md:gap-6 mb-4 md:mb-6">
+            <div className="regal-card p-3 md:p-4">
+              <p className="text-xs md:text-sm font-medium text-gray-600 mb-3">Quick Actions</p>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={() => setShowShopReportModal(true)}
+                  className="regal-btn bg-regal-yellow text-regal-black text-sm md:text-base w-full sm:w-auto py-4"
+                >
+                  Shop Requirement Report
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Chart Section - Only for Admin/Employee */}
         {userRole !== 'Cashier' && (
           <div className="mt-4 md:mt-8 regal-card p-3 md:p-6">
@@ -628,6 +647,13 @@ const DashboardPage: React.FC = () => {
         {/* Cashier Info - Only for Cashier */}
         
       </div>
+
+      <ReportModal
+        isOpen={showShopReportModal}
+        onClose={() => setShowShopReportModal(false)}
+        title="Shop Requirement Report"
+        reportUrl="/api/warehouse-stock/shop-requirement-report"
+      />
     </div>
   );
 };

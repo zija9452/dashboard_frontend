@@ -212,7 +212,7 @@ const ViewCustomerOrderPage: React.FC = () => {
   };
 
   return (
-    <div className="p-2 py-5 bg-white pt-14">
+    <div className="p-2 py-5 bg-white pt-14 md:pt-0">
       <PageHeader title="View Customer Orders" />
 
       {/* Search Button & Filters - Left Side */}

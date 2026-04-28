@@ -33,7 +33,7 @@ const ShopWarehouseProductsPage: React.FC = () => {
   const [totalItems, setTotalItems] = useState(0);
   const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
 
-  const totalPages = Math.min(totalPagesFromApi, 5);
+  const totalPages = totalPagesFromApi;
 
   // Predefined branch options
   const branchOptions = [

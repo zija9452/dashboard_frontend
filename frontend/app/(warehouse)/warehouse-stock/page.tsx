@@ -21,7 +21,7 @@ const WarehouseStockPage: React.FC = () => {
   const [pageSize, setPageSize] = useState(8);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
-  const totalPages = Math.min(totalPagesFromApi, 5);
+  const totalPages = totalPagesFromApi;
 
   const [showStockInReportModal, setShowStockInReportModal] = useState(false);
   const [stockInReportUrl, setStockInReportUrl] = useState<string>('');

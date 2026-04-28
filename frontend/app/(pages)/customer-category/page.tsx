@@ -38,7 +38,7 @@ const CustomerCategoryPage: React.FC = () => {
   const [totalItems, setTotalItems] = useState(0);
   const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
 
-  const totalPages = Math.min(totalPagesFromApi, 5);
+  const totalPages = totalPagesFromApi;
 
   // Form state
   const [mainCategoryName, setMainCategoryName] = useState('');

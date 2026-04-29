@@ -48,6 +48,8 @@ const CustomersPage: React.FC = () => {
   const [pageSize] = useState(8);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
+  const [marketBalance, setMarketBalance] = useState<number | null>(null);
+  const [loadingMarketBalance, setLoadingMarketBalance] = useState(false);
 
   // Calculate totalPages
   const totalPages = totalPagesFromApi;
@@ -121,6 +123,25 @@ const CustomersPage: React.FC = () => {
     }
   };
 
+  // Fetch Total Market Balance
+  const fetchMarketBalance = async () => {
+    try {
+      setLoadingMarketBalance(true);
+      const response = await fetch('/api/customers/market-balance', {
+        method: 'GET',
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setMarketBalance(data.total_market_balance);
+      }
+    } catch (error) {
+      console.error('Error fetching market balance:', error);
+    } finally {
+      setLoadingMarketBalance(false);
+    }
+  };
+
   // Fetch customers on page change or initial load
   useEffect(() => {
     fetchCustomersWithBalance();
@@ -129,6 +150,7 @@ const CustomersPage: React.FC = () => {
   // Fetch salesmans on mount
   useEffect(() => {
     fetchSalesmans();
+    fetchMarketBalance();
   }, []);
 
   // Calculate customer balance from invoices
@@ -623,19 +645,36 @@ const CustomersPage: React.FC = () => {
         )}
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="mt-6">
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalItems={totalItems}
-            pageSize={pageSize}
-            baseUrl="/customers"
-            onPageChange={handlePageChange}
-          />
+      {/* Pagination & Market Balance */}
+      <div className="mt-8 space-y-6">
+        {/* Total Market Balance Display - Left Aligned */}
+        <div className="flex justify-start">
+          <div className="px-6 py-3 bg-gray-100 border border-gray-300 rounded-lg shadow-sm">
+            <span className="text-sm font-medium text-gray-700">Total Market Balance: </span>
+            <span className="text-base font-bold text-red-700">
+              {loadingMarketBalance ? (
+                <span className="animate-pulse text-sm">Calculating Market Balance...</span>
+              ) : (
+                `Rs. ${marketBalance?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}`
+              )}
+            </span>
+          </div>
         </div>
-      )}
+
+        {/* Pagination - Centered */}
+        <div className="flex justify-center">
+          {totalPages > 1 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              pageSize={pageSize}
+              baseUrl="/customers"
+              onPageChange={handlePageChange}
+            />
+          )}
+        </div>
+      </div>
 
       {/* Customer Report Modal */}
       <ReportModal

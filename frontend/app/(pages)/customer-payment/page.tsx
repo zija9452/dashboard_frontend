@@ -81,6 +81,7 @@ const CustomerPaymentPage: React.FC = () => {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
   const [totalBalance, setTotalBalance] = useState<number>(0);
+  const [filterStatus, setFilterStatus] = useState<'all' | 'unpaid' | 'paid'>('unpaid');
 
   // Form state
   const [formData, setFormData] = useState({
@@ -107,7 +108,10 @@ const CustomerPaymentPage: React.FC = () => {
     'Cash',
     'Easypaisa Zohaib',
     'Easypaisa Yasir',
-    'Faysal Bank'
+    'Faysal Bank',
+    'Islami Bank',
+    "Credit",
+    "Other"
   ];
 
   // Fetch customers for dropdown
@@ -134,8 +138,6 @@ const CustomerPaymentPage: React.FC = () => {
   // Fetch branches for dropdown (placeholder - API to be added later)
   const fetchBranches = async () => {
     try {
-      // TODO: Add branch API endpoint later
-      // const response = await fetch('/api/branches', { method: 'GET', credentials: 'include' });
       // For now, using placeholder data
       setBranches([
         { id: '1', name: 'European Sports Light House' },
@@ -150,22 +152,61 @@ const CustomerPaymentPage: React.FC = () => {
     }
   };
 
+  // Fetch invoices based on customer and filter status
+  const fetchInvoices = async (customerId?: string, status?: string) => {
+    try {
+      setLoading(true);
+      const targetCustomerId = customerId !== undefined ? customerId : formData.customer_id;
+      const targetStatus = status !== undefined ? status : filterStatus;
+
+      let paymentStatusParam = '';
+      if (targetStatus === 'unpaid') {
+        paymentStatusParam = 'unpaid,partial';
+      } else if (targetStatus === 'paid') {
+        paymentStatusParam = 'paid';
+      }
+
+      let url = `/api/customerinvoice/viewcustomerorder?skip=0&limit=10000`;
+      if (targetCustomerId) url += `&customer_id=${targetCustomerId}`;
+      if (paymentStatusParam) url += `&payment_status=${paymentStatusParam}`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const data = result.data || [];
+        setInvoices(data);
+
+        // Calculate total balance ONLY if a customer is selected
+        if (targetCustomerId) {
+          const total = data.reduce((sum: number, invoice: Invoice) => sum + (invoice.balance_due || 0), 0);
+          setTotalBalance(total);
+        } else {
+          setTotalBalance(0);
+        }
+      } else {
+        showToast('Failed to fetch invoices', 'error');
+      }
+    } catch (error) {
+      console.error('Error fetching invoices:', error);
+      showToast('Failed to fetch invoices', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     const initData = async () => {
       await fetchCustomers();
       await fetchBranches();
-      // Fetch all unpaid invoices on initial load
-      await fetchAllUnpaidInvoices();
+      // Fetch initial unpaid invoices for all customers
+      await fetchInvoices('', 'unpaid');
     };
     initData();
   }, []);
-
-  // Fetch all unpaid invoices when customer is deselected
-  useEffect(() => {
-    if (customers.length > 0 && !formData.customer_id && invoices.length === 0) {
-      fetchAllUnpaidInvoices();
-    }
-  }, [formData.customer_id]);
 
   // Handle customer selection
   const handleCustomerChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -176,97 +217,20 @@ const CustomerPaymentPage: React.FC = () => {
       ...prev,
       customer_id: customerId,
       customer_name: customer?.cus_name || '',
-      order_id: ''
+      order_id: '',
+      invoice_no: ''
     }));
 
     setSelectedInvoice(null);
-
-    // Fetch customer invoices if customer selected
-    if (customerId) {
-      await fetchCustomerInvoices(customerId);
-    } else {
-      // If customer cleared, fetch all unpaid invoices
-      await fetchAllUnpaidInvoices();
-    }
+    
+    // Fetch invoices for this customer with current filter
+    await fetchInvoices(customerId);
   };
 
-  // Fetch customer invoices (all invoices without pagination)
-  const fetchCustomerInvoices = async (customerId: string) => {
-    try {
-      setLoading(true);
-      // Fetch all invoices - no pagination
-      const response = await fetch(`/api/customerinvoice/customerorders/${customerId}?skip=0&limit=10000`, {
-        method: 'GET',
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        const data = result.data || result || [];
-
-        // When specific customer is selected, show ALL invoices (paid + unpaid)
-        setInvoices(data);
-
-        // Calculate total balance
-        const total = data.reduce((sum: number, invoice: Invoice) => sum + (invoice.balance_due || 0), 0);
-        setTotalBalance(total);
-      }
-    } catch (error) {
-      console.error('Error fetching customer invoices:', error);
-      showToast('Failed to fetch invoices', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetch all unpaid invoices from all customers
-  const fetchAllUnpaidInvoices = async () => {
-    try {
-      setLoading(true);
-      
-      // Use customers from state (should already be loaded)
-      let customersList = customers;
-      
-      // Fallback: fetch customers if not loaded
-      if (customersList.length === 0) {
-        const customerResponse = await fetch('/api/customers/viewcustomer?page=1&limit=10000', {
-          method: 'GET',
-          credentials: 'include',
-        });
-        if (customerResponse.ok) {
-          const data = await customerResponse.json();
-          customersList = Array.isArray(data.data) ? data.data : [];
-        }
-      }
-
-      // Fetch all customers' invoices
-      const promises = customersList.map(customer =>
-        fetch(`/api/customerinvoice/customerorders/${customer.cus_id}?skip=0&limit=10000`, {
-          method: 'GET',
-          credentials: 'include',
-        })
-      );
-
-      const responses = await Promise.all(promises);
-      const results = await Promise.all(responses.map(res => res.json()));
-
-      // Combine all invoices and filter only unpaid/partial
-      const allInvoices = results.flatMap(result => result.data || result || []);
-      const unpaidInvoices = allInvoices.filter((invoice: Invoice) =>
-        invoice.payment_status === 'unpaid' || invoice.payment_status === 'partial'
-      );
-
-      setInvoices(unpaidInvoices);
-
-      // Calculate total balance
-      const total = unpaidInvoices.reduce((sum: number, invoice: Invoice) => sum + (invoice.balance_due || 0), 0);
-      setTotalBalance(total);
-    } catch (error) {
-      console.error('Error fetching unpaid invoices:', error);
-      showToast('Failed to fetch unpaid invoices', 'error');
-    } finally {
-      setLoading(false);
-    }
+  // Handle filter change
+  const handleFilterChange = async (status: 'all' | 'unpaid' | 'paid') => {
+    setFilterStatus(status);
+    await fetchInvoices(formData.customer_id, status);
   };
 
   // Handle invoice selection
@@ -420,12 +384,7 @@ const CustomerPaymentPage: React.FC = () => {
         });
 
         // Refresh invoices
-        if (formData.customer_id) {
-          await fetchCustomerInvoices(formData.customer_id);
-        } else {
-          // If no customer selected, refresh all unpaid invoices
-          await fetchAllUnpaidInvoices();
-        }
+        await fetchInvoices();
         resetForm();
       } else {
         const errorData = await response.json();
@@ -640,6 +599,22 @@ const CustomerPaymentPage: React.FC = () => {
 
             {/* Right Side - Invoices List (6 columns) */}
             <div className="col-span-12 lg:col-span-6">
+              {/* Filter Dropdown */}
+              <div className="flex justify-end mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-700">Filter:</span>
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => handleFilterChange(e.target.value as any)}
+                    className="regal-input py-1 text-sm border-gray-300 rounded-md focus:ring-regal-yellow focus:border-regal-yellow"
+                  >
+                    <option value="unpaid">Unpaid (Partial + Unpaid)</option>
+                    <option value="paid">Paid Only</option>
+                    <option value="all">All Invoices</option>
+                  </select>
+                </div>
+              </div>
+
               <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
                 <table className="w-full table-fixed">
                   <thead className="bg-gray-100 sticky top-0">
@@ -687,7 +662,10 @@ const CustomerPaymentPage: React.FC = () => {
                           onClick={() => handleInvoiceSelect(invoice)}
                         >
                           <td className="px-3 py-6">
-                            <span className="font-medium text-gray-900">{invoice.invoice_no}</span>
+                            <div className="flex flex-col">
+                              <span className="font-medium text-gray-900">{invoice.invoice_no}</span>
+                              <span className="text-[10px] text-gray-500 truncate">{invoice.customer}</span>
+                            </div>
                           </td>
                           <td className="px-3 py-6">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(invoice.status)}`}>

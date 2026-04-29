@@ -12,6 +12,9 @@ export async function GET(request: NextRequest) {
     const searchString = url.searchParams.get('searchString') || '';
     const status = url.searchParams.get('status') || '';
     const orderStatus = url.searchParams.get('order_status') || status;
+    const customerId = url.searchParams.get('customer_id') || '';
+    const paymentStatus = url.searchParams.get('payment_status') || '';
+    const includeStats = url.searchParams.get('include_stats') || 'false';
 
     // Build query string
     const params = new URLSearchParams();
@@ -19,6 +22,9 @@ export async function GET(request: NextRequest) {
     params.append('limit', limit);
     if (searchString) params.append('searchString', searchString);
     if (orderStatus) params.append('order_status', orderStatus);
+    if (customerId) params.append('customer_id', customerId);
+    if (paymentStatus) params.append('payment_status', paymentStatus);
+    if (includeStats) params.append('include_stats', includeStats);
 
     const queryString = params.toString();
     const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/customerinvoice/viewcustomerorder${queryString ? '?' + queryString : ''}`;

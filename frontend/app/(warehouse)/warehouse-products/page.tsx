@@ -237,7 +237,7 @@ const ShopWarehouseProductsPage: React.FC = () => {
         brand_action: formData.brand_action,
         is_warehouse_product: true, // Auto-set to true
         article_no: userRole === 'warehouse' || userRole === 'admin' ? formData.article_no : undefined,
-        warehouse_limited_qty: userRole === 'warehouse' || userRole === 'admin' ? formData.warehouse_limited_qty : undefined
+        warehouse_limited_qty: userRole === 'warehouse' || userRole === 'admin' ? formData.warehouse_limited_qty : Number(formData.warehouse_limited_qty)
       };
 
       if (editingProduct) {

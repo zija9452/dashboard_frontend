@@ -42,15 +42,18 @@ const WarehouseDashboardPage: React.FC = () => {
       if (warehouseResponse.ok) {
         const warehouseData = await warehouseResponse.json();
         const products = warehouseData.data || [];
+
         totalWarehouse = warehouseData.total || 0;
 
-        // Short Inventory: warehouse products where stock_level is 0 OR < limited_qty
-        shortInventory = products.filter((p: any) => 
-          (p.stock_level || 0) === 0 || (p.stock_level || 0) < (p.limited_qty || 0)
-        ).length;
+        shortInventory = products.filter((p: any) => {
+          const stock = Number(p.stock) || 0;
+          const limitedQuan = Number(p.limitedquan) || 0;
+
+          return stock < limitedQuan;
+        }).length;
 
         // Low Warehouse Stock: warehouse products where warehouse_stock < warehouse_limited_qty
-        lowWarehouseStock = products.filter((p: any) => 
+        lowWarehouseStock = products.filter((p: any) =>
           (p.warehouse_stock || 0) < (p.warehouse_limited_qty || 0)
         ).length;
       }

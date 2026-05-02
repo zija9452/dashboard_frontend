@@ -28,6 +28,7 @@ const StockPage: React.FC = () => {
 
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [generatingExcel, setGeneratingExcel] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showReportModal, setShowReportModal] = useState(false);
   const [showStockInReportModal, setShowStockInReportModal] = useState(false);
@@ -103,6 +104,52 @@ const StockPage: React.FC = () => {
     setShowStockInReportModal(false);
   };
 
+  const handleExportExcel = async () => {
+    try {
+      setGeneratingExcel(true);
+      const response = await fetch('/api/stock/stockreportexcel', {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.excel) {
+          // Decode base64 and trigger download
+          const excelContent = atob(data.excel);
+          const byteNumbers = new Array(excelContent.length);
+          for (let i = 0; i < excelContent.length; i++) {
+            byteNumbers[i] = excelContent.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+          const link = document.createElement('a');
+          const url = URL.createObjectURL(blob);
+
+          const date = new Date().toISOString().split('T')[0];
+          link.setAttribute('href', url);
+          link.setAttribute('download', `Stock_Report_${date}.xlsx`);
+          link.style.visibility = 'hidden';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          showToast('Stock Excel report downloaded successfully!', 'success');
+        } else {
+          showToast('No data available for export', 'warning');
+        }
+      } else {
+        const errorData = await response.json();
+        showToast(errorData.error || 'Failed to generate Excel report', 'error');
+      }
+    } catch (error) {
+      console.error('Error exporting to Excel:', error);
+      showToast('Error exporting to Excel', 'error');
+    } finally {
+      setGeneratingExcel(false);
+    }
+  };
+
   return (
     <div className="p-2 py-5">
       <PageHeader title="View Stock" />
@@ -117,11 +164,19 @@ const StockPage: React.FC = () => {
             + Add Stock
           </button>
 
-          <button
+          {/* <button
             onClick={() => setShowReportModal(true)}
             className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
           >
             Stock Details
+          </button> */}
+
+          <button
+            onClick={handleExportExcel}
+            disabled={generatingExcel}
+            className={`regal-btn bg-regal-yellow text-regal-black whitespace-nowrap ${generatingExcel ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            {generatingExcel ? 'Exporting...' : 'Stock Details'}
           </button>
 
           <button

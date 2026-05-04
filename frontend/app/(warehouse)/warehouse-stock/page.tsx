@@ -172,7 +172,7 @@ const WarehouseStockPage: React.FC = () => {
                     <td className="px-2 py-4 text-center">{(item.unit_price || 0)}</td>
                     <td className="px-2 py-4 text-center">{(item.cost_price || 0)}</td>
                     <td className="px-2 py-4">{item.barcode || '-'}</td>
-                    <td className="px-2 py-4">{item.article_no || '-'}</td>
+                    <td className="px-2 py-4 text-center">{item.article_no || '-'}</td>
                     <td className="px-2 py-4">{item.branch || '-'}</td>
                   </tr>
                 ))}

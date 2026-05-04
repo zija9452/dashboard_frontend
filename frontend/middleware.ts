@@ -19,7 +19,11 @@ const protectedRoutes = [
   '/warehouse-dashboard',
   '/warehouse-products',
   '/shop-warehouse-products',
-  '/warehouse-stock'
+  '/warehouse-stock',
+  '/warehouse-customers',
+  '/warehouse-vendors',
+  '/warehouse-vendor-payment',
+  '/warehouse-vendor-payment-history'
 ];
 
 export function middleware(request: NextRequest) {

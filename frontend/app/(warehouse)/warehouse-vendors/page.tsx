@@ -1,0 +1,467 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useToast } from '@/components/ui/Toast';
+import Swal from 'sweetalert2';
+import { useRouter } from 'next/navigation';
+import Pagination from '@/components/ui/Pagination';
+import ReportModal from '@/components/ui/ReportModal';
+import PageHeader from '@/components/ui/PageHeader';
+
+interface Vendor {
+  ven_id: string;
+  ven_name: string;
+  ven_phone: string;
+  ven_address: string;
+  branch: string;
+  vend_balance?: number;
+}
+
+const WarehouseVendorsPage: React.FC = () => {
+  const router = useRouter();
+  const { showToast } = useToast();
+
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showReportModal, setShowReportModal] = useState(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(8);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
+
+  const totalPages = totalPagesFromApi;
+
+  // Form state
+  const [formData, setFormData] = useState({
+    ven_name: '',
+    ven_phone: '',
+    ven_address: '',
+    branch: ''
+  });
+
+  const branchOptions = [
+    'European Sports Light House',
+    'Warehouse Main'
+  ];
+
+  const fetchVendors = async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      params.append('page', currentPage.toString());
+      params.append('limit', pageSize.toString());
+      if (searchTerm) {
+        params.append('search_string', searchTerm);
+      }
+
+      const response = await fetch(`/api/warehouse-vendors/viewvendor?${params.toString()}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || errorData.error || 'Failed to fetch warehouse vendors');
+      }
+
+      const data = await response.json();
+      const vendorsList = data.data || [];
+      const total = data.total || vendorsList.length;
+      const totalPages = data.totalPages || Math.ceil(total / pageSize);
+
+      setVendors(vendorsList);
+      setTotalItems(total);
+      setTotalPagesFromApi(totalPages);
+    } catch (error: any) {
+      console.error('Error fetching warehouse vendors:', error);
+      showToast(error.message || 'Failed to fetch warehouse vendors', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchVendors();
+  }, [currentPage, pageSize, searchTerm]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const resetForm = () => {
+    setFormData({
+      ven_name: '',
+      ven_phone: '',
+      ven_address: '',
+      branch: ''
+    });
+    setEditingVendor(null);
+    setShowAddForm(false);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
+
+    try {
+      const contactsData = {
+        phone: formData.ven_phone,
+        email: '',
+        address: formData.ven_address
+      };
+
+      let response;
+      if (editingVendor) {
+        response = await fetch(`/api/warehouse-vendors/${editingVendor.ven_id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            name: formData.ven_name,
+            contacts: JSON.stringify(contactsData),
+            branch: formData.branch || null
+          }),
+        });
+      } else {
+        response = await fetch('/api/warehouse-vendors/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            name: formData.ven_name,
+            contacts: JSON.stringify(contactsData),
+            branch: formData.branch
+          }),
+        });
+      }
+
+      if (response.ok) {
+        Swal.fire({
+          title: editingVendor ? 'Updated!' : 'Created!',
+          text: `Warehouse vendor has been ${editingVendor ? 'updated' : 'created'} successfully.`,
+          icon: 'success',
+          timer: 2000,
+          timerProgressBar: true,
+          showConfirmButton: false
+        });
+        await fetchVendors();
+        resetForm();
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || errorData.error || 'Failed to save warehouse vendor');
+      }
+    } catch (error: any) {
+      showToast(error.message || 'Failed to save warehouse vendor', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleEdit = (vendor: Vendor) => {
+    setEditingVendor(vendor);
+    setFormData({
+      ven_name: vendor.ven_name,
+      ven_phone: vendor.ven_phone,
+      ven_address: vendor.ven_address || '',
+      branch: vendor.branch || ''
+    });
+    setShowAddForm(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: "You won't be able to revert this!",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel'
+    });
+
+    if (result.isConfirmed) {
+      setDeletingId(id);
+      try {
+        const response = await fetch(`/api/warehouse-vendors/${id}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+
+        if (response.ok) {
+          Swal.fire({
+            title: 'Deleted!',
+            text: 'Warehouse vendor has been deleted successfully.',
+            icon: 'success',
+            timer: 2000,
+            timerProgressBar: true,
+            showConfirmButton: false
+          });
+          await fetchVendors();
+        } else {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || errorData.error || 'Failed to delete warehouse vendor');
+        }
+      } catch (error: any) {
+        showToast(error.message || 'Failed to delete warehouse vendor', 'error');
+      } finally {
+        setDeletingId(null);
+      }
+    }
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  return (
+    <div className="p-2 py-5">
+      <PageHeader title="Warehouse Vendors" />
+
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => {
+              resetForm();
+              setShowAddForm(!showAddForm);
+            }}
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+          >
+            {showAddForm ? 'Cancel' : '+ Add Warehouse Vendor'}
+          </button>
+
+          <button
+            onClick={() => router.push('/warehouse-vendor-payment-history')}
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+          >
+            Payments
+          </button>
+
+          <button
+            onClick={() => setShowReportModal(true)}
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+          >
+            Vendor Details
+          </button>
+        </div>
+
+        <div className="w-full sm:w-auto flex gap-2">
+          <div className="relative">
+            <input
+              id="vendorSearchInput"
+              type="text"
+              placeholder="Search vendors..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="regal-input w-full pl-10 pr-4 py-2"
+            />
+            <svg
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <button
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+            onClick={() => {
+              setSearchTerm('');
+              document.getElementById('vendorSearchInput')?.focus();
+            }}
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+
+      {showAddForm && (
+        <div className="border-0 p-0 mb-6 transition-all duration-300">
+          <h3 className="text-lg font-semibold mb-4">
+            {editingVendor ? 'Edit Warehouse Vendor' : 'Add New Warehouse Vendor'}
+          </h3>
+          <form onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Name *</label>
+                <input
+                  type="text"
+                  name="ven_name"
+                  value={formData.ven_name}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                  placeholder="Enter vendor name"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Phone *</label>
+                <input
+                  type="text"
+                  name="ven_phone"
+                  value={formData.ven_phone}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                  placeholder="Enter phone number"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Address *</label>
+                <input
+                  type="text"
+                  name="ven_address"
+                  value={formData.ven_address}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                  placeholder="Enter address"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Branch</label>
+                <select
+                  name="branch"
+                  value={formData.branch}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                  required
+                >
+                  <option value="">Select Branch</option>
+                  {branchOptions.map((branch) => (
+                    <option key={branch} value={branch}>
+                      {branch}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? 'Saving...' : (editingVendor ? 'Update Vendor' : 'Add Vendor')}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowAddForm(false)}
+                className="regal-btn bg-gray-300 text-black"
+              >
+                Close
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <div className="border-0 p-0">
+        {loading ? (
+          <div className="text-center py-4">
+            <div className="animate-pulse">
+              <div className="h-12 bg-gray-200 rounded mb-4"></div>
+              <div className="h-64 bg-gray-200 rounded"></div>
+            </div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full table-fixed">
+              <thead className="bg-gray-100 border-b">
+                <tr className='text-xs text-gray-900 uppercase tracking-wider font-semibold'>
+                  <th className="px-4 py-5 text-left w-48">Name</th>
+                  <th className="px-4 py-5 text-left w-32">Phone</th>
+                  <th className="px-4 py-5 text-left w-40">Address</th>
+                  <th className="px-4 py-5 text-left w-24">Balance</th>
+                  <th className="px-4 py-5 text-left w-40">Branch</th>
+                  <th className="px-4 py-5 text-left w-32">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {vendors.map((vendor) => (
+                  <tr key={vendor.ven_id} className="hover:bg-gray-50 text-sm">
+                    <td className="px-4 py-4">{vendor.ven_name}</td>
+                    <td className="px-4 py-4 whitespace-nowrap">{vendor.ven_phone}</td>
+                    <td className="px-4 py-4">{vendor.ven_address || '-'}</td>
+                    <td className="px-4 py-4 whitespace-nowrap">{vendor.vend_balance?.toFixed(2) || '0.00'}</td>
+                    <td className="px-4 py-4">{vendor.branch || '-'}</td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleEdit(vendor)}
+                          disabled={deletingId === vendor.ven_id}
+                          className={`${
+                            deletingId === vendor.ven_id
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-blue-600 hover:text-blue-800'
+                          }`}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(vendor.ven_id)}
+                          disabled={deletingId === vendor.ven_id}
+                          className={`${
+                            deletingId === vendor.ven_id
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-red-600 hover:text-red-800'
+                          }`}
+                        >
+                          {deletingId === vendor.ven_id ? (
+                            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          ) : (
+                            'Delete'
+                          )}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {totalPages > 1 && (
+        <div className="mt-6">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            baseUrl=""
+            onPageChange={handlePageChange}
+          />
+        </div>
+      )}
+
+      <ReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        title="Warehouse Vendor Details"
+        reportUrl="/api/warehouse-vendors/vendorviewreport"
+      />
+    </div>
+  );
+};
+
+export default WarehouseVendorsPage;

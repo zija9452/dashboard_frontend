@@ -15,6 +15,8 @@ interface WarehouseStockInItem {
   selling_price: number;
   total_cost: number;
   date: string;
+  vendor_id?: string;
+  vendor_name?: string;
 }
 
 interface Product {
@@ -28,6 +30,12 @@ interface Product {
   is_warehouse_product: boolean;
 }
 
+interface WarehouseVendor {
+  id: string;
+  name: string;
+  balance: number;
+}
+
 const WarehouseStockInPage: React.FC = () => {
   const router = useRouter();
   const { showToast } = useToast();
@@ -37,17 +45,38 @@ const WarehouseStockInPage: React.FC = () => {
   const [barcode, setBarcode] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState('');
+  const [costPrice, setCostPrice] = useState('0');
+  const [sellingPrice, setSellingPrice] = useState('0');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [vendors, setVendors] = useState<WarehouseVendor[]>([]);
+  const [selectedVendorId, setSelectedVendorId] = useState('');
 
   // Temporary table for multi-product stock in
   const [stockInItems, setStockInItems] = useState<WarehouseStockInItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [searching, setSearching] = useState(false);
 
-  // Focus barcode input on mount
+  // Focus barcode input on mount and fetch vendors
   useEffect(() => {
     barcodeInputRef.current?.focus();
+    fetchVendors();
   }, []);
+
+  const fetchVendors = async () => {
+    try {
+      const response = await fetch('/api/warehouse-vendors/', {
+        method: 'GET',
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setVendors(Array.isArray(data) ? data : []);
+      }
+    } catch (error) {
+      console.error('Error fetching warehouse vendors:', error);
+      showToast('Failed to fetch warehouse vendors', 'error');
+    }
+  };
 
   // Handle barcode submit
   const handleBarcodeSubmit = async (e: React.FormEvent) => {
@@ -108,6 +137,8 @@ const WarehouseStockInPage: React.FC = () => {
 
           setSelectedProduct(product);
           setQuantity('');
+          setCostPrice(product.pro_cost?.toString() || '0');
+          setSellingPrice(product.pro_price?.toString() || '0');
           showToast(`Product found: ${product.pro_name}`, 'success');
 
           setTimeout(() => {
@@ -137,21 +168,31 @@ const WarehouseStockInPage: React.FC = () => {
       return;
     }
 
+    if (!selectedVendorId) {
+      showToast('Please select a warehouse vendor', 'error');
+      return;
+    }
+
     if (!quantity || parseInt(quantity) <= 0) {
       showToast('Quantity must be greater than 0', 'error');
       return;
     }
 
     const qty = parseInt(quantity) || 0;
+    const cost = parseFloat(costPrice) || 0;
+    const vendor = vendors.find(v => v.id === selectedVendorId);
+
     const newItem: WarehouseStockInItem = {
       product_id: selectedProduct.pro_id,
       product_name: selectedProduct.pro_name,
       barcode: selectedProduct.pro_barcode,
       quantity: qty,
-      cost_price: selectedProduct.pro_cost || 0,
-      selling_price: selectedProduct.pro_price || 0,
-      total_cost: qty * (selectedProduct.pro_cost || 0),
+      cost_price: cost,
+      selling_price: parseFloat(sellingPrice) || 0,
+      total_cost: qty * cost,
       date: date,
+      vendor_id: selectedVendorId,
+      vendor_name: vendor?.name
     };
 
     setStockInItems([...stockInItems, newItem]);
@@ -160,6 +201,9 @@ const WarehouseStockInPage: React.FC = () => {
     setSelectedProduct(null);
     setBarcode('');
     setQuantity('');
+    setCostPrice('0');
+    setSellingPrice('0');
+    // Note: We keep selectedVendorId for convenience if adding multiple items from same vendor
 
     setTimeout(() => {
       barcodeInputRef.current?.focus();
@@ -199,8 +243,10 @@ const WarehouseStockInPage: React.FC = () => {
             credentials: 'include',
             body: JSON.stringify({
               product_id: item.product_id,
-              product_type: 'warehouse',
-              qty: item.quantity
+              qty: item.quantity,
+              vendor_id: item.vendor_id,
+              cost_price: item.cost_price,
+              ref: `W_IN_${new Date().toISOString().split('T')[0].replace(/-/g, '')}`
             })
           });
 
@@ -309,7 +355,7 @@ const WarehouseStockInPage: React.FC = () => {
 
       {/* Product Details Form */}
       {selectedProduct && (
-        <div className="regal-card mb-6">
+        <div className="regal-card mb-6 !p-2 md:!p-6">
           <h3 className="text-lg font-semibold mb-4">Product Details</h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -334,6 +380,23 @@ const WarehouseStockInPage: React.FC = () => {
             </div>
 
             <div>
+              <label className="block text-sm font-medium mb-1">Select Warehouse Vendor *</label>
+              <select
+                value={selectedVendorId}
+                onChange={(e) => setSelectedVendorId(e.target.value)}
+                className="regal-input w-full"
+                required
+              >
+                <option value="">Select Vendor</option>
+                {vendors.map((vendor) => (
+                  <option key={vendor.id} value={vendor.id}>
+                    {vendor.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
               <label className="block text-sm font-medium mb-1">Quantity *</label>
               <input
                 id="quantity-input"
@@ -343,6 +406,26 @@ const WarehouseStockInPage: React.FC = () => {
                 className="regal-input w-full"
                 min="1"
                 required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Cost Price (Rs.)</label>
+              <input
+                type="text"
+                value={costPrice}
+                disabled
+                className="regal-input w-full bg-gray-100"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Selling Price (Rs.)</label>
+              <input
+                type="text"
+                value={sellingPrice}
+                disabled
+                className="regal-input w-full bg-gray-100"
               />
             </div>
 
@@ -369,6 +452,8 @@ const WarehouseStockInPage: React.FC = () => {
                 setSelectedProduct(null);
                 setBarcode('');
                 setQuantity('');
+                setCostPrice('0');
+                setSellingPrice('0');
                 barcodeInputRef.current?.focus();
               }}
               className="regal-btn bg-gray-300 text-black"
@@ -389,8 +474,10 @@ const WarehouseStockInPage: React.FC = () => {
               <thead className="bg-gray-100 border-b">
                 <tr className="text-xs text-gray-900 uppercase tracking-wider font-semibold">
                   <th className="px-4 py-3 text-left">Product</th>
-                  <th className="px-4 py-3 text-left">Barcode</th>
+                  <th className="px-4 py-3 text-left">Vendor</th>
                   <th className="px-4 py-3 text-right">Quantity</th>
+                  <th className="px-4 py-3 text-right">Cost</th>
+                  <th className="px-4 py-3 text-right">Total</th>
                   <th className="px-4 py-3 text-center">Action</th>
                 </tr>
               </thead>
@@ -398,8 +485,10 @@ const WarehouseStockInPage: React.FC = () => {
                 {stockInItems.map((item, index) => (
                   <tr key={index} className="hover:bg-gray-50 text-sm">
                     <td className="px-4 py-3">{item.product_name}</td>
-                    <td className="px-4 py-3">{item.barcode || '-'}</td>
+                    <td className="px-4 py-3">{item.vendor_name || '-'}</td>
                     <td className="px-4 py-3 text-right">{item.quantity}</td>
+                    <td className="px-4 py-3 text-right">{item.cost_price.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right">{item.total_cost.toFixed(2)}</td>
                     <td className="px-4 py-3 text-center">
                       <button
                         onClick={() => handleRemoveItem(index)}
@@ -415,6 +504,8 @@ const WarehouseStockInPage: React.FC = () => {
                 <tr>
                   <td colSpan={2} className="px-4 py-3">Total</td>
                   <td className="px-4 py-3 text-right">{stockInItems.reduce((sum, item) => sum + item.quantity, 0)}</td>
+                  <td className="px-4 py-3 text-right"></td>
+                  <td className="px-4 py-3 text-right">{stockInItems.reduce((sum, item) => sum + item.total_cost, 0).toFixed(2)}</td>
                   <td className="px-4 py-3"></td>
                 </tr>
               </tfoot>

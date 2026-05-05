@@ -142,10 +142,12 @@ const WarehouseStockPage: React.FC = () => {
               <thead className="bg-gray-100 border-b">
                 <tr className='text-xs text-gray-900 uppercase tracking-wider font-semibold'>
                   <th className="px-3 py-5 text-left w-12">S.No</th>
-                  <th className="px-2 py-5 text-left w-44">Product</th>
+                  <th className="px-2 py-5 text-left w-32">Vendor</th>
+                  <th className="px-2 py-5 text-left w-52">Product</th>
                   <th className="px-2 py-5 text-left w-28">Category</th>
-                  <th className="px-2 py-5 w-20">Stock</th>
-                  <th className="px-2 py-5 w-24">Warehouse Limited Qty</th>
+                  <th className="px-2 py-5 w-24">Warehouse Stock</th>
+                  <th className="px-2 py-5 w-24">Warehouse Cost</th>
+                  <th className="px-2 py-5 w-28">Warehouse Limited Qty</th>
                   <th className="px-2 py-5 w-24">Price</th>
                   <th className="px-2 py-5 w-24">Cost</th>
                   <th className="px-2 py-5 text-left w-24">Barcode</th>
@@ -157,6 +159,7 @@ const WarehouseStockPage: React.FC = () => {
                 {stockItems.map((item, index) => (
                   <tr key={item.id} className="hover:bg-gray-50 text-sm text-gray-900">
                     <td className="px-3 py-4">{(currentPage - 1) * pageSize + index + 1}</td>
+                    <td className="px-2 py-4">{item.vendor_name || '-'}</td>
                     <td className="px-2 py-4">{item.name}</td>
                     <td className="px-2 py-4">{item.category || '-'}</td>
                     <td className="px-2 py-4 text-center">
@@ -168,6 +171,7 @@ const WarehouseStockPage: React.FC = () => {
                         {item.warehouse_stock || 0}
                       </span>
                     </td>
+                    <td className="px-2 py-4 text-center">{item.warehouse_cost || 0}</td>
                     <td className="px-2 py-4 text-center">{item.warehouse_limited_qty || 0}</td>
                     <td className="px-2 py-4 text-center">{(item.unit_price || 0)}</td>
                     <td className="px-2 py-4 text-center">{(item.cost_price || 0)}</td>

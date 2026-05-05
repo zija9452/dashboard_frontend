@@ -27,6 +27,7 @@ interface Product {
   pro_cost: number;
   stock: number;
   warehouse_stock: number;
+  warehouse_cost?: number;
   is_warehouse_product: boolean;
 }
 
@@ -137,7 +138,7 @@ const WarehouseStockInPage: React.FC = () => {
 
           setSelectedProduct(product);
           setQuantity('');
-          setCostPrice(product.pro_cost?.toString() || '0');
+          setCostPrice(product.warehouse_cost?.toString() || product.pro_cost?.toString() || '0');
           setSellingPrice(product.pro_price?.toString() || '0');
           showToast(`Product found: ${product.pro_name}`, 'success');
 
@@ -410,12 +411,15 @@ const WarehouseStockInPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Cost Price (Rs.)</label>
+              <label className="block text-sm font-medium mb-1">Warehouse Cost (Rs.) *</label>
               <input
-                type="text"
+                type="number"
                 value={costPrice}
-                disabled
-                className="regal-input w-full bg-gray-100"
+                onChange={(e) => setCostPrice(e.target.value)}
+                className="regal-input w-full"
+                step="1"
+                min="1"
+                required
               />
             </div>
 
@@ -476,7 +480,7 @@ const WarehouseStockInPage: React.FC = () => {
                   <th className="px-4 py-3 text-left">Product</th>
                   <th className="px-4 py-3 text-left">Vendor</th>
                   <th className="px-4 py-3 text-right">Quantity</th>
-                  <th className="px-4 py-3 text-right">Cost</th>
+                  <th className="px-4 py-3 text-right">Warehouse Cost</th>
                   <th className="px-4 py-3 text-right">Total</th>
                   <th className="px-4 py-3 text-center">Action</th>
                 </tr>

@@ -55,7 +55,8 @@ const ShopWarehouseProductsPage: React.FC = () => {
     attributes: '',
     // Warehouse fields (only article_no and warehouse_limited_qty, no warehouse_stock)
     article_no: '',
-    warehouse_limited_qty: 0
+    warehouse_limited_qty: 0,
+    warehouse_cost: 0
   });
 
   // Generate barcode from backend
@@ -202,7 +203,8 @@ const ShopWarehouseProductsPage: React.FC = () => {
       sku: '',
       attributes: '',
       article_no: '',
-      warehouse_limited_qty: 0
+      warehouse_limited_qty: 0,
+      warehouse_cost: 0
     });
     setEditingProduct(null);
     setShowAddForm(false);
@@ -237,7 +239,8 @@ const ShopWarehouseProductsPage: React.FC = () => {
         brand_action: formData.brand_action,
         is_warehouse_product: true, // Auto-set to true
         article_no: userRole === 'warehouse' || userRole === 'admin' ? formData.article_no : undefined,
-        warehouse_limited_qty: userRole === 'warehouse' || userRole === 'admin' ? formData.warehouse_limited_qty : Number(formData.warehouse_limited_qty)
+        warehouse_limited_qty: userRole === 'warehouse' || userRole === 'admin' ? formData.warehouse_limited_qty : Number(formData.warehouse_limited_qty),
+        warehouse_cost: Number(formData.warehouse_cost)
       };
 
       if (editingProduct) {
@@ -313,7 +316,8 @@ const ShopWarehouseProductsPage: React.FC = () => {
         attributes: fullProduct.pro_image,
         // Warehouse fields
         article_no: fullProduct.article_no || '',
-        warehouse_limited_qty: fullProduct.warehouse_limited_qty || 0
+        warehouse_limited_qty: fullProduct.warehouse_limited_qty || 0,
+        warehouse_cost: fullProduct.warehouse_cost || 0
       });
       setShowAddForm(true);
 
@@ -398,7 +402,8 @@ const ShopWarehouseProductsPage: React.FC = () => {
                     sku: '',
                     attributes: '',
                     article_no: '',
-                    warehouse_limited_qty: 0
+                    warehouse_limited_qty: 0,
+                    warehouse_cost: 0
                   });
                   setEditingProduct(null);
                   setShowAddForm(true);
@@ -639,6 +644,21 @@ const ShopWarehouseProductsPage: React.FC = () => {
                       required
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Warehouse Cost *</label>
+                    <input
+                      type="number"
+                      name="warehouse_cost"
+                      value={formData.warehouse_cost || ''}
+                      onChange={handleInputChange}
+                      className="regal-input w-full"
+                      placeholder="Enter warehouse cost"
+                      step="1"
+                      min="1"
+                      required
+                    />
+                  </div>
            
             </div>
 
@@ -701,6 +721,7 @@ const ShopWarehouseProductsPage: React.FC = () => {
                   <th className="px-2 py-5 text-left w-28">Brand</th>
                   <th className="px-2 py-5 text-left w-24">Article No</th>
                   <th className="px-2 py-5 w-24">Warehouse Stock</th>
+                  <th className="px-2 py-5 w-24">Warehouse Cost</th>
                   <th className="px-2 py-5 w-28">Warehouse Limited Qty</th>
                  
                
@@ -723,6 +744,7 @@ const ShopWarehouseProductsPage: React.FC = () => {
                     
                     <td className="px-2 py-4 text-center">{product.article_no || '-'}</td>
                         <td className="px-2 py-4 text-center">{product.warehouse_stock ?? 0}</td>
+                        <td className="px-2 py-4 text-center">{product.warehouse_cost ?? 0}</td>
                         <td className="px-2 py-4 text-center">{product.warehouse_limited_qty ?? 0}</td>
                     
                   

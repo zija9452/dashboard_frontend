@@ -4,6 +4,8 @@ export interface StockInRequest {
   product_id: string;
   product_type: string; // "warehouse" or "shop"
   qty: number;
+  cost_price?: number;
+  vendor_id?: string;
   ref?: string;
 }
 
@@ -23,8 +25,10 @@ export interface StockAdjustRequest {
 
 export interface StockItem {
   id: string;
+  vendor_name?: string;
   name: string;
   warehouse_stock: number;
+  warehouse_cost: number;
   stock_level?: number; // For backward compatibility
   category: string;
   branch: string;

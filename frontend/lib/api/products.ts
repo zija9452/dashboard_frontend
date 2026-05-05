@@ -19,6 +19,7 @@ export interface Product {
   is_warehouse_product?: boolean;
   article_no?: string;
   warehouse_stock?: number;
+  warehouse_cost?: number;
   warehouse_limited_qty?: number;
 }
 
@@ -39,6 +40,11 @@ export interface ProductCreateRequest {
   branch?: string;
   limited_qty: number;
   brand_action?: string;
+  is_warehouse_product?: boolean;
+  article_no?: string;
+  warehouse_stock?: number;
+  warehouse_cost?: number;
+  warehouse_limited_qty?: number;
 }
 
 export interface ProductListResponse {

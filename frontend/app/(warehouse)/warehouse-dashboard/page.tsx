@@ -73,7 +73,7 @@ const WarehouseDashboardPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="p-2 py-5 pt-16 sm:pt-4">
+      <div className="p-2 py-5 pt-14 sm:pt-4">
         <PageHeader title="Warehouse Dashboard" />
 
         <div className="max-w-[100%] md:max-w-[85%] mx-auto">

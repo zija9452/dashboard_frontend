@@ -378,10 +378,10 @@ const WarehouseInvoicePage: React.FC = () => {
       <style dangerouslySetInnerHTML={{ __html: printStyles }} />
       <div className="bg-white min-h-screen">
       {/* Navbar Header */}
-      <nav className="flex items-center mb-4 md:mb-6 px-4 md:px-6 py-2 md:py-8 bg-regal-yellow shadow-lg relative">
+      <nav className="flex items-center mb-4 md:mb-6 px-4 md:px-6 py-8 md:py-8 bg-regal-yellow shadow-lg relative">
   
         <div className="absolute left-1/2 transform -translate-x-1/2 text-center">
-          <div className="text-lg md:text-2xl font-bold text-regal-black uppercase">Warehouse Invoice</div>
+          <div className="text-lg md:text-2xl font-bold text-regal-black uppercase whitespace-nowrap">Warehouse Invoice</div>
           <div className="text-[10px] md:text-xs font-medium text-regal-black opacity-70">(Stock Transfer)</div>
         </div>
       </nav>

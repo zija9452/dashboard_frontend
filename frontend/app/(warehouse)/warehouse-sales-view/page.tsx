@@ -220,7 +220,7 @@ const WarehouseSalesViewPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4 bg-white min-h-screen">
+    <div className="p-4 bg-white min-h-screen pt-14 md:pt-0">
       <PageHeader title="Warehouse Sales View" />
         {/* Filters Section */}
         <div className="mb-6">

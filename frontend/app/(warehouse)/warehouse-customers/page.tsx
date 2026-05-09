@@ -227,7 +227,7 @@ const WarehouseCustomersPage: React.FC = () => {
   };
 
   return (
-    <div className="p-2 py-5">
+    <div className="p-2 py-5 pt-14 md:pt-0">
       <PageHeader title="Warehouse Customers" />
 
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">

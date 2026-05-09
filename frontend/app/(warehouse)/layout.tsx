@@ -58,6 +58,9 @@ function WarehouseSidebarLayoutContent({ children }: { children: React.ReactNode
                   <SidebarLink href="/warehouse-dashboard" className="text-base py-3 border-b border-gray-200">
                     Warehouse Dashboard
                   </SidebarLink>
+                  <SidebarLink href="/warehouse-vendors" className="text-base py-3 border-b border-gray-200">
+                    Warehouse Vendors
+                  </SidebarLink>
                   <SidebarLink href="/warehouse-customers" className="text-base py-3 border-b border-gray-200">
                     Warehouse Customers
                   </SidebarLink>
@@ -67,9 +70,13 @@ function WarehouseSidebarLayoutContent({ children }: { children: React.ReactNode
                   <SidebarLink href="/warehouse-stock" className="text-base py-3 border-b border-gray-200">
                     Warehouse Stock
                   </SidebarLink>
-                  <SidebarLink href="/warehouse-vendors" className="text-base py-3 border-b border-gray-200">
-                    Warehouse Vendors
+                  <SidebarLink href="/warehouse-invoice" className="text-base py-3 border-b border-gray-200">
+                    Warehouse Invoice
                   </SidebarLink>
+                  <SidebarLink href="/warehouse-sales-view" className="text-base py-3 border-b border-gray-200">
+                    Warehouse Sales View
+                  </SidebarLink>
+                  
                   <SidebarLink href="/logout" className="text-base py-3">
                     Logout
                   </SidebarLink>

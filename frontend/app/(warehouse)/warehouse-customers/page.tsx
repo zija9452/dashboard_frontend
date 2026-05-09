@@ -242,11 +242,18 @@ const WarehouseCustomersPage: React.FC = () => {
             {showAddForm ? 'Cancel' : '+ Add Warehouse Customer'}
           </button>
           <button
+            onClick={() => router.push('/warehouse-customer-payment')}
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+          >
+            Customer Payment
+          </button>
+          <button
             onClick={() => setShowReportModal(true)}
             className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
           >
             Customer Details
           </button>
+          
         </div>
 
         <div className="w-full sm:w-auto flex gap-2">

@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/ui/PageHeader';
 import ReportModal from '@/components/ui/ReportModal';
 
-// Warehouse Invoice interface (item-wise row)
 interface WarehouseInvoiceRow {
   id: string;
   invoice_no: string;
@@ -24,7 +23,6 @@ interface WarehouseInvoiceRow {
   customer_name: string;
 }
 
-// Summary interface
 interface SalesSummary {
   opening: number;
   totalSale: number;
@@ -36,16 +34,18 @@ interface SalesSummary {
   totalPurchase: number;
   totalRefund: number;
   netProfit: number;
-  warehouse_sales?: number;
+  warehouse_sales: number;
 }
 
 const WarehouseSalesViewPage: React.FC = () => {
   const router = useRouter();
   const { showToast } = useToast();
-
-  // Filter states
-  const [fromDate, setFromDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [toDate, setToDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  
+  // Date filter state
+  const todayStr = new Date().toISOString().split('T')[0];
+  const [fromDate, setFromDate] = useState<string>(todayStr);
+  const [toDate, setToDate] = useState<string>(todayStr);
+  const [search, setSearch] = useState<string>('');
   const [reportType, setReportType] = useState<string>('warehouse-invoice');
 
   // Data states
@@ -85,11 +85,11 @@ const WarehouseSalesViewPage: React.FC = () => {
 
       const [invoicesResponse, summaryResponse] = await Promise.all([
         fetch(
-          `/api/warehouse-invoice/sales-view?from_date=${fromDate}&to_date=${toDate}`,
+          `/api/warehouse-salesview/sales-view?from_date=${fromDate}&to_date=${toDate}${search ? `&search=${search}` : ''}`,
           { credentials: 'include' }
         ),
         fetch(
-          `/api/warehouse-invoice/summary?from_date=${fromDate}&to_date=${toDate}`,
+          `/api/warehouse-salesview/summary?from_date=${fromDate}&to_date=${toDate}`,
           { credentials: 'include' }
         )
       ]);
@@ -118,7 +118,7 @@ const WarehouseSalesViewPage: React.FC = () => {
     try {
       setGeneratingExcel(true);
 
-      let apiUrl = `/api/warehouse-invoice/sales-view/excel?from_date=${fromDate}&to_date=${toDate}`;
+      let apiUrl = `/api/warehouse-salesview/sales-view/excel?from_date=${fromDate}&to_date=${toDate}`;
       let reportName = 'Warehouse Invoices';
 
       if (reportType === 'warehouse-adjustment-stock') {
@@ -169,7 +169,7 @@ const WarehouseSalesViewPage: React.FC = () => {
     try {
       setGeneratingPdf(true);
 
-      let apiUrl = `/api/warehouse-invoice/sales-view/pdf?from_date=${fromDate}&to_date=${toDate}`;
+      let apiUrl = `/api/warehouse-salesview/sales-view/pdf?from_date=${fromDate}&to_date=${toDate}`;
       let reportTitleText = 'Warehouse Sales Report';
 
       if (reportType === 'warehouse-adjustment-stock') {
@@ -247,6 +247,18 @@ const WarehouseSalesViewPage: React.FC = () => {
               />
             </div>
 
+            {/* Search */}
+            <div className="md:col-span-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Search Invoice / Customer</label>
+              <input
+                type="text"
+                placeholder="Search..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="regal-input w-full"
+              />
+            </div>
+
             {/* Fetch Button */}
             <div className="md:col-span-1 flex items-end">
               <button
@@ -309,8 +321,6 @@ const WarehouseSalesViewPage: React.FC = () => {
                   <th className="px-3 py-5 text-left w-16">Qty</th>
                   <th className="px-3 py-5 text-left w-20">Discount</th>
                   <th className="px-3 py-5 text-center w-20">Amount Paid</th>
-                  
-                  
                   <th className="px-3 py-5 text-left w-28">Time</th>
                 </tr>
               </thead>
@@ -319,7 +329,9 @@ const WarehouseSalesViewPage: React.FC = () => {
                   <tr>
                     <td colSpan={9} className="px-3 py-8 text-center">
                       <div className="animate-pulse">
-                        <div className="h-40 bg-gray-200 rounded w-full mx-auto"></div>
+                        {[...Array(5)].map((_, i) => (
+                          <div key={i} className="h-10 bg-gray-100 mb-2 rounded"></div>
+                        ))}
                       </div>
                     </td>
                   </tr>
@@ -349,8 +361,6 @@ const WarehouseSalesViewPage: React.FC = () => {
                         <td className="px-2 py-4 text-center font-semibold text-green-700">
                           {invoice.amount_paid > 0 ? invoice.amount_paid.toLocaleString() : '0'}
                         </td>
-                        
-                        
                         <td className="px-3 py-4">
                           {(() => {
                             const date = new Date(invoice.created_at);

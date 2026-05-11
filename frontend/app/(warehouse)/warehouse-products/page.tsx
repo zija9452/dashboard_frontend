@@ -353,18 +353,41 @@ const ShopWarehouseProductsPage: React.FC = () => {
         setDeletingId(null);
         Swal.fire({
           title: 'Deleted!',
-          text: 'Warehouse product has been deleted.',
+          text: 'Warehouse product has been deleted successfully.',
           icon: 'success',
-          timer: 2000,
-          timerProgressBar: true,
-          showConfirmButton: false
+          confirmButtonColor: '#3085d6',
+          confirmButtonText: 'OK'
         });
       } catch (error: any) {
         console.error('Error deleting product:', error);
         setDeletingId(null);
-        let errorMessage = 'Failed to delete warehouse product';
-        if (error?.response?.data?.detail) errorMessage = error.response.data.detail;
-        showToast(errorMessage, 'error');
+        
+        const status = error?.response?.status;
+        const errorData = error?.response?.data;
+        const errorMessage = errorData?.detail || errorData?.error || 'Failed to delete warehouse product';
+
+        // Check for constraint violations
+        if (status === 400 || status === 409) {
+          Swal.fire({
+            title: 'Cannot Delete!',
+            text: errorMessage.includes('referenced') || errorMessage.includes('foreign key') 
+              ? 'This product is still referenced by invoices or other records and cannot be deleted.'
+              : errorMessage,
+            icon: 'error',
+            confirmButtonColor: '#3085d6',
+            confirmButtonText: 'OK'
+          });
+        } else {
+          if (!Swal.isVisible()) {
+            Swal.fire({
+              title: 'Error!',
+              text: errorMessage,
+              icon: 'error',
+              confirmButtonColor: '#3085d6',
+              confirmButtonText: 'OK'
+            });
+          }
+        }
       }
     }
   };

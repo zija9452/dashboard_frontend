@@ -202,17 +202,35 @@ const WarehouseVendorsPage: React.FC = () => {
             title: 'Deleted!',
             text: 'Warehouse vendor has been deleted successfully.',
             icon: 'success',
-            timer: 2000,
-            timerProgressBar: true,
-            showConfirmButton: false
+            confirmButtonColor: '#3085d6',
+            confirmButtonText: 'OK'
           });
           await fetchVendors();
         } else {
           const errorData = await response.json();
-          throw new Error(errorData.detail || errorData.error || 'Failed to delete warehouse vendor');
+          // Check for constraint violations
+          if (response.status === 400 || response.status === 409) {
+            Swal.fire({
+              title: 'Cannot Delete!',
+              text: errorData.detail || errorData.error || 'This vendor is still referenced by invoices or other records and cannot be deleted.',
+              icon: 'error',
+              confirmButtonColor: '#3085d6',
+              confirmButtonText: 'OK'
+            });
+          } else {
+            throw new Error(errorData.detail || errorData.error || 'Failed to delete warehouse vendor');
+          }
         }
       } catch (error: any) {
-        showToast(error.message || 'Failed to delete warehouse vendor', 'error');
+        if (!Swal.isVisible()) {
+          Swal.fire({
+            title: 'Error!',
+            text: error.message || 'An unexpected error occurred.',
+            icon: 'error',
+            confirmButtonColor: '#3085d6',
+            confirmButtonText: 'OK'
+          });
+        }
       } finally {
         setDeletingId(null);
       }

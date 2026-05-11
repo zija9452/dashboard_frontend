@@ -212,14 +212,40 @@ const WarehouseCustomersPage: React.FC = () => {
         });
 
         if (response.ok) {
-          Swal.fire('Deleted!', 'Warehouse customer has been deleted.', 'success');
+          Swal.fire({
+            title: 'Deleted!',
+            text: 'Warehouse customer has been deleted.',
+            icon: 'success',
+            confirmButtonColor: '#3085d6',
+            confirmButtonText: 'OK'
+          });
           await fetchCustomers();
           await fetchMarketBalance();
         } else {
-          throw new Error('Failed to delete warehouse customer');
+          const errorData = await response.json();
+          // Check if it's a foreign key violation or other constraint error
+          if (response.status === 400 || response.status === 409) {
+            Swal.fire({
+              title: 'Cannot Delete!',
+              text: errorData.detail || 'This customer is still referenced by invoices or other records and cannot be deleted.',
+              icon: 'error',
+              confirmButtonColor: '#3085d6',
+              confirmButtonText: 'OK'
+            });
+          } else {
+            throw new Error(errorData.detail || 'Failed to delete warehouse customer');
+          }
         }
       } catch (error: any) {
-        showToast(error.message || 'Failed to delete warehouse customer', 'error');
+        if (!Swal.isVisible()) {
+          Swal.fire({
+            title: 'Error!',
+            text: error.message || 'An unexpected error occurred.',
+            icon: 'error',
+            confirmButtonColor: '#3085d6',
+            confirmButtonText: 'OK'
+          });
+        }
       } finally {
         setDeletingId(null);
       }

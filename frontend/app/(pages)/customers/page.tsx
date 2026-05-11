@@ -354,21 +354,39 @@ const CustomersPage: React.FC = () => {
             title: 'Deleted!',
             text: 'Customer has been deleted successfully.',
             icon: 'success',
-            timer: 2000,
-            timerProgressBar: true,
-            showConfirmButton: false
+            confirmButtonColor: '#3085d6',
+            confirmButtonText: 'OK'
           });
           await fetchCustomers();
           setDeletingId(null);
         } else {
           const errorData = await response.json();
           setDeletingId(null);
-          throw new Error(errorData.error || errorData.detail || 'Failed to delete customer');
+          // Check for constraint violations
+          if (response.status === 400 || response.status === 409) {
+            Swal.fire({
+              title: 'Cannot Delete!',
+              text: errorData.error || errorData.detail || 'This customer is still referenced by invoices or other records and cannot be deleted.',
+              icon: 'error',
+              confirmButtonColor: '#3085d6',
+              confirmButtonText: 'OK'
+            });
+          } else {
+            throw new Error(errorData.error || errorData.detail || 'Failed to delete customer');
+          }
         }
       } catch (error: any) {
         setDeletingId(null);
         console.error('Error deleting customer:', error);
-        showToast(error.message || 'Failed to delete customer', 'error');
+        if (!Swal.isVisible()) {
+          Swal.fire({
+            title: 'Error!',
+            text: error.message || 'An unexpected error occurred.',
+            icon: 'error',
+            confirmButtonColor: '#3085d6',
+            confirmButtonText: 'OK'
+          });
+        }
       }
     }
   };

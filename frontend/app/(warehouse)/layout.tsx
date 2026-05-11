@@ -73,12 +73,13 @@ function WarehouseSidebarLayoutContent({ children }: { children: React.ReactNode
                   <SidebarLink href="/warehouse-invoice" className="text-base py-3 border-b border-gray-200">
                     Warehouse Invoice
                   </SidebarLink>
-                  <SidebarLink href="/warehouse-duplicate-bill" className="text-base py-3 border-b border-gray-200">
-                    Warehouse Duplicate Bill
-                  </SidebarLink>
                   <SidebarLink href="/warehouse-sales-view" className="text-base py-3 border-b border-gray-200">
                     Warehouse Sales View
                   </SidebarLink>
+                  <SidebarLink href="/warehouse-duplicate-bill" className="text-base py-3 border-b border-gray-200">
+                    Warehouse Duplicate Bill
+                  </SidebarLink>
+                  
                   
                   <SidebarLink href="/logout" className="text-base py-3">
                     Logout

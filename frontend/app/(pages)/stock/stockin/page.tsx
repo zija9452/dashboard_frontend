@@ -216,19 +216,6 @@ const StockInPage: React.FC = () => {
 
     const qty = parseInt(quantity) || 0;
 
-    if (selectedProduct.is_warehouse_product) {
-      const warehouseStock = selectedProduct.warehouse_stock || 0;
-      if (warehouseStock < qty) {
-        Swal.fire({
-          title: 'Insufficient Warehouse Stock',
-          html: `<p>This is a warehouse product.</p><p class="mt-2 text-red-600">Available in warehouse: <strong>${warehouseStock}</strong></p><p class="mt-1">Requested quantity: <strong>${qty}</strong></p>`,
-          icon: 'error',
-          confirmButtonText: 'OK',
-        });
-        return;
-      }
-    }
-
     const newItem: StockInItem = {
       product_id: selectedProduct.pro_id,
       product_name: selectedProduct.pro_name,
@@ -605,14 +592,6 @@ const StockInPage: React.FC = () => {
         <div className="regal-card mb-6 !p-2 md:!p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold">Product Details</h3>
-            {selectedProduct.is_warehouse_product && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-                Warehouse Product — Stock transfers from warehouse
-              </span>
-            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -624,9 +603,6 @@ const StockInPage: React.FC = () => {
             <div>
               <label className="block text-sm font-medium mb-1">
                 Current Stock
-                {selectedProduct.is_warehouse_product && (
-                  <span className="ml-1 text-xs text-blue-600 font-normal">(Warehouse: {selectedProduct.warehouse_stock || 0})</span>
-                )}
               </label>
               <input type="text" value={selectedProduct.stock} disabled className="regal-input w-full bg-gray-100" />
             </div>
@@ -651,19 +627,13 @@ const StockInPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">
-                Quantity *
-                {selectedProduct.is_warehouse_product && (
-                  <span className="ml-1 text-xs text-amber-600 font-normal">Max: {selectedProduct.warehouse_stock || 0}</span>
-                )}
-              </label>
+              <label className="block text-sm font-medium mb-1">Quantity *</label>
               <input
                 type="number"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 className="regal-input w-full"
                 min="1"
-                max={selectedProduct.is_warehouse_product ? (selectedProduct.warehouse_stock || undefined) : undefined}
                 required
               />
             </div>
@@ -818,7 +788,7 @@ const StockInPage: React.FC = () => {
             <button
               onClick={handlePrintBarcodesOnly}
               disabled={submitting}
-              className="regal-btn bg-orange-500 text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 w-full sm:w-auto"
+              className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 w-full sm:w-auto"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -834,16 +804,6 @@ const StockInPage: React.FC = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               {submitting ? 'Processing...' : 'Stock In + Print Barcodes'}
-            </button>
-            <button
-              onClick={handleStockIn}
-              disabled={submitting}
-              className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 w-full sm:w-auto"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              {submitting ? 'Processing...' : 'Stock In Only'}
             </button>
             <button
               onClick={() => setStockInItems([])}

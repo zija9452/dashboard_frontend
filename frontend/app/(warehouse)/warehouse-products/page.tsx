@@ -226,12 +226,11 @@ const ShopWarehouseProductsPage: React.FC = () => {
     setSubmitting(true);
 
     try {
-      const payload = {
+      const basePayload = {
         sku: formData.sku || `SKU-${Date.now()}`,
         name: formData.name,
         unit_price: Number(formData.unit_price),
         cost_price: Number(formData.cost_price),
-        stock_level: 0,
         barcode: formData.barcode,
         discount: Number(formData.discount),
         category: formData.category,
@@ -245,7 +244,8 @@ const ShopWarehouseProductsPage: React.FC = () => {
       };
 
       if (editingProduct) {
-        await productsApi.updateProduct(editingProduct.pro_id, payload);
+        // Do NOT include stock_level in update — stock is managed via stock-in/out
+        await productsApi.updateProduct(editingProduct.pro_id, basePayload);
         Swal.fire({
           title: 'Updated!',
           text: 'Warehouse product has been updated successfully.',
@@ -255,7 +255,7 @@ const ShopWarehouseProductsPage: React.FC = () => {
           showConfirmButton: false
         });
       } else {
-        await productsApi.createProduct(payload);
+        await productsApi.createProduct({ ...basePayload, stock_level: 0 });
         Swal.fire({
           title: 'Created!',
           text: 'Warehouse product has been created successfully.',

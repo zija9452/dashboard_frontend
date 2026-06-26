@@ -346,12 +346,11 @@ const ProductsPage: React.FC = () => {
       }
 
       // Only send fields that exist in ProductCreate model
-      const payload = {
+      const basePayload = {
         sku: formData.sku || `SKU-${Date.now()}`, // Generate SKU if not provided
         name: formData.name,
         unit_price: Number(formData.unit_price),
         cost_price: Number(formData.cost_price),
-        stock_level: 0, // Default stock level for new products
         attributes: imageUrl,
         barcode: formData.barcode,
         discount: Number(formData.discount),
@@ -362,7 +361,8 @@ const ProductsPage: React.FC = () => {
       };
 
       if (editingProduct) {
-        await productsApi.updateProduct(editingProduct.pro_id, payload);
+        // Do NOT include stock_level in update — stock is managed via stock-in/out
+        await productsApi.updateProduct(editingProduct.pro_id, basePayload);
         Swal.fire({
           title: 'Updated!',
           text: 'Product has been updated successfully.',
@@ -372,7 +372,7 @@ const ProductsPage: React.FC = () => {
           showConfirmButton: false
         });
       } else {
-        await productsApi.createProduct(payload);
+        await productsApi.createProduct({ ...basePayload, stock_level: 0 });
         Swal.fire({
           title: 'Created!',
           text: 'Product has been created successfully.',

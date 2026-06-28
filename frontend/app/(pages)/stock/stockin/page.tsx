@@ -61,6 +61,7 @@ const StockInPage: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [selectedVendor, setSelectedVendor] = useState('');
+  const [defaultVendorId, setDefaultVendorId] = useState('');
   const [quantity, setQuantity] = useState('');
   const [costPrice, setCostPrice] = useState<number>(0);
   const [sellingPrice, setSellingPrice] = useState(0);
@@ -135,6 +136,11 @@ const StockInPage: React.FC = () => {
         const data = await response.json();
         const vendorList = Array.isArray(data) ? data : (data.vendors || []);
         setVendors(vendorList.map((v: VendorAPI) => ({ ven_id: v.id, ven_name: v.name })));
+        const jns = vendorList.find((v: VendorAPI) => v.name === 'J&S Sports');
+        if (jns) {
+          setDefaultVendorId(jns.id);
+          setSelectedVendor(jns.id);
+        }
       }
     } catch (error) {
       showToast('Error loading vendors', 'error');
@@ -236,7 +242,7 @@ const StockInPage: React.FC = () => {
     setQuantity('');
     setCostPrice(0);
     setSellingPrice(0);
-    setSelectedVendor('');
+    setSelectedVendor(defaultVendorId);
 
     setTimeout(() => {
       if (searchMode === 'barcode') barcodeInputRef.current?.focus();
@@ -703,7 +709,7 @@ const StockInPage: React.FC = () => {
                 setQuantity('');
                 setCostPrice(0);
                 setSellingPrice(0);
-                setSelectedVendor('');
+                setSelectedVendor(defaultVendorId);
                 if (searchMode === 'barcode') barcodeInputRef.current?.focus();
                 else nameSearchRef.current?.focus();
               }}

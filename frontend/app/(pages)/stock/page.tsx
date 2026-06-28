@@ -250,7 +250,7 @@ const StockPage: React.FC = () => {
                   <th className="px-3 py-5 text-left w-12">S.No</th>
                   <th className="px-2 py-5 text-left w-24">Vendor</th>
                   <th className="px-2 py-5 text-left w-44">Product</th>
-                  <th className="px-2 py-5 text-left w-28">Category</th>
+                  <th className="px-2 py-5 text-left w-40">Category</th>
                   <th className="px-2 py-5 w-20">Stock</th>
                   <th className="px-2 py-5 w-24">Price</th>
                   <th className="px-2 py-5 w-24">Cost</th>

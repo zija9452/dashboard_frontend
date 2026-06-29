@@ -189,12 +189,13 @@ const ShopWarehouseProductsPage: React.FC = () => {
   };
 
   // Reset form
-  const resetForm = () => {
+  const resetForm = async () => {
+    const newBarcode = await generateBarcode();
     setFormData({
       name: '',
       unit_price: 0,
       cost_price: 0,
-      barcode: '',
+      barcode: newBarcode,
       discount: 0,
       limited_qty: 0,
       category: '',
@@ -266,7 +267,7 @@ const ShopWarehouseProductsPage: React.FC = () => {
       }
 
       await fetchProducts();
-      resetForm();
+      await resetForm();
       setSubmitting(false);
     } catch (error: any) {
       // Extract error message from response

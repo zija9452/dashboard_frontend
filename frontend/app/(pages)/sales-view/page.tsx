@@ -758,20 +758,30 @@ const SalesViewPage: React.FC = () => {
         </div>
 
        {/* Total Sales Summary - Walk-in + Customer Invoices */}
-        
+
           <div className="grid grid-cols-2 gap-4 mb-4">
             {/* Walk-in Invoices Total */}
             <div className="bg-white p-4 rounded border border-gray-200">
-              <p className="text-sm text-gray-600 mb-2">Walk-in Invoices</p>
-              <p className="text-2xl font-bold">
+              <p className="text-xs text-gray-500 mb-1 uppercase tracking-wide">Walk-in Total Sale</p>
+              <p className="text-2xl font-bold text-gray-900">
                 Rs. {summary.walkin_sales?.toLocaleString() || 0}
               </p>
+              {(summary.totalRefund ?? 0) > 0 && (
+                <div className="mt-1 border-t border-gray-100">
+                  <p className="text-sm text-red-600 font-medium">
+                    (-) Refund: Rs. {summary.totalRefund?.toLocaleString() || 0}
+                  </p>
+                  <p className="text-sm font-bold text-green-700 mt-1">
+                    Net: Rs. {((summary.walkin_sales || 0) - (summary.totalRefund || 0)).toLocaleString()}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Customer Invoices Total */}
             <div className="bg-white p-4 rounded border border-gray-200">
-              <p className="text-sm text-gray-600 mb-2">Customer Invoices</p>
-              <p className="text-2xl font-bold">
+              <p className="text-xs text-gray-500 mb-1 uppercase tracking-wide">Customer Invoices</p>
+              <p className="text-2xl font-bold text-gray-900">
                 Rs. {summary.customer_payments?.toLocaleString() || 0}
               </p>
             </div>

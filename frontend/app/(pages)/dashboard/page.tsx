@@ -54,6 +54,7 @@ const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState(false);
   const [userRole, setUserRole] = useState<string>('Admin');
+  const isCashierLike = userRole === 'Cashier' || userRole === 'Order Booker';
   const [showShopReportModal, setShowShopReportModal] = useState(false);
 
   // Single Date Range for both KPI cards and Chart - defaults to TODAY (daily view)
@@ -93,20 +94,21 @@ const DashboardPage: React.FC = () => {
           const data = await response.json();
           if (data.user?.role) {
             const role = data.user.role;
-            const capitalizedRole = role.charAt(0).toUpperCase() + role.slice(1);
+            const roleDisplayMap: Record<string, string> = {
+              'order_booker': 'Order Booker',
+            };
+            const capitalizedRole = roleDisplayMap[role] || (role.charAt(0).toUpperCase() + role.slice(1));
             setUserRole(capitalizedRole);
 
-            // CASHIER: Auto-fetch today's data only, no chart shown
-            if (role === 'cashier') {
-              const todayStr = new Date().toISOString().split('T')[0];
-              setFromDate(todayStr);
-              setToDate(todayStr);
+            const todayStr = new Date().toISOString().split('T')[0];
+            setFromDate(todayStr);
+            setToDate(todayStr);
+
+            // CASHIER / ORDER_BOOKER: Auto-fetch today's data only, no chart shown
+            if (role === 'cashier' || role === 'order_booker') {
               fetchDashboardData(todayStr, todayStr, false);
             } else {
               // ADMIN/EMPLOYEE: Auto-fetch TODAY's data with chart on mount
-              const todayStr = new Date().toISOString().split('T')[0];
-              setFromDate(todayStr);
-              setToDate(todayStr);
               fetchDashboardData(todayStr, todayStr, true);
             }
           }
@@ -125,7 +127,7 @@ const DashboardPage: React.FC = () => {
       setLoading(true);
 
       // Fetch chart data first if needed (for Admin/Employee)
-      if (fetchChart && userRole !== 'Cashier') {
+      if (fetchChart && !isCashierLike) {
         setChartLoading(true);
         const chartResponse = await fetch(`/api/dashboard/stats?from_date=${kpiFrom}&to_date=${kpiTo}`, {
           credentials: 'include',
@@ -158,7 +160,7 @@ const DashboardPage: React.FC = () => {
 
   const handleFetchClick = () => {
     if (fromDate && toDate) {
-      fetchDashboardData(fromDate, toDate, userRole !== 'Cashier');
+      fetchDashboardData(fromDate, toDate, !isCashierLike);
     }
   };
 
@@ -170,7 +172,7 @@ const DashboardPage: React.FC = () => {
   const monthAbbrs = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   // Check if chart data exists (for Admin/Employee only)
-  const hasChartData = userRole !== 'Cashier' &&
+  const hasChartData = !isCashierLike &&
                        dashboardData.chartData &&
                        dashboardData.chartData.dates &&
                        dashboardData.chartData.dates.length > 0;
@@ -414,8 +416,8 @@ const DashboardPage: React.FC = () => {
 
       {/* Main Content - Wider on mobile */}
       <div className="max-w-[100%] md:max-w-[85%] mx-auto">
-        {/* Date Range Picker - Hide for Cashier */}
-        {userRole !== 'Cashier' && (
+        {/* Date Range Picker - Hide for Cashier/Order Booker */}
+        {!isCashierLike && (
           <div className="mb-4 md:mb-6 bg-white p-3 md:p-4">
             {/* Mobile: dates side by side, fetch button below */}
             <div className="md:hidden">
@@ -562,7 +564,7 @@ const DashboardPage: React.FC = () => {
                   {dashboardData.adminUser}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {dashboardData.userRole}
+                  {dashboardData.userRole === 'order_booker' ? 'Order Booker' : dashboardData.userRole}
                 </p>
               </div>
               <div className="text-3xl md:text-4xl">👤</div>
@@ -601,7 +603,7 @@ const DashboardPage: React.FC = () => {
         )}
 
         {/* Chart Section - Only for Admin/Employee */}
-        {userRole !== 'Cashier' && (
+        {!isCashierLike && (
           <div className="mt-4 md:mt-8 regal-card p-3 md:p-6">
             {/* Chart Header */}
             <div className="p-1">

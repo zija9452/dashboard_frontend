@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { EyeIcon, EyeSlashIcon, LockClosedIcon, UserCircleIcon, UserGroupIcon } from '@heroicons/react/24/outline';
 
 const LoginPage: React.FC = () => {
-  const [selectedRole, setSelectedRole] = useState<'admin' | 'cashier' | 'employee' | 'warehouse'>('admin'); // Default to admin
+  const [selectedRole, setSelectedRole] = useState<'admin' | 'cashier' | 'employee' | 'warehouse' | 'order_booker'>('admin'); // Default to admin
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -107,13 +107,14 @@ const LoginPage: React.FC = () => {
                   required
                   className="block w-full pl-10 pr-10 py-3 border border-regal-yellow/30 rounded-lg shadow-sm focus:ring-2 focus:ring-regal-yellow focus:border-regal-yellow bg-white appearance-none cursor-pointer"
                   value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value as 'admin' | 'cashier' | 'employee' | 'warehouse')}
+                  onChange={(e) => setSelectedRole(e.target.value as 'admin' | 'cashier' | 'employee' | 'warehouse' | 'order_booker')}
                   disabled={loading}
                 >
                   <option value="admin">Admin</option>
                   <option value="cashier">Cashier</option>
                   <option value="employee">Employee</option>
                   <option value="warehouse">Warehouse</option>
+                  <option value="order_booker">Order Booker</option>
                 </select>
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                   <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">

@@ -184,7 +184,7 @@ const WalkInInvoicePage: React.FC = () => {
       // Use stock API with search_string parameter (same as stock page)
       const params = new URLSearchParams();
       params.append('search_string', search);
-      params.append('limit', '20'); // Limit search results
+      params.append('limit', '500');
 
       const response = await fetch(`/api/stock/viewstock?${params.toString()}`, {
         method: 'GET',

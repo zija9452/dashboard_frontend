@@ -359,6 +359,14 @@ const WalkInInvoicePage: React.FC = () => {
         const data = await response.json();
         const salesmansList = Array.isArray(data.salesmans) ? data.salesmans : [];
         setSalesmans(salesmansList);
+
+        // Default salesman to Suleman if present
+        const defaultSalesman = salesmansList.find(
+          (s: Salesman) => s.sal_name?.toLowerCase() === 'suleman'
+        );
+        if (defaultSalesman) {
+          setSelectedSalesman(defaultSalesman.sal_id);
+        }
       }
     } catch (error) {
       console.error('Error fetching salesmans:', error);
@@ -532,7 +540,10 @@ const WalkInInvoicePage: React.FC = () => {
         setShowPaymentModal(false);
         setAmountPaid('');
         setSelectedCustomer('');
-        setSelectedSalesman('');
+        const defaultSalesmanAfterSave = salesmans.find(
+          (s) => s.sal_name?.toLowerCase() === 'suleman'
+        );
+        setSelectedSalesman(defaultSalesmanAfterSave ? defaultSalesmanAfterSave.sal_id : '');
         setPaymentDate(new Date().toISOString().split('T')[0]);
         setManualDiscount(0);
 
@@ -751,6 +762,7 @@ const WalkInInvoicePage: React.FC = () => {
         setStockProducts(data.data || data.products || []);
       } else {
         setStockProducts([]);
+        showToast('Failed to fetch stock', 'error');
       }
     } catch (error) {
       console.error('Error fetching stock:', error);
@@ -1275,7 +1287,7 @@ const WalkInInvoicePage: React.FC = () => {
                 <tbody className="divide-y divide-gray-200">
                   {!hasSearched ? (
                     <tr>
-                      <td colSpan={4} className="px-6 py-32 text-center">
+                      <td colSpan={3} className="px-6 py-32 text-center">
                         <div className="flex flex-col items-center justify-center">
                           <svg className="w-24 h-24 mx-auto mb-6 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -1310,7 +1322,7 @@ const WalkInInvoicePage: React.FC = () => {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={4} className="px-6 py-32 text-center">
+                      <td colSpan={3} className="px-6 py-32 text-center">
                         <div className="flex flex-col items-center justify-center">
                           <svg className="w-24 h-24 mx-auto mb-6 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />

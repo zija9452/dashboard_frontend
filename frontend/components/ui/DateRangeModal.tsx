@@ -6,6 +6,7 @@ interface DateRangeModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (dateFrom: string, dateTo: string) => void;
+  onSubmitExcel?: (dateFrom: string, dateTo: string) => void;
   title: string;
 }
 
@@ -13,28 +14,42 @@ const DateRangeModal: React.FC<DateRangeModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
+  onSubmitExcel,
   title
 }) => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<'pdf' | 'excel' | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const validate = () => {
     if (!dateFrom || !dateTo) {
       alert('Please select both dates');
-      return;
+      return false;
     }
 
     if (new Date(dateFrom) > new Date(dateTo)) {
       alert('From date must be before To date');
-      return;
+      return false;
     }
 
-    setLoading(true);
+    return true;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validate()) return;
+
+    setLoading('pdf');
     await onSubmit(dateFrom, dateTo);
-    setLoading(false);
+    setLoading(null);
+  };
+
+  const handleExcelSubmit = async () => {
+    if (!validate() || !onSubmitExcel) return;
+
+    setLoading('excel');
+    await onSubmitExcel(dateFrom, dateTo);
+    setLoading(null);
   };
 
   if (!isOpen) return null;
@@ -83,14 +98,30 @@ const DateRangeModal: React.FC<DateRangeModalProps> = ({
             />
           </div>
 
-          <div className="flex gap-2 mt-6">
+          {onSubmitExcel && (
+            <p className="text-xs text-gray-500 mb-3">
+              Bara date range ho to Excel behtar rahega &mdash; PDF heavy data par khulne mein masla kar sakti hai.
+            </p>
+          )}
+
+          <div className="flex gap-2 mt-2">
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading !== null}
               className="regal-btn bg-regal-yellow text-regal-black flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Generating...' : 'Generate Report'}
+              {loading === 'pdf' ? 'Generating...' : 'PDF Report'}
             </button>
+            {onSubmitExcel && (
+              <button
+                type="button"
+                onClick={handleExcelSubmit}
+                disabled={loading !== null}
+                className="regal-btn bg-green-600 text-white flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading === 'excel' ? 'Generating...' : 'Excel Report'}
+              </button>
+            )}
             <button
               type="button"
               onClick={onClose}

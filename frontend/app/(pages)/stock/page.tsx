@@ -96,12 +96,55 @@ const StockPage: React.FC = () => {
     setCurrentPage(page);
   };
 
-  // Handle stock-in report generation
+  // Handle stock-in report generation (PDF)
   const handleStockInReport = async (dateFrom: string, dateTo: string) => {
     // Build URL with date params
     const reportUrl = `/api/stock/stockinreport?date_from=${dateFrom}&date_to=${dateTo}`;
     setStockInReportUrl(reportUrl);
     setShowStockInReportModal(false);
+  };
+
+  // Handle stock-in report generation (Excel) - use for heavy date ranges where PDF won't open
+  const handleStockInReportExcel = async (dateFrom: string, dateTo: string) => {
+    try {
+      const response = await fetch(`/api/stock/stockinreportexcel?date_from=${dateFrom}&date_to=${dateTo}`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.excel) {
+          const excelContent = atob(data.excel);
+          const byteNumbers = new Array(excelContent.length);
+          for (let i = 0; i < excelContent.length; i++) {
+            byteNumbers[i] = excelContent.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+          const link = document.createElement('a');
+          const url = URL.createObjectURL(blob);
+
+          link.setAttribute('href', url);
+          link.setAttribute('download', `Stock_In_Report_${dateFrom}_to_${dateTo}.xlsx`);
+          link.style.visibility = 'hidden';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          setShowStockInReportModal(false);
+          showToast('Stock In Excel report downloaded successfully!', 'success');
+        } else {
+          showToast('No data available for export', 'warning');
+        }
+      } else {
+        const errorData = await response.json();
+        showToast(errorData.error || 'Failed to generate Excel report', 'error');
+      }
+    } catch (error) {
+      console.error('Error exporting stock-in report to Excel:', error);
+      showToast('Error exporting to Excel', 'error');
+    }
   };
 
   const handleExportExcel = async () => {
@@ -315,6 +358,7 @@ const StockPage: React.FC = () => {
         isOpen={showStockInReportModal}
         onClose={() => setShowStockInReportModal(false)}
         onSubmit={handleStockInReport}
+        onSubmitExcel={handleStockInReportExcel}
         title="Stock In Report"
       />
 

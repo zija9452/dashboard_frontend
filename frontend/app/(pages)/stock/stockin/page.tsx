@@ -285,7 +285,7 @@ const StockInPage: React.FC = () => {
     try {
       const payload = stockInItems.map(item => ({
         product_id: item.product_id, vendor_id: item.vendor_id, quantity: item.quantity,
-        cost_price: item.cost_price, date: item.date,
+        cost_price: item.cost_price, selling_price: item.selling_price, date: item.date,
       }));
       const response = await fetch('/api/stock/savestockin', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload),

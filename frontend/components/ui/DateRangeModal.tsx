@@ -100,7 +100,7 @@ const DateRangeModal: React.FC<DateRangeModalProps> = ({
 
           {onSubmitExcel && (
             <p className="text-xs text-gray-500 mb-3">
-              Bara date range ho to Excel behtar rahega &mdash; PDF heavy data par khulne mein masla kar sakti hai.
+              For a large date range, Excel is the better option, as a PDF may struggle to open with a large volume of data.
             </p>
           )}
 

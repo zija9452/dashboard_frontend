@@ -1276,7 +1276,7 @@ const WalkInInvoicePage: React.FC = () => {
 
             {/* Table */}
             <div className="flex-1 overflow-auto bg-gray-50">
-              <table className="table-fixed min-w-0">
+              <table className="table-fixed w-full">
                 <thead className="bg-gray-100 sticky top-0 z-10">
                   <tr className="text-gray-700 font-semibold text-xs uppercase tracking-wider">
                     <th className="px-6 py-4 text-left border-b border-gray-300">Product Name</th>

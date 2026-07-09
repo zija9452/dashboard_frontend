@@ -84,6 +84,7 @@ const WarehouseDuplicateBillPage: React.FC = () => {
       }
       params.append('page', currentPage.toString());
       params.append('limit', pageSize.toString());
+      params.append('scope', 'warehouse');
 
       const response = await fetch(`/api/duplicatebill/search?${params.toString()}`, {
         method: 'GET',

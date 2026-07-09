@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
     const search_query = searchParams.get('search_query') || '';
     const page = searchParams.get('page') || '1';
     const limit = searchParams.get('limit') || '8';
+    const scope = searchParams.get('scope') || 'general';
 
     // Build query string
     const queryParams = new URLSearchParams();
@@ -17,6 +18,7 @@ export async function GET(request: NextRequest) {
     }
     queryParams.append('page', page);
     queryParams.append('limit', limit);
+    queryParams.append('scope', scope);
 
     const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/duplicatebill/search?${queryParams.toString()}`;
 

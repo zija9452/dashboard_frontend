@@ -81,7 +81,6 @@ const RefundPage: React.FC = () => {
   const [selectedInvoice, setSelectedInvoice] = useState<WalkinInvoice | null>(null);
   const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null);
   const [refundQuantity, setRefundQuantity] = useState<string>('');
-  const [refundAmountPaid, setRefundAmountPaid] = useState<string>('');
   const [refundDate, setRefundDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -297,7 +296,6 @@ const RefundPage: React.FC = () => {
     setSelectedInvoice(invoice);
     setSelectedItem(item);
     setRefundQuantity('');
-    setRefundAmountPaid('');
     setRefundDate(new Date().toISOString().split('T')[0]);
     setShowRefundModal(true);
   };
@@ -340,30 +338,6 @@ const RefundPage: React.FC = () => {
     }
   };
 
-  // Handle refund amount paid change with validation
-  const handleRefundAmountPaidChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    const numValue = parseFloat(value) || 0;
-    const maxAmount = getRefundAmount();
-    
-    if (value === '') {
-      setRefundAmountPaid('');
-    } else if (numValue > maxAmount) {
-      // Don't allow amount greater than calculated refund amount
-      setRefundAmountPaid(maxAmount.toFixed(2));
-      Swal.fire({
-        icon: 'warning',
-        title: 'Amount Exceeds Limit',
-        text: `Maximum refund amount is Rs. ${maxAmount.toFixed(2)}`,
-        timer: 2000,
-        timerProgressBar: true,
-        showConfirmButton: false
-      });
-    } else {
-      setRefundAmountPaid(value);
-    }
-  };
-
   // Submit refund
   const handleSubmitRefund = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -371,22 +345,17 @@ const RefundPage: React.FC = () => {
     if (!selectedInvoice || !selectedItem) return;
 
     const qty = parseInt(refundQuantity) || 0;
-    
+
     if (!refundQuantity || qty < 1) {
       showToast('Refund quantity must be at least 1', 'error');
       return;
     }
 
-    if (!refundAmountPaid || parseFloat(refundAmountPaid) <= 0) {
-      showToast('Please enter a valid refund amount', 'error');
-      return;
-    }
-
     const perUnitPrice = getPerUnitPrice();
-    const maxRefundAmount = qty * perUnitPrice;
+    const calculatedAmount = qty * perUnitPrice;
 
-    if (parseFloat(refundAmountPaid) > maxRefundAmount) {
-      showToast(`Refund amount cannot exceed ${maxRefundAmount.toFixed(2)} for ${qty} items`, 'error');
+    if (calculatedAmount <= 0) {
+      showToast('Please enter a valid refund quantity', 'error');
       return;
     }
 
@@ -399,13 +368,13 @@ const RefundPage: React.FC = () => {
         product_id: selectedItem.product_id,
         quantity_returned: qty,
         unit_price: perUnitPrice,
-        total_amount: qty * perUnitPrice
+        total_amount: calculatedAmount
       }];
 
       const refundData = {
         invoice_id: selectedInvoice.invoice_id,
         refunded_items: refundItems,
-        amount: parseFloat(refundAmountPaid),
+        amount: calculatedAmount,
         reason: 'Customer return',
         customer_id: null
       };
@@ -433,7 +402,6 @@ const RefundPage: React.FC = () => {
         setSelectedInvoice(null);
         setSelectedItem(null);
         setRefundQuantity('');
-        setRefundAmountPaid('');
         fetchInvoices();
       } else {
         const errorData = await response.json();
@@ -768,21 +736,16 @@ const RefundPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Amount Paid <span className="text-red-500">*</span>
+                      Amount Paid
                     </label>
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max={refundQuantity ? parseInt(refundQuantity) * getPerUnitPrice() : 0}
-                      value={refundAmountPaid}
-                      onChange={handleRefundAmountPaidChange}
-                      className="regal-input w-full"
-                      placeholder="Enter amount"
-                      required
+                      type="text"
+                      value={`Rs. ${getRefundAmount().toFixed(2)}`}
+                      disabled
+                      className="regal-input w-full bg-gray-100 cursor-not-allowed"
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      Max: Rs. {getRefundAmount()}
+                      Auto-calculated: Quantity &times; Price
                     </p>
                   </div>
 
@@ -792,7 +755,7 @@ const RefundPage: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      value={`Rs. ${(getRefundAmount() - (parseFloat(refundAmountPaid) || 0))}`}
+                      value="Rs. 0.00"
                       disabled
                       className="regal-input w-full bg-gray-100 cursor-not-allowed"
                     />
@@ -822,7 +785,6 @@ const RefundPage: React.FC = () => {
                       setSelectedInvoice(null);
                       setSelectedItem(null);
                       setRefundQuantity('');
-                      setRefundAmountPaid('');
                     }}
                     disabled={submitting}
                     className={`regal-btn bg-gray-300 text-black ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}

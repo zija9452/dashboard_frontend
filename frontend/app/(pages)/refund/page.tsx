@@ -14,7 +14,7 @@ interface WalkinInvoice {
   quantity: number;
   total_amount: number;
   amount_paid: number;
-  balance: number;
+  discount: number;
   date: string;
   items: Array<{
     product_name: string;
@@ -44,6 +44,7 @@ interface SelectedItem {
   quantity: number;
   unit_price: number;
   total_price?: number;
+  discount?: number;
 }
 
 interface RefundRecord {
@@ -81,6 +82,9 @@ const RefundPage: React.FC = () => {
   const [selectedInvoice, setSelectedInvoice] = useState<WalkinInvoice | null>(null);
   const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null);
   const [refundQuantity, setRefundQuantity] = useState<string>('');
+  // Auto-filled from quantity × price, but editable — cashier can override
+  // (e.g. to account for a discount that isn't tied to a specific product).
+  const [refundAmountInput, setRefundAmountInput] = useState<string>('');
   const [refundDate, setRefundDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -143,7 +147,7 @@ const RefundPage: React.FC = () => {
                 quantity: quantityReturned,
                 total_amount: refund.refund_amount,
                 amount_paid: refund.refund_amount,
-                balance: 0,
+                discount: 0,
                 date: refund.created_at.split('T')[0],
                 items: [{
                   product_name: productName,
@@ -296,30 +300,33 @@ const RefundPage: React.FC = () => {
     setSelectedInvoice(invoice);
     setSelectedItem(item);
     setRefundQuantity('');
+    setRefundAmountInput('');
     setRefundDate(new Date().toISOString().split('T')[0]);
     setShowRefundModal(true);
   };
 
-  // Calculate per unit price from selected item
+  // Plain per-unit list price (no discount math) — just for the auto-fill default.
   const getPerUnitPrice = () => {
     if (!selectedItem) return 0;
     return selectedItem.unit_price || ((selectedItem.total_price || 0) / selectedItem.quantity);
   };
 
-  // Calculate refund amount based on quantity
+  // The value actually being refunded — whatever the cashier has typed in
+  // "Amount Paid" (defaults to quantity × price, but can be edited).
   const getRefundAmount = () => {
-    const qty = parseInt(refundQuantity) || 0;
-    return qty * getPerUnitPrice();
+    const parsed = parseFloat(refundAmountInput);
+    return isNaN(parsed) ? 0 : parsed;
   };
 
   // Handle refund quantity change with validation
   const handleRefundQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     const numValue = parseInt(value) || 0;
-    
+
     if (selectedItem) {
       if (value === '') {
         setRefundQuantity('');
+        setRefundAmountInput('');
       } else if (numValue > selectedItem.quantity) {
         Swal.fire({
           icon: 'error',
@@ -330,12 +337,22 @@ const RefundPage: React.FC = () => {
           showConfirmButton: false
         });
         setRefundQuantity(selectedItem.quantity.toString());
+        setRefundAmountInput((selectedItem.quantity * getPerUnitPrice()).toFixed(2));
       } else if (numValue < 1) {
         setRefundQuantity('');
+        setRefundAmountInput('');
       } else {
         setRefundQuantity(value);
+        // Auto-fill the amount from quantity × price — cashier can still edit it.
+        setRefundAmountInput((numValue * getPerUnitPrice()).toFixed(2));
       }
     }
+  };
+
+  // Let the cashier type a different amount than the auto-filled default
+  // (e.g. to account for a discount that isn't tied to this specific product).
+  const handleRefundAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setRefundAmountInput(e.target.value);
   };
 
   // Submit refund
@@ -352,10 +369,16 @@ const RefundPage: React.FC = () => {
     }
 
     const perUnitPrice = getPerUnitPrice();
-    const calculatedAmount = qty * perUnitPrice;
+    const listAmount = qty * perUnitPrice; // undiscounted ceiling for sanity-checking
+    const enteredAmount = getRefundAmount();
 
-    if (calculatedAmount <= 0) {
-      showToast('Please enter a valid refund quantity', 'error');
+    if (!refundAmountInput || enteredAmount <= 0) {
+      showToast('Please enter a valid refund amount', 'error');
+      return;
+    }
+
+    if (enteredAmount > listAmount + 0.01) {
+      showToast(`Refund amount can't exceed Rs. ${listAmount.toFixed(2)} for this quantity`, 'error');
       return;
     }
 
@@ -368,13 +391,13 @@ const RefundPage: React.FC = () => {
         product_id: selectedItem.product_id,
         quantity_returned: qty,
         unit_price: perUnitPrice,
-        total_amount: calculatedAmount
+        total_amount: enteredAmount
       }];
 
       const refundData = {
         invoice_id: selectedInvoice.invoice_id,
         refunded_items: refundItems,
-        amount: calculatedAmount,
+        amount: enteredAmount,
         reason: 'Customer return',
         customer_id: null
       };
@@ -402,6 +425,7 @@ const RefundPage: React.FC = () => {
         setSelectedInvoice(null);
         setSelectedItem(null);
         setRefundQuantity('');
+        setRefundAmountInput('');
         fetchInvoices();
       } else {
         const errorData = await response.json();
@@ -549,16 +573,16 @@ const RefundPage: React.FC = () => {
                   <th className="px-3 py-5 text-left w-28">Total Price</th>
                   <th className="px-3 py-5 text-left w-28">Amount Paid</th>
                   <th className="px-3 py-5 text-left w-20">Quantity</th>
-                  <th className="px-3 py-5 text-left w-28">Balance</th>
+                  <th className="px-3 py-5 text-left w-28">Discount</th>
                   <th className="px-3 py-5 text-left w-32">Action</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {invoices.map((invoice, invoiceIndex) => 
+                {invoices.map((invoice, invoiceIndex) =>
                   invoice.items.map((item, itemIndex) => {
                     const showPayment = itemIndex === 0;
                     const amountPaidToShow = showPayment ? invoice.amount_paid : 0;
-                    const balanceToShow = showPayment ? (invoice.total_amount - invoice.amount_paid) : 0;
+                    const discountToShow = showPayment ? invoice.discount : 0;
                     
                     return (
                       <tr 
@@ -581,7 +605,7 @@ const RefundPage: React.FC = () => {
                           {item.quantity}
                         </td>
                         <td className="px-3 py-4 text-sm text-gray-900">
-                          Rs. {balanceToShow.toFixed(2)}
+                          Rs. {discountToShow.toFixed(2)}
                         </td>
                         <td className="px-3 py-4">
                           {viewMode === 'refunded' ? (
@@ -721,11 +745,11 @@ const RefundPage: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Amount
+                      Amount (Quantity &times; Price)
                     </label>
                     <input
                       type="text"
-                      value={`Rs. ${getRefundAmount().toFixed(2)}`}
+                      value={`Rs. ${(((parseInt(refundQuantity) || 0)) * getPerUnitPrice()).toFixed(2)}`}
                       disabled
                       className="regal-input w-full bg-gray-100 cursor-not-allowed"
                     />
@@ -736,26 +760,30 @@ const RefundPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Amount Paid
+                      Amount Paid <span className="text-red-500">*</span>
                     </label>
                     <input
-                      type="text"
-                      value={`Rs. ${getRefundAmount().toFixed(2)}`}
-                      disabled
-                      className="regal-input w-full bg-gray-100 cursor-not-allowed"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={refundAmountInput}
+                      onChange={handleRefundAmountChange}
+                      className="regal-input w-full"
+                      placeholder="Enter refund amount"
+                      required
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      Auto-calculated: Quantity &times; Price
+                      Auto-filled: Quantity &times; Price — edit if discount applies
                     </p>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Balance
+                      Discount / Difference
                     </label>
                     <input
                       type="text"
-                      value="Rs. 0.00"
+                      value={`Rs. ${(((parseInt(refundQuantity) || 0) * getPerUnitPrice()) - getRefundAmount()).toFixed(2)}`}
                       disabled
                       className="regal-input w-full bg-gray-100 cursor-not-allowed"
                     />
@@ -785,6 +813,7 @@ const RefundPage: React.FC = () => {
                       setSelectedInvoice(null);
                       setSelectedItem(null);
                       setRefundQuantity('');
+                      setRefundAmountInput('');
                     }}
                     disabled={submitting}
                     className={`regal-btn bg-gray-300 text-black ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}

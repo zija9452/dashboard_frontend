@@ -295,10 +295,14 @@ const StockInPage: React.FC = () => {
         const errors = result.results?.filter((r: any) => r.status === 'error') || [];
         const successes = result.results?.filter((r: any) => r.status === 'success') || [];
         if (errors.length > 0) {
+          const allDuplicates = errors.every((e: any) => (e.message || '').includes('Duplicate stock-in detected'));
+          const title = successes.length === 0
+            ? (allDuplicates ? 'Duplicate Stock-In Blocked' : 'Stock In Failed')
+            : 'Stock In Partially Failed';
           Swal.fire({
-            title: 'Stock In Partially Failed',
+            title,
             html: `<p>Successfully added: ${successes.length} product(s)</p><p class="mt-2 text-red-600">Failed: ${errors.length} product(s)</p><div class="mt-2 text-left text-sm">${errors.map((e: any) => `<p class="mt-1">• ${e.message || e.product_name}</p>`).join('')}</div>`,
-            icon: 'warning', confirmButtonText: 'OK',
+            icon: allDuplicates && successes.length === 0 ? 'info' : 'warning', confirmButtonText: 'OK',
           });
           const successIds = successes.map((s: any) => s.product_id);
           setStockInItems(prev => prev.filter(item => successIds.includes(item.product_id)));
@@ -332,10 +336,14 @@ const StockInPage: React.FC = () => {
         const errors = apiResult.results?.filter((r: any) => r.status === 'error') || [];
         const successes = apiResult.results?.filter((r: any) => r.status === 'success') || [];
         if (errors.length > 0) {
+          const allDuplicates = errors.every((e: any) => (e.message || '').includes('Duplicate stock-in detected'));
+          const title = successes.length === 0
+            ? (allDuplicates ? 'Duplicate Stock-In Blocked' : 'Stock In Failed')
+            : 'Stock In Partially Failed';
           Swal.fire({
-            title: 'Stock In Partially Failed',
+            title,
             html: `<p>Successfully added: ${successes.length} product(s)</p><p class="mt-2 text-red-600">Failed: ${errors.length} product(s)</p><div class="mt-2 text-left text-sm">${errors.map((e: any) => `<p class="mt-1">• ${e.message || e.product_name}</p>`).join('')}</div>`,
-            icon: 'warning', confirmButtonText: 'OK',
+            icon: allDuplicates && successes.length === 0 ? 'info' : 'warning', confirmButtonText: 'OK',
           });
           const successIds = successes.map((s: any) => s.product_id);
           setStockInItems(prev => prev.filter(item => successIds.includes(item.product_id)));

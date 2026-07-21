@@ -619,7 +619,7 @@ const CustomerPaymentPage: React.FC = () => {
                 <table className="w-full table-fixed">
                   <thead className="bg-gray-100 sticky top-0">
                     <tr className="text-xs text-gray-900 uppercase tracking-wider font-semibold">
-                      <th className="px-3 py-4 text-left w-24">Invoice No</th>
+                      <th className="px-3 py-4 text-left w-32">Invoice No</th>
                       <th className="px-3 py-4 text-left w-24">Order Status</th>
                       <th className="px-3 py-4 text-left w-20">Payment</th>
                       <th className="px-3 py-4 text-left w-24">Total</th>
@@ -664,7 +664,8 @@ const CustomerPaymentPage: React.FC = () => {
                           <td className="px-3 py-6">
                             <div className="flex flex-col">
                               <span className="font-medium text-gray-900">{invoice.invoice_no}</span>
-                              <span className="text-[10px] text-gray-500 truncate">{invoice.customer}</span>
+                              <span className="text-[10px] text-gray-500 break-words" title={invoice.customer}>{invoice.customer}</span>
+                              <span className="text-[10px] text-gray-400 break-words" title={invoice.teamname}>{invoice.teamname}</span>
                             </div>
                           </td>
                           <td className="px-3 py-6">

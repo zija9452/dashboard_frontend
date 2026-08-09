@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import Pagination from '@/components/ui/Pagination';
@@ -17,6 +18,7 @@ interface Salesman {
 
 const SalesmanPage: React.FC = () => {
   const { showToast } = useToast();
+  const router = useRouter();
 
   const [salesmen, setSalesmen] = useState<Salesman[]>([]);
   const [loading, setLoading] = useState(false);
@@ -272,6 +274,13 @@ const SalesmanPage: React.FC = () => {
             className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
           >
             Salesman Details
+          </button>
+
+          <button
+            onClick={() => router.push('/salesman-attendance')}
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+          >
+            Salesman Attendance
           </button>
         </div>
 

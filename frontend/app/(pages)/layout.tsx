@@ -6,6 +6,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 import SidebarLink from "@/components/SidebarLink";
 import SidebarClientWrapper from "@/components/SidebarClientWrapper";
 import PageHamburgerButton from "@/components/PageHamburgerButton";
+import SalesmanAttendanceWidget from "@/components/SalesmanAttendanceWidget";
 import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
 import Image from "next/image";
 import { useEffect, useState } from "react";
@@ -173,8 +174,10 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
               sidebarOpen ? 'md:ml-64' : 'ml-0'
             }`}
           >
-            <header className="bg-white shadow-sm sticky top-0 z-20">
-
+            <header className="bg-white shadow-sm sticky top-0 z-20 flex items-center justify-end px-4 py-2">
+              {userRole === 'cashier' && (
+                <SalesmanAttendanceWidget />
+              )}
             </header>
             <main className="flex-1 md:p-6 bg-white">
               {children}

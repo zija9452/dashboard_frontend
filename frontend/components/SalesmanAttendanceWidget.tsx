@@ -12,6 +12,7 @@ interface AttendanceEntry {
 }
 
 interface AttendanceOverview {
+  date: string;
   pending: AttendanceEntry[];
   active: AttendanceEntry[];
   completed: AttendanceEntry[];
@@ -28,6 +29,25 @@ function todayKey(): string {
 function formatTime(iso?: string): string {
   if (!iso) return '';
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDatePart(iso?: string): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function formatDateTime(iso?: string): string {
+  if (!iso) return '';
+  return `${formatDatePart(iso)}, ${formatTime(iso)}`;
+}
+
+function formatServerDate(iso?: string): string {
+  if (!iso) return '';
+  // iso is a plain YYYY-MM-DD date (no time/timezone) from the server - parse
+  // it as local calendar date so it doesn't shift a day depending on the
+  // browser's timezone.
+  const [year, month, day] = iso.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 const SalesmanAttendanceWidget: React.FC = () => {
@@ -189,7 +209,9 @@ const SalesmanAttendanceWidget: React.FC = () => {
               </button>
 
               <div className="p-6">
-                <h3 className="text-lg font-semibold text-regal-black mb-1">Salesman Attendance - Today</h3>
+                <h3 className="text-lg font-semibold text-regal-black mb-1">
+                  Salesman Attendance - {formatServerDate(overview.date)}
+                </h3>
                 <p className="text-sm text-gray-500 mb-4">
                   {pendingCount} pending &middot; {overview.active.length} currently in &middot; {overview.completed.length} completed
                 </p>
@@ -230,7 +252,7 @@ const SalesmanAttendanceWidget: React.FC = () => {
                           <div>
                             <p className="text-sm font-medium text-regal-black">{s.name}</p>
                             <p className="text-xs text-gray-500">
-                              {s.branch ? `${s.branch} · ` : ''}In at {formatTime(s.check_in_time)}
+                              {s.branch ? `${s.branch} · ` : ''}In at {formatDateTime(s.check_in_time)}
                             </p>
                           </div>
                           <button
@@ -259,7 +281,7 @@ const SalesmanAttendanceWidget: React.FC = () => {
                             {s.branch && <p className="text-xs text-gray-500">{s.branch}</p>}
                           </div>
                           <p className="text-xs text-gray-500">
-                            {formatTime(s.check_in_time)} &ndash; {formatTime(s.check_out_time)}
+                            {formatDatePart(s.check_in_time)} &middot; {formatTime(s.check_in_time)} &ndash; {formatTime(s.check_out_time)}
                           </p>
                         </div>
                       ))}

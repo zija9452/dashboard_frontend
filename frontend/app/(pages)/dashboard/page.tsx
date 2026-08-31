@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -13,6 +14,7 @@ import {
   Legend,
   Filler,
 } from 'chart.js';
+import Link from 'next/link';
 import PageHeader from '@/components/ui/PageHeader';
 import ReportModal from '@/components/ui/ReportModal';
 
@@ -26,6 +28,35 @@ ChartJS.register(
   Legend,
   Filler
 );
+
+interface UpcomingTournament {
+  id: string;
+  name: string;
+  sport: 'CRICKET' | 'FOOTBALL' | 'TENNIS';
+  start_date: string;
+  end_date: string | null;
+}
+
+const sportMeta: Record<string, { icon: string; label: string; hint: string; badge: string }> = {
+  CRICKET: { icon: '🏏', label: 'Cricket', hint: 'Cricket Jerseys, Kit', badge: 'bg-lime-100 text-lime-800' },
+  FOOTBALL: { icon: '⚽', label: 'Football', hint: 'Football Jersey, Shorts', badge: 'bg-blue-100 text-blue-800' },
+  TENNIS: { icon: '🎾', label: 'Tennis', hint: 'Tennis Accessories', badge: 'bg-purple-100 text-purple-800' },
+};
+
+const formatShortDate = (value: string) =>
+  new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+const daysUntilLabel = (dateStr: string) => {
+  const start = new Date(dateStr);
+  const today = new Date();
+  start.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  if (days > 1) return `In ${days} days`;
+  if (days === 1) return 'Tomorrow';
+  if (days === 0) return 'Today';
+  return 'Underway';
+};
 
 interface DashboardData {
   totalSales: number;
@@ -51,11 +82,14 @@ interface DashboardData {
 }
 
 const DashboardPage: React.FC = () => {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState(false);
   const [userRole, setUserRole] = useState<string>('Admin');
   const isCashierLike = userRole === 'Cashier' || userRole === 'Order Booker';
   const [showShopReportModal, setShowShopReportModal] = useState(false);
+  const [upcomingTournaments, setUpcomingTournaments] = useState<UpcomingTournament[]>([]);
+  const [tournamentsLoading, setTournamentsLoading] = useState(true);
 
   // Single Date Range for both KPI cards and Chart - defaults to TODAY (daily view)
   const today = new Date();
@@ -120,6 +154,26 @@ const DashboardPage: React.FC = () => {
     };
 
     fetchUserRole();
+  }, []);
+
+  useEffect(() => {
+    const fetchUpcomingTournaments = async () => {
+      try {
+        const response = await fetch('/api/tournament/upcoming?days_ahead=90', {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setUpcomingTournaments(data.data || []);
+        }
+      } catch (error) {
+        console.error('Error fetching upcoming tournaments:', error);
+      } finally {
+        setTournamentsLoading(false);
+      }
+    };
+    fetchUpcomingTournaments();
   }, []);
 
   const fetchDashboardData = async (kpiFrom: string, kpiTo: string, fetchChart: boolean) => {
@@ -525,7 +579,10 @@ const DashboardPage: React.FC = () => {
           </div>
 
           {/* Out Of Stock */}
-          <div className="regal-card p-3 md:p-4">
+          <div
+            className="regal-card p-3 md:p-4 cursor-pointer hover:shadow-md transition-shadow"
+            onClick={() => router.push('/stock-order?filter=zero')}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs md:text-sm font-medium text-gray-600 mb-1">Out Of Stock</p>
@@ -542,7 +599,10 @@ const DashboardPage: React.FC = () => {
         {/* Middle Row - 3 Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-4 md:mb-6">
           {/* Short Stock */}
-          <div className="regal-card p-3 md:p-4">
+          <div
+            className="regal-card p-3 md:p-4 cursor-pointer hover:shadow-md transition-shadow"
+            onClick={() => router.push('/stock-order?filter=short')}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs md:text-sm font-medium text-gray-600 mb-1">Short Stock</p>
@@ -601,6 +661,55 @@ const DashboardPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Upcoming Tournaments - auto-synced cricket/football schedule, for restock planning */}
+        <div className="regal-card p-3 md:p-4 mb-4 md:mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-sm md:text-base font-semibold text-gray-900">🏆 Upcoming Tournaments</p>
+              <p className="text-xs text-gray-500">Auto-synced cricket &amp; football schedules</p>
+            </div>
+            <Link href="/tournaments" className="text-xs md:text-sm font-medium text-regal-black underline hover:no-underline">
+              View All
+            </Link>
+          </div>
+
+          {tournamentsLoading ? (
+            <div className="animate-pulse space-y-2">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-10 bg-gray-100 rounded"></div>
+              ))}
+            </div>
+          ) : upcomingTournaments.length === 0 ? (
+            <p className="text-sm text-gray-500 py-2">
+              No tournaments in the next 90 days yet. They sync automatically, or{' '}
+              <Link href="/tournaments" className="underline">add one manually</Link>.
+            </p>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {upcomingTournaments.slice(0, 5).map((t) => {
+                const meta = sportMeta[t.sport];
+                return (
+                  <div key={t.id} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-xl md:text-2xl">{meta.icon}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 break-words">{t.name}</p>
+                        <p className="text-xs text-gray-500">
+                          {formatShortDate(t.start_date)}
+                          {t.end_date ? ` – ${formatShortDate(t.end_date)}` : ''} · {meta.hint}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-medium ${meta.badge}`}>
+                      {daysUntilLabel(t.start_date)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Chart Section - Only for Admin/Employee */}
         {!isCashierLike && (

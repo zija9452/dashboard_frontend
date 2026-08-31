@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
@@ -125,6 +125,11 @@ const WalkInInvoicePage: React.FC = () => {
   const [defaultProducts, setDefaultProducts] = useState<Product[]>([]);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
 
+  // Tracks the latest search box value so a delayed "not found" check can tell
+  // if the user has already moved on before firing its alert
+  const latestSearchTermRef = useRef('');
+  const zeroStockCheckTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Item form state
   const [unitPrice, setUnitPrice] = useState<number | ''>('');
   const [quantity, setQuantity] = useState<number | ''>('');
@@ -196,9 +201,83 @@ const WalkInInvoicePage: React.FC = () => {
         // Filter only products with stock > 0
         const products = (data.data || data.products || []).filter((p: any) => (p.stock_level || p.stock || 0) > 0);
         setSearchResults(products);
+
+        // Nothing came back with stock > 0 for this search - figure out why
+        // (product exists but stock is 0, vs. no such product/barcode at all)
+        if (zeroStockCheckTimeout.current) {
+          clearTimeout(zeroStockCheckTimeout.current);
+        }
+        if (products.length === 0 && search.trim().length >= 2) {
+          zeroStockCheckTimeout.current = setTimeout(() => {
+            checkZeroStockOrMissing(search);
+          }, 300);
+        }
       }
     } catch (error) {
       console.error('Error fetching products:', error);
+    }
+  };
+
+  // Called after the user stops typing/scanning when a stock search comes back empty.
+  // Distinguishes "product exists but stock is 0" from "no such product/barcode exists".
+  const checkZeroStockOrMissing = async (search: string) => {
+    // User has already changed the search box - this check is stale, skip it
+    if (latestSearchTermRef.current.trim() !== search.trim()) {
+      return;
+    }
+
+    try {
+      const params = new URLSearchParams();
+      params.append('search_string', search);
+      params.append('limit', '10');
+
+      const response = await fetch(`/api/products?${params.toString()}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (!response.ok) return;
+
+      // Bail out if the user moved on while this request was in flight
+      if (latestSearchTermRef.current.trim() !== search.trim()) {
+        return;
+      }
+
+      const data = await response.json();
+      const matches = data.data || data.products || [];
+
+      if (matches.length > 0) {
+        const names = matches
+          .map((p: any) => p.pro_name || p.product_name)
+          .filter(Boolean)
+          .join(', ');
+        Swal.fire({
+          icon: 'warning',
+          title: 'Out of Stock',
+          text: `${names || 'This product'} currently has zero stock available.`,
+          confirmButtonColor: '#f59e0b',
+        }).then(() => {
+          // Only clear if the user hasn't already started typing a new search
+          if (latestSearchTermRef.current.trim() === search.trim()) {
+            setSearchTerm('');
+            setSearchResults([]);
+          }
+        });
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Product Not Found',
+          text: `No product or barcode matching "${search}" exists in the system.`,
+          confirmButtonColor: '#ef4444',
+        }).then(() => {
+          if (latestSearchTermRef.current.trim() === search.trim()) {
+            setSearchTerm('');
+            setSearchResults([]);
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error checking product existence:', error);
     }
   };
 
@@ -224,6 +303,11 @@ const WalkInInvoicePage: React.FC = () => {
 
     fetchUserRole();
   }, []);
+
+  // Keep a ref of the latest search box value (used by the delayed not-found check below)
+  useEffect(() => {
+    latestSearchTermRef.current = searchTerm;
+  }, [searchTerm]);
 
   // Debounced search
   useEffect(() => {

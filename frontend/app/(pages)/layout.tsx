@@ -9,6 +9,7 @@ import PageHamburgerButton from "@/components/PageHamburgerButton";
 import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
 import Image from "next/image";
 import { useEffect, useState } from "react";
+
 function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -104,6 +105,21 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
                   {(userRole === 'admin' || userRole === 'employee') && (
                   <SidebarLink href="/stock" className="text-base py-3 border-b border-gray-200">
                     Stock
+                  </SidebarLink>
+                   )}
+                  {(userRole === 'admin' || userRole === 'employee' || userRole === 'cashier') && (
+                  <SidebarLink href="/shop-order" className="text-base py-3 border-b border-gray-200">
+                    Shop Order
+                  </SidebarLink>
+                   )}
+                  {(userRole === 'admin' || userRole === 'employee' || userRole === 'cashier') && (
+                  <SidebarLink href="/demand" className="text-base py-3 border-b border-gray-200">
+                    Demand
+                  </SidebarLink>
+                   )}
+                  {(userRole === 'admin' || userRole === 'employee' || userRole === 'cashier') && (
+                  <SidebarLink href="/tournaments" className="text-base py-3 border-b border-gray-200">
+                    Tournaments
                   </SidebarLink>
                    )}
                   {userRole !== 'order_booker' && (

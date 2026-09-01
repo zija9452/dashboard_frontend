@@ -313,7 +313,7 @@ const WalkInInvoicePage: React.FC = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchProducts(searchTerm);
-    }, 300);
+    }, 500);
 
     return () => clearTimeout(timer);
   }, [searchTerm]);

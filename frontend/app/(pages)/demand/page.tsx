@@ -5,6 +5,7 @@ import { useToast } from '@/components/ui/Toast';
 import PageHeader from '@/components/ui/PageHeader';
 import Pagination from '@/components/ui/Pagination';
 import Swal from 'sweetalert2';
+import { useRouter } from 'next/navigation';
 
 interface Demand {
   id: string;
@@ -65,6 +66,7 @@ const rowColors: Record<string, string> = {
 };
 
 const DemandPage: React.FC = () => {
+  const router = useRouter();
   const { showToast } = useToast();
 
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -117,6 +119,12 @@ const DemandPage: React.FC = () => {
   });
   const [addingCustomer, setAddingCustomer] = useState(false);
 
+  // Add Category modal (shared between Add Demand form and edit panel, same pattern as Add Customer)
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
+  const [addCategoryTarget, setAddCategoryTarget] = useState<'add' | 'edit' | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [addingCategory, setAddingCategory] = useState(false);
+
   useEffect(() => {
     const fetchRole = async () => {
       try {
@@ -132,18 +140,19 @@ const DemandPage: React.FC = () => {
     fetchRole();
   }, []);
 
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const response = await fetch('/api/category/?page=1&limit=1000', { credentials: 'include' });
-        if (response.ok) {
-          const data = await response.json();
-          setCategories(data?.data || []);
-        }
-      } catch (error) {
-        console.error('Error fetching categories:', error);
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch('/api/demand-category/?page=1&limit=1000', { credentials: 'include' });
+      if (response.ok) {
+        const data = await response.json();
+        setCategories(data?.data || []);
       }
-    };
+    } catch (error) {
+      console.error('Error fetching demand categories:', error);
+    }
+  };
+
+  useEffect(() => {
     fetchCategories();
   }, []);
 
@@ -226,6 +235,11 @@ const DemandPage: React.FC = () => {
       return;
     }
 
+    if (!formData.category) {
+      showToast('Please select a category', 'error');
+      return;
+    }
+
     const pickedCustomer = customers.find((c) => c.cus_id === formData.customer_id);
 
     setSubmitting(true);
@@ -236,7 +250,7 @@ const DemandPage: React.FC = () => {
         credentials: 'include',
         body: JSON.stringify({
           demand_text: formData.demand_text.trim(),
-          category: formData.category || null,
+          category: formData.category,
           customer_name: pickedCustomer?.cus_name || null,
           customer_phone: pickedCustomer?.cus_phone || null,
         }),
@@ -291,6 +305,11 @@ const DemandPage: React.FC = () => {
       return;
     }
 
+    if (!editDraft.category) {
+      showToast('Please select a category', 'error');
+      return;
+    }
+
     const pickedCustomer = customers.find((c) => c.cus_id === editDraft.customer_id);
 
     setSavingEdit(true);
@@ -301,7 +320,7 @@ const DemandPage: React.FC = () => {
         credentials: 'include',
         body: JSON.stringify({
           demand_text: editDraft.demand_text.trim(),
-          category: editDraft.category || null,
+          category: editDraft.category,
           // Only overwrite the recorded customer if a new one was actually picked;
           // otherwise keep whatever was already saved on this demand.
           customer_name: pickedCustomer ? pickedCustomer.cus_name : selectedDemand.customer_name || null,
@@ -444,6 +463,48 @@ const DemandPage: React.FC = () => {
     }
   };
 
+  const handleAddCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) {
+      showToast('Please enter a category name', 'error');
+      return;
+    }
+
+    setAddingCategory(true);
+    try {
+      const response = await fetch('/api/demand-category/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ name }),
+      });
+
+      if (response.ok) {
+        const addedCategory = await response.json();
+        await fetchCategories();
+
+        if (addCategoryTarget === 'edit') {
+          setEditDraft((prev) => ({ ...prev, category: addedCategory.name }));
+        } else {
+          setFormData((prev) => ({ ...prev, category: addedCategory.name }));
+        }
+
+        setShowAddCategoryModal(false);
+        setAddCategoryTarget(null);
+        setNewCategoryName('');
+        showToast('Category added successfully', 'success');
+      } else {
+        const errorData = await response.json();
+        showToast(errorData.error || errorData.detail || 'Failed to add category', 'error');
+      }
+    } catch (error) {
+      console.error('Error adding category:', error);
+      showToast('Failed to add category', 'error');
+    } finally {
+      setAddingCategory(false);
+    }
+  };
+
   const isDirty = selectedDemand
     ? editDraft.demand_text !== selectedDemand.demand_text ||
       editDraft.category !== (selectedDemand.category || '') ||
@@ -465,6 +526,12 @@ const DemandPage: React.FC = () => {
               className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap px-4 py-2 flex items-center gap-2"
             >
               {showAddForm ? 'Cancel' : '+ Add Demand'}
+            </button>
+            <button
+              onClick={() => router.push('/demand-category')}
+              className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap px-4 py-2 flex items-center gap-2"
+            >
+              Demand Category
             </button>
             <button
               onClick={() => setShowSearch(!showSearch)}
@@ -526,7 +593,7 @@ const DemandPage: React.FC = () => {
         <div className="border-0 p-0 mb-6 transition-all duration-300">
           <h3 className="text-lg font-semibold mb-4">Add New Demand</h3>
           <form onSubmit={handleAddSubmit}>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Demand *</label>
                 <input
@@ -540,21 +607,37 @@ const DemandPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Category</label>
-                <select
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="regal-input w-full"
-                >
-                  <option value="">Select category</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.name}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-sm font-medium mb-1">Category *</label>
+                <div className="flex gap-2">
+                  <select
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    className="regal-input w-full"
+                    required
+                  >
+                    <option value="">Select category</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.name}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddCategoryTarget('add');
+                      setShowAddCategoryModal(true);
+                    }}
+                    className="regal-btn bg-regal-yellow text-regal-black px-5"
+                    title="Add New Category"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
+            </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
               <div>
                 <label className="block text-sm font-medium mb-1">
                   Customer <span className="text-gray-400 font-normal">(optional)</span>
@@ -714,19 +797,33 @@ const DemandPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-500 mb-1">Category</label>
-                <select
-                  value={editDraft.category}
-                  onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })}
-                  className="regal-input w-full"
-                >
-                  <option value="">Select category</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.name}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-sm text-gray-500 mb-1">Category *</label>
+                <div className="flex gap-2">
+                  <select
+                    value={editDraft.category}
+                    onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })}
+                    className="regal-input w-full"
+                    required
+                  >
+                    <option value="">Select category</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.name}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddCategoryTarget('edit');
+                      setShowAddCategoryModal(true);
+                    }}
+                    className="regal-btn bg-regal-yellow text-regal-black px-4"
+                    title="Add New Category"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -918,6 +1015,52 @@ const DemandPage: React.FC = () => {
                     resetNewCustomerForm();
                   }}
                   disabled={addingCustomer}
+                  className="regal-btn bg-gray-300 text-black flex-1"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Category Modal - lets a category be added on the spot from the demand form/edit panel */}
+      {showAddCategoryModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="regal-card bg-white p-3 md:p-6 rounded-lg max-w-md w-full">
+            <h3 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Add New Category</h3>
+
+            <form onSubmit={(e) => { e.preventDefault(); handleAddCategory(); }} className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Category Name *</label>
+                <input
+                  type="text"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  className="regal-input w-full"
+                  placeholder="Enter category name"
+                  autoFocus
+                  required
+                />
+              </div>
+
+              <div className="flex gap-2 mt-6">
+                <button
+                  type="submit"
+                  disabled={addingCategory}
+                  className={`regal-btn bg-regal-yellow text-regal-black flex-1 ${addingCategory ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  {addingCategory ? 'Adding...' : 'Add Category'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddCategoryModal(false);
+                    setAddCategoryTarget(null);
+                    setNewCategoryName('');
+                  }}
+                  disabled={addingCategory}
                   className="regal-btn bg-gray-300 text-black flex-1"
                 >
                   Cancel

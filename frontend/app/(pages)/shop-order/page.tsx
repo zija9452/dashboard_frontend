@@ -50,7 +50,7 @@ const ShopOrderPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showSearch, setShowSearch] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('PENDING');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(8);
   const [totalItems, setTotalItems] = useState(0);
@@ -244,9 +244,9 @@ const ShopOrderPage: React.FC = () => {
                 <tr className="text-xs text-gray-900 uppercase tracking-wider font-semibold">
                   <th className="px-3 py-5 text-left w-16">S.No</th>
                   <th className="px-3 py-5 text-left w-48">Product Name</th>
+                  <th className="px-3 py-5 text-center w-24">Current Stock</th>
                   <th className="px-3 py-5 text-left w-32">Barcode</th>
                   <th className="px-3 py-5 text-left w-28">Category</th>
-                  <th className="px-3 py-5 text-center w-24">Current Stock</th>
                   <th className="px-3 py-5 text-left w-20">Qty</th>
                   <th className="px-3 py-5 text-left w-32">Note</th>
                   <th className="px-3 py-5 text-left w-28">Status</th>
@@ -264,13 +264,13 @@ const ShopOrderPage: React.FC = () => {
                   >
                     <td className="px-3 py-4">{(currentPage - 1) * pageSize + index + 1}</td>
                     <td className="px-3 py-4 font-medium">{order.product_name}</td>
-                    <td className="px-3 py-4">{order.barcode || '-'}</td>
-                    <td className="px-3 py-4">{order.category || 'N/A'}</td>
                     <td className="px-3 py-4 text-center">
                       <span className={order.current_stock <= 0 ? 'text-red-600 font-semibold' : 'text-yellow-700 font-semibold'}>
                         {order.current_stock}
                       </span>
                     </td>
+                    <td className="px-3 py-4">{order.barcode || '-'}</td>
+                    <td className="px-3 py-4">{order.category || 'N/A'}</td>
                     <td className="px-3 py-4">{order.quantity_ordered}</td>
                     <td className="px-3 py-4 truncate" title={order.note || undefined}>{order.note || '-'}</td>
                     <td className="px-3 py-4">

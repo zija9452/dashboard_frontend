@@ -30,6 +30,7 @@ const StockOrderPage: React.FC = () => {
   const [products, setProducts] = useState<StockOrderProduct[]>([]);
   const [loading, setLoading] = useState(false);
   const [orderQuantities, setOrderQuantities] = useState<Record<string, string>>({});
+  const [orderNotes, setOrderNotes] = useState<Record<string, string>>({});
   const [placingOrderId, setPlacingOrderId] = useState<string | null>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -91,6 +92,10 @@ const StockOrderPage: React.FC = () => {
     setOrderQuantities((prev) => ({ ...prev, [productId]: value }));
   };
 
+  const handleNoteChange = (productId: string, value: string) => {
+    setOrderNotes((prev) => ({ ...prev, [productId]: value }));
+  };
+
   const handlePlaceOrder = async (product: StockOrderProduct) => {
     const rawQty = orderQuantities[product.id];
     const qty = parseInt(rawQty, 10);
@@ -112,13 +117,15 @@ const StockOrderPage: React.FC = () => {
 
     if (!result.isConfirmed) return;
 
+    const note = (orderNotes[product.id] || '').trim();
+
     setPlacingOrderId(product.id);
     try {
       const response = await fetch('/api/shoporder/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ product_id: product.id, quantity_ordered: qty }),
+        body: JSON.stringify({ product_id: product.id, quantity_ordered: qty, note: note || undefined }),
       });
 
       if (response.ok) {
@@ -131,6 +138,7 @@ const StockOrderPage: React.FC = () => {
           showConfirmButton: false,
         });
         setOrderQuantities((prev) => ({ ...prev, [product.id]: '' }));
+        setOrderNotes((prev) => ({ ...prev, [product.id]: '' }));
       } else {
         const errorData = await response.json();
         showToast(errorData.error || 'Failed to place order', 'error');
@@ -230,8 +238,9 @@ const StockOrderPage: React.FC = () => {
                   <th className="px-3 py-5 text-left w-48">Product Name</th>
                   <th className="px-3 py-5 text-left w-32">Barcode</th>
                   <th className="px-3 py-5 text-left w-28">Category</th>
-                  <th className="px-3 py-5 text-left w-24">Current Stock</th>
+                  <th className="px-3 py-5 text-center w-24">Current Stock</th>
                   <th className="px-3 py-5 text-left w-32">Order Quantity</th>
+                  <th className="px-3 py-5 text-left w-36">Note (Optional)</th>
                   <th className="px-3 py-5 text-left w-32">Action</th>
                 </tr>
               </thead>
@@ -255,6 +264,16 @@ const StockOrderPage: React.FC = () => {
                         onChange={(e) => handleQuantityChange(product.id, e.target.value)}
                         className="regal-input w-24 py-1"
                         placeholder="Qty"
+                      />
+                    </td>
+                    <td className="px-3 py-4">
+                      <input
+                        type="text"
+                        value={orderNotes[product.id] || ''}
+                        onChange={(e) => handleNoteChange(product.id, e.target.value)}
+                        className="regal-input w-32 py-1"
+                        placeholder="e.g. Player name"
+                        maxLength={255}
                       />
                     </td>
                     <td className="px-3 py-4">

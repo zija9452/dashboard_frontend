@@ -394,12 +394,20 @@ const RefundPage: React.FC = () => {
         total_amount: enteredAmount
       }];
 
+      // Combine the picked date with the current wall-clock time (as a plain
+      // string, not via `new Date(refundDate)`) so we never trip the UTC
+      // midnight-parsing/timezone-shift pitfall that a date-only string hits.
+      const now = new Date();
+      const timePart = now.toTimeString().split(' ')[0];
+      const refundCreatedAt = `${refundDate}T${timePart}`;
+
       const refundData = {
         invoice_id: selectedInvoice.invoice_id,
         refunded_items: refundItems,
         amount: enteredAmount,
         reason: 'Customer return',
-        customer_id: null
+        customer_id: null,
+        created_at: refundCreatedAt
       };
 
       const response = await fetch('/api/refunds/walkin-invoice', {

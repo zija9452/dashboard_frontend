@@ -11,13 +11,28 @@ interface ShopOrder {
   barcode: string;
   category: string;
   quantity_ordered: number;
-  status: 'PENDING' | 'DELIVERED' | 'CANCEL';
+  note: string;
+  current_stock: number;
+  status: 'PENDING' | 'IN_PRODUCTION' | 'DELIVERED' | 'CANCEL';
   created_at: string;
+  in_production_at: string | null;
   delivered_at: string | null;
   cancelled_at: string | null;
 }
 
 const formatDate = (value: string | null) => {
+  if (!value) return '-';
+  return new Date(value).toLocaleString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+};
+
+const formatDateOnly = (value: string | null) => {
   if (!value) return '-';
   return new Date(value).toLocaleDateString('en-GB', {
     day: '2-digit',
@@ -25,6 +40,8 @@ const formatDate = (value: string | null) => {
     year: 'numeric',
   });
 };
+
+const statusLabel = (status: string) => status.replace('_', ' ');
 
 const ShopOrderPage: React.FC = () => {
   const { showToast } = useToast();
@@ -47,12 +64,14 @@ const ShopOrderPage: React.FC = () => {
 
   const statusColors: Record<string, string> = {
     PENDING: 'bg-lime-200 text-lime-800',
+    IN_PRODUCTION: 'bg-amber-100 text-amber-800',
     DELIVERED: 'bg-blue-100 text-blue-800',
     CANCEL: 'bg-red-100 text-red-800',
   };
 
   const rowColors: Record<string, string> = {
     PENDING: 'bg-lime-100 hover:bg-lime-100',
+    IN_PRODUCTION: 'bg-amber-50 hover:bg-amber-100',
     DELIVERED: 'bg-blue-50 hover:bg-blue-100',
     CANCEL: 'bg-red-50 hover:bg-red-100',
   };
@@ -124,6 +143,7 @@ const ShopOrderPage: React.FC = () => {
         const updatedOrder: ShopOrder = {
           ...selectedOrder,
           status: result.status,
+          in_production_at: result.in_production_at,
           delivered_at: result.delivered_at,
           cancelled_at: result.cancelled_at,
         };
@@ -200,6 +220,7 @@ const ShopOrderPage: React.FC = () => {
               >
                 <option value="">All Statuses</option>
                 <option value="PENDING">PENDING</option>
+                <option value="IN_PRODUCTION">IN PRODUCTION</option>
                 <option value="DELIVERED">DELIVERED</option>
                 <option value="CANCEL">CANCEL</option>
               </select>
@@ -225,7 +246,9 @@ const ShopOrderPage: React.FC = () => {
                   <th className="px-3 py-5 text-left w-48">Product Name</th>
                   <th className="px-3 py-5 text-left w-32">Barcode</th>
                   <th className="px-3 py-5 text-left w-28">Category</th>
+                  <th className="px-3 py-5 text-center w-24">Current Stock</th>
                   <th className="px-3 py-5 text-left w-20">Qty</th>
+                  <th className="px-3 py-5 text-left w-32">Note</th>
                   <th className="px-3 py-5 text-left w-28">Status</th>
                   <th className="px-3 py-5 text-left w-32">Order Placed</th>
                 </tr>
@@ -243,13 +266,19 @@ const ShopOrderPage: React.FC = () => {
                     <td className="px-3 py-4 font-medium">{order.product_name}</td>
                     <td className="px-3 py-4">{order.barcode || '-'}</td>
                     <td className="px-3 py-4">{order.category || 'N/A'}</td>
-                    <td className="px-3 py-4">{order.quantity_ordered}</td>
-                    <td className="px-3 py-4">
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[order.status]}`}>
-                        {order.status}
+                    <td className="px-3 py-4 text-center">
+                      <span className={order.current_stock <= 0 ? 'text-red-600 font-semibold' : 'text-yellow-700 font-semibold'}>
+                        {order.current_stock}
                       </span>
                     </td>
-                    <td className="px-3 py-4">{formatDate(order.created_at)}</td>
+                    <td className="px-3 py-4">{order.quantity_ordered}</td>
+                    <td className="px-3 py-4 truncate" title={order.note || undefined}>{order.note || '-'}</td>
+                    <td className="px-3 py-4">
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[order.status]}`}>
+                        {statusLabel(order.status)}
+                      </span>
+                    </td>
+                    <td className="px-3 py-4">{formatDateOnly(order.created_at)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -319,18 +348,32 @@ const ShopOrderPage: React.FC = () => {
                 <span className="text-sm font-medium text-gray-900">{selectedOrder.category || 'N/A'}</span>
               </div>
               <div className="flex justify-between border-b border-gray-100 pb-3">
+                <span className="text-sm text-gray-500">Current Stock</span>
+                <span className={`text-sm font-semibold ${selectedOrder.current_stock <= 0 ? 'text-red-600' : 'text-yellow-700'}`}>
+                  {selectedOrder.current_stock}
+                </span>
+              </div>
+              <div className="flex justify-between border-b border-gray-100 pb-3">
                 <span className="text-sm text-gray-500">Quantity Ordered</span>
                 <span className="text-sm font-medium text-gray-900">{selectedOrder.quantity_ordered}</span>
               </div>
               <div className="flex justify-between border-b border-gray-100 pb-3">
+                <span className="text-sm text-gray-500">Note</span>
+                <span className="text-sm font-medium text-gray-900">{selectedOrder.note || '-'}</span>
+              </div>
+              <div className="flex justify-between border-b border-gray-100 pb-3">
                 <span className="text-sm text-gray-500">Status</span>
                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[selectedOrder.status]}`}>
-                  {selectedOrder.status}
+                  {statusLabel(selectedOrder.status)}
                 </span>
               </div>
               <div className="flex justify-between border-b border-gray-100 pb-3">
                 <span className="text-sm text-gray-500">Order Placed Date</span>
                 <span className="text-sm font-medium text-gray-900">{formatDate(selectedOrder.created_at)}</span>
+              </div>
+              <div className="flex justify-between border-b border-gray-100 pb-3">
+                <span className="text-sm text-gray-500">In Production Date</span>
+                <span className="text-sm font-medium text-gray-900">{formatDate(selectedOrder.in_production_at)}</span>
               </div>
               <div className="flex justify-between border-b border-gray-100 pb-3">
                 <span className="text-sm text-gray-500">Delivered Date</span>
@@ -350,6 +393,7 @@ const ShopOrderPage: React.FC = () => {
                     className="regal-input flex-1"
                   >
                     <option value="PENDING">PENDING</option>
+                    <option value="IN_PRODUCTION">IN PRODUCTION</option>
                     <option value="DELIVERED">DELIVERED</option>
                     <option value="CANCEL">CANCEL</option>
                   </select>

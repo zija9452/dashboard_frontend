@@ -330,7 +330,7 @@ const TournamentsPage: React.FC = () => {
               </svg>
               Search
             </button>
-            {userRole === 'admin' && (
+            {(userRole === 'admin' || userRole === 'cashier') && (
               <button
                 onClick={handleSyncNow}
                 disabled={syncing}
@@ -414,7 +414,7 @@ const TournamentsPage: React.FC = () => {
 
             {tournaments.length === 0 && (
               <p className="text-center py-12 text-gray-500">
-                No tournaments tracked yet. They sync automatically every 1-2 hours.
+                No tournaments tracked yet. They sync automatically twice a day (9am/9pm), or tap Sync Now above.
               </p>
             )}
           </div>

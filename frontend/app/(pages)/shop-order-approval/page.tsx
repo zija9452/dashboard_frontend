@@ -1,11 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/components/ui/Toast';
+import Swal from 'sweetalert2';
+import { useSearchParams, useRouter } from 'next/navigation';
 import PageHeader from '@/components/ui/PageHeader';
 import Pagination from '@/components/ui/Pagination';
 
-interface ShopOrder {
+interface ApprovalOrder {
   id: string;
   product_name: string;
   barcode: string;
@@ -13,12 +15,36 @@ interface ShopOrder {
   quantity_ordered: number;
   note: string;
   current_stock: number;
-  status: 'PENDING' | 'IN_PRODUCTION' | 'DELIVERED' | 'CANCEL';
+  approval_status: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
   created_at: string;
-  in_production_at: string | null;
-  delivered_at: string | null;
-  cancelled_at: string | null;
+  approved_at: string | null;
+  rejected_at: string | null;
 }
+
+type ApprovalFilter = 'pending' | 'approved' | 'rejected' | 'all';
+
+const statusLabel = (status: string) => status.replace('_', ' ');
+
+const statusColors: Record<string, string> = {
+  PENDING_APPROVAL: 'bg-lime-200 text-lime-800',
+  APPROVED: 'bg-green-100 text-green-800',
+  REJECTED: 'bg-red-100 text-red-800',
+};
+
+const rowColors: Record<string, string> = {
+  PENDING_APPROVAL: 'bg-lime-100 hover:bg-lime-100',
+  APPROVED: 'bg-green-50 hover:bg-green-100',
+  REJECTED: 'bg-red-50 hover:bg-red-100',
+};
+
+const formatDateOnly = (value: string | null) => {
+  if (!value) return '-';
+  return new Date(value).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+};
 
 const formatDate = (value: string | null) => {
   if (!value) return '-';
@@ -32,60 +58,38 @@ const formatDate = (value: string | null) => {
   });
 };
 
-const formatDateOnly = (value: string | null) => {
-  if (!value) return '-';
-  return new Date(value).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-};
-
-const statusLabel = (status: string) => status.replace('_', ' ');
-
-const ShopOrderPage: React.FC = () => {
+const ShopOrderApprovalPage: React.FC = () => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { showToast } = useToast();
 
-  const [orders, setOrders] = useState<ShopOrder[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState<ApprovalFilter>(
+    (searchParams.get('filter') as ApprovalFilter) || 'pending'
+  );
   const [searchTerm, setSearchTerm] = useState('');
   const [showSearch, setShowSearch] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('PENDING');
+  const [orders, setOrders] = useState<ApprovalOrder[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(8);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
 
   // Right-side details panel
-  const [selectedOrder, setSelectedOrder] = useState<ShopOrder | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<ApprovalOrder | null>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
-  const [statusDraft, setStatusDraft] = useState('');
-  const [updatingStatus, setUpdatingStatus] = useState(false);
 
-  const statusColors: Record<string, string> = {
-    PENDING: 'bg-lime-200 text-lime-800',
-    IN_PRODUCTION: 'bg-amber-100 text-amber-800',
-    DELIVERED: 'bg-blue-100 text-blue-800',
-    CANCEL: 'bg-red-100 text-red-800',
-  };
-
-  const rowColors: Record<string, string> = {
-    PENDING: 'bg-lime-100 hover:bg-lime-100',
-    IN_PRODUCTION: 'bg-amber-50 hover:bg-amber-100',
-    DELIVERED: 'bg-blue-50 hover:bg-blue-100',
-    CANCEL: 'bg-red-50 hover:bg-red-100',
-  };
-
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
+      params.append('filter', filter);
       params.append('page', currentPage.toString());
       params.append('limit', pageSize.toString());
       if (searchTerm) params.append('search_string', searchTerm);
-      if (statusFilter) params.append('order_status', statusFilter);
 
-      const response = await fetch(`/api/shoporder/list?${params.toString()}`, {
+      const response = await fetch(`/api/shoporder/approval/list?${params.toString()}`, {
         method: 'GET',
         credentials: 'include',
       });
@@ -97,32 +101,41 @@ const ShopOrderPage: React.FC = () => {
         setTotalPagesFromApi(data.total_pages || 0);
       } else {
         const errorData = await response.json();
-        showToast(errorData.error || 'Failed to fetch shop orders', 'error');
+        showToast(errorData.error || 'Failed to fetch orders', 'error');
       }
     } catch (error) {
-      console.error('Error fetching shop orders:', error);
-      showToast('Error fetching shop orders', 'error');
+      console.error('Error fetching approval orders:', error);
+      showToast('Error fetching orders', 'error');
     } finally {
       setLoading(false);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter, currentPage, pageSize, searchTerm]);
 
   useEffect(() => {
     fetchOrders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, searchTerm, statusFilter]);
+  }, [fetchOrders]);
 
-  // Viewing this page clears the "new orders" badge on the entry point button.
+  // Viewing this page clears the sidebar notification badge immediately,
+  // instead of waiting for its next poll (the sidebar stays mounted across
+  // page navigation, so it needs to be told rather than re-fetching itself).
   useEffect(() => {
-    fetch('/api/shoporder/mark-seen', {
+    fetch('/api/shoporder/approval/mark-seen', {
       method: 'POST',
       credentials: 'include',
-    }).catch((error) => console.error('Error marking shop orders seen:', error));
+    })
+      .then(() => window.dispatchEvent(new Event('shop-order-approval-reviewed')))
+      .catch((error) => console.error('Error marking approvals seen:', error));
   }, []);
 
-  const openOrderDetails = (order: ShopOrder) => {
+  const handleFilterChange = (newFilter: ApprovalFilter) => {
+    setFilter(newFilter);
+    setCurrentPage(1);
+    router.replace(`/shop-order-approval?filter=${newFilter}`);
+  };
+
+  const openOrderDetails = (order: ApprovalOrder) => {
     setSelectedOrder(order);
-    setStatusDraft(order.status);
     setIsPanelOpen(true);
   };
 
@@ -134,39 +147,49 @@ const ShopOrderPage: React.FC = () => {
     setTimeout(() => setSelectedOrder(null), 300);
   };
 
-  const handleUpdateStatus = async () => {
-    if (!selectedOrder || statusDraft === selectedOrder.status) return;
+  const handleReview = async (order: ApprovalOrder, action: 'approve' | 'reject') => {
+    if (action === 'reject') {
+      const result = await Swal.fire({
+        title: 'Reject this order?',
+        text: `${order.quantity_ordered} unit(s) of ${order.product_name}`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Yes, reject it',
+        cancelButtonText: 'Cancel',
+      });
+      if (!result.isConfirmed) return;
+    }
 
-    setUpdatingStatus(true);
+    setReviewing(true);
     try {
-      const response = await fetch(`/api/shoporder/update-status/${selectedOrder.id}`, {
+      const response = await fetch(`/api/shoporder/approval/${order.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ status: statusDraft }),
+        body: JSON.stringify({ action }),
       });
 
       if (response.ok) {
-        const result = await response.json();
-        const updatedOrder: ShopOrder = {
-          ...selectedOrder,
-          status: result.status,
-          in_production_at: result.in_production_at,
-          delivered_at: result.delivered_at,
-          cancelled_at: result.cancelled_at,
-        };
-        setSelectedOrder(updatedOrder);
-        showToast('Order status updated successfully', 'success');
+        Swal.fire({
+          title: action === 'approve' ? 'Approved!' : 'Rejected!',
+          icon: 'success',
+          timer: 1500,
+          timerProgressBar: true,
+          showConfirmButton: false,
+        });
+        closePanel();
         fetchOrders();
       } else {
         const errorData = await response.json();
-        showToast(errorData.error || 'Failed to update status', 'error');
+        showToast(errorData.error || `Failed to ${action} order`, 'error');
       }
     } catch (error) {
-      console.error('Error updating shop order status:', error);
-      showToast('Error updating status', 'error');
+      console.error(`Error ${action}ing order:`, error);
+      showToast(`Error ${action}ing order`, 'error');
     } finally {
-      setUpdatingStatus(false);
+      setReviewing(false);
     }
   };
 
@@ -176,7 +199,7 @@ const ShopOrderPage: React.FC = () => {
 
   return (
     <div className="p-2 py-5 bg-white pt-14 md:pt-0">
-      <PageHeader title="Shop Orders" />
+      <PageHeader title="Shop Order Approval" />
 
       <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-4">
         <div className="flex flex-col gap-2">
@@ -219,18 +242,14 @@ const ShopOrderPage: React.FC = () => {
                 </svg>
               </div>
               <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
+                value={filter}
+                onChange={(e) => handleFilterChange(e.target.value as ApprovalFilter)}
                 className="regal-input w-32"
               >
-                <option value="">All Statuses</option>
-                <option value="PENDING">PENDING</option>
-                <option value="IN_PRODUCTION">IN PRODUCTION</option>
-                <option value="DELIVERED">DELIVERED</option>
-                <option value="CANCEL">CANCEL</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+                <option value="all">All Statuses</option>
               </select>
             </div>
           )}
@@ -256,9 +275,9 @@ const ShopOrderPage: React.FC = () => {
                   <th className="px-3 py-5 text-left w-32">Barcode</th>
                   <th className="px-3 py-5 text-left w-28">Category</th>
                   <th className="px-3 py-5 text-left w-20">Qty</th>
-                  <th className="px-3 py-5 text-left w-32">Note</th>
-                  <th className="px-3 py-5 text-left w-28">Status</th>
-                  <th className="px-3 py-5 text-left w-32">Order Placed</th>
+                  <th className="px-3 py-5 text-left w-28">Note</th>
+                  <th className="px-3 py-5 text-center w-40">Status</th>
+                  <th className="px-3 py-5 text-left w-32">Requested</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -267,7 +286,7 @@ const ShopOrderPage: React.FC = () => {
                     key={order.id}
                     onClick={() => openOrderDetails(order)}
                     className={`text-sm text-gray-900 transition-colors cursor-pointer ${
-                      rowColors[order.status] || 'hover:bg-gray-50'
+                      rowColors[order.approval_status] || 'hover:bg-gray-50'
                     }`}
                   >
                     <td className="px-3 py-4">{(currentPage - 1) * pageSize + index + 1}</td>
@@ -281,9 +300,9 @@ const ShopOrderPage: React.FC = () => {
                     <td className="px-3 py-4">{order.category || 'N/A'}</td>
                     <td className="px-3 py-4">{order.quantity_ordered}</td>
                     <td className="px-3 py-4 truncate" title={order.note || undefined}>{order.note || '-'}</td>
-                    <td className="px-3 py-4">
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[order.status]}`}>
-                        {statusLabel(order.status)}
+                    <td className="px-3 py-4 text-center">
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${statusColors[order.approval_status]}`}>
+                        {statusLabel(order.approval_status)}
                       </span>
                     </td>
                     <td className="px-3 py-4">{formatDateOnly(order.created_at)}</td>
@@ -293,7 +312,12 @@ const ShopOrderPage: React.FC = () => {
             </table>
 
             {orders.length === 0 && (
-              <p className="text-center py-12 text-gray-500">No shop orders found</p>
+              <p className="text-center py-12 text-gray-500">
+                {filter === 'pending' && 'No orders awaiting approval'}
+                {filter === 'approved' && 'No approved orders'}
+                {filter === 'rejected' && 'No rejected orders'}
+                {filter === 'all' && 'No shop order requests found'}
+              </p>
             )}
           </div>
 
@@ -304,7 +328,7 @@ const ShopOrderPage: React.FC = () => {
                 totalPages={totalPagesFromApi}
                 totalItems={totalItems}
                 pageSize={pageSize}
-                baseUrl="/shop-order"
+                baseUrl="/shop-order-approval"
                 onPageChange={handlePageChange}
               />
             </div>
@@ -371,53 +395,45 @@ const ShopOrderPage: React.FC = () => {
               </div>
               <div className="flex justify-between border-b border-gray-100 pb-3">
                 <span className="text-sm text-gray-500">Status</span>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[selectedOrder.status]}`}>
-                  {statusLabel(selectedOrder.status)}
+                <span className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${statusColors[selectedOrder.approval_status]}`}>
+                  {statusLabel(selectedOrder.approval_status)}
                 </span>
               </div>
               <div className="flex justify-between border-b border-gray-100 pb-3">
-                <span className="text-sm text-gray-500">Order Placed Date</span>
+                <span className="text-sm text-gray-500">Requested Date</span>
                 <span className="text-sm font-medium text-gray-900">{formatDate(selectedOrder.created_at)}</span>
               </div>
-              <div className="flex justify-between border-b border-gray-100 pb-3">
-                <span className="text-sm text-gray-500">In Production Date</span>
-                <span className="text-sm font-medium text-gray-900">{formatDate(selectedOrder.in_production_at)}</span>
-              </div>
-              <div className="flex justify-between border-b border-gray-100 pb-3">
-                <span className="text-sm text-gray-500">Delivered Date</span>
-                <span className="text-sm font-medium text-gray-900">{formatDate(selectedOrder.delivered_at)}</span>
-              </div>
-              <div className="flex justify-between border-b border-gray-100 pb-3">
-                <span className="text-sm text-gray-500">Cancelled Date</span>
-                <span className="text-sm font-medium text-gray-900">{formatDate(selectedOrder.cancelled_at)}</span>
-              </div>
+              {selectedOrder.approval_status === 'APPROVED' && (
+                <div className="flex justify-between border-b border-gray-100 pb-3">
+                  <span className="text-sm text-gray-500">Approved On</span>
+                  <span className="text-sm font-medium text-gray-900">{formatDate(selectedOrder.approved_at)}</span>
+                </div>
+              )}
+              {selectedOrder.approval_status === 'REJECTED' && (
+                <div className="flex justify-between border-b border-gray-100 pb-3">
+                  <span className="text-sm text-gray-500">Rejected On</span>
+                  <span className="text-sm font-medium text-gray-900">{formatDate(selectedOrder.rejected_at)}</span>
+                </div>
+              )}
 
-              <div className="pt-4">
-                <label className="block text-sm text-gray-500 mb-2">Update Status</label>
-                <div className="flex gap-2">
-                  <select
-                    value={statusDraft}
-                    onChange={(e) => setStatusDraft(e.target.value)}
-                    className="regal-input flex-1"
-                  >
-                    <option value="PENDING">PENDING</option>
-                    <option value="IN_PRODUCTION">IN PRODUCTION</option>
-                    <option value="DELIVERED">DELIVERED</option>
-                    <option value="CANCEL">CANCEL</option>
-                  </select>
+              {selectedOrder.approval_status === 'PENDING_APPROVAL' && (
+                <div className="pt-4 flex gap-2">
                   <button
-                    onClick={handleUpdateStatus}
-                    disabled={updatingStatus || statusDraft === selectedOrder.status}
-                    className={`regal-btn px-4 py-2 ${
-                      updatingStatus || statusDraft === selectedOrder.status
-                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        : 'bg-regal-yellow text-regal-black'
-                    }`}
+                    onClick={() => handleReview(selectedOrder, 'approve')}
+                    disabled={reviewing}
+                    className="regal-btn bg-green-500 text-white flex-1 py-2 disabled:opacity-50"
                   >
-                    {updatingStatus ? 'Updating...' : 'Update'}
+                    {reviewing ? 'Please wait...' : 'Approve'}
+                  </button>
+                  <button
+                    onClick={() => handleReview(selectedOrder, 'reject')}
+                    disabled={reviewing}
+                    className="regal-btn bg-red-500 text-white flex-1 py-2 disabled:opacity-50"
+                  >
+                    {reviewing ? 'Please wait...' : 'Reject'}
                   </button>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -426,4 +442,4 @@ const ShopOrderPage: React.FC = () => {
   );
 };
 
-export default ShopOrderPage;
+export default ShopOrderApprovalPage;

@@ -4,8 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import PageHeader from '@/components/ui/PageHeader';
 import Pagination from '@/components/ui/Pagination';
+import ShopOrdersUnseenBadge from '@/components/ShopOrdersUnseenBadge';
 
 interface CustomerOrder {
   orderid: string;
@@ -234,6 +236,13 @@ const ViewCustomerOrderPage: React.FC = () => {
               </svg>
               Search
             </button>
+            <Link
+              href="/shop-order"
+              className="relative regal-btn bg-regal-yellow text-regal-black whitespace-nowrap px-4 py-2 flex items-center gap-2"
+            >
+              Shop Orders
+              <ShopOrdersUnseenBadge />
+            </Link>
           </div>
 
           {/* Search Bar & Status Filter - Show on button click */}

@@ -7,6 +7,7 @@ import SidebarLink from "@/components/SidebarLink";
 import SidebarClientWrapper from "@/components/SidebarClientWrapper";
 import PageHamburgerButton from "@/components/PageHamburgerButton";
 import SalesmanAttendanceWidget from "@/components/SalesmanAttendanceWidget";
+import ShopOrderApprovalBadge from "@/components/ShopOrderApprovalBadge";
 import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
 import Image from "next/image";
 import { useEffect, useState } from "react";
@@ -108,9 +109,12 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
                     Stock
                   </SidebarLink>
                    )}
-                  {(userRole === 'admin' || userRole === 'employee' || userRole === 'cashier') && (
-                  <SidebarLink href="/shop-order" className="text-base py-3 border-b border-gray-200">
-                    Shop Order
+                  {userRole === 'admin' && (
+                  <SidebarLink href="/shop-order-approval" className="text-base py-3 border-b border-gray-200">
+                    <span className="flex items-center">
+                      Shop Order Approval
+                      <ShopOrderApprovalBadge />
+                    </span>
                   </SidebarLink>
                    )}
                   {(userRole === 'admin' || userRole === 'employee' || userRole === 'cashier') && (

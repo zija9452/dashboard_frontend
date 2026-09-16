@@ -108,6 +108,15 @@ const SalesmanAttendanceWidget: React.FC = () => {
     };
   }, [fetchOverview]);
 
+  // Instant push the moment anyone checks in/out on any machine, instead of
+  // waiting for the next 45s poll - the interval above stays as a fallback
+  // in case the stream connection ever drops silently (e.g. behind a proxy).
+  useEffect(() => {
+    const source = new EventSource('/api/salesman-attendance/stream');
+    source.onmessage = () => fetchOverview();
+    return () => source.close();
+  }, [fetchOverview]);
+
   const handleCheckIn = async (salesmanId: string, name: string) => {
     setActingId(salesmanId);
     try {

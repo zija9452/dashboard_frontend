@@ -140,6 +140,7 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
                       Customer Category
                     </SidebarLink>
                   )}
+                  
                   <SidebarLink href="/view-customer-order" className="text-base py-3 border-b border-gray-200">
                     View Customer Order
                   </SidebarLink>

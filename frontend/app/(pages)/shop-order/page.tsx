@@ -55,6 +55,7 @@ const ShopOrderPage: React.FC = () => {
   const [pageSize] = useState(8);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
+  const [pendingStats, setPendingStats] = useState({ pending_orders_count: 0, total_pending_quantity: 0 });
 
   // Right-side details panel
   const [selectedOrder, setSelectedOrder] = useState<ShopOrder | null>(null);
@@ -82,6 +83,7 @@ const ShopOrderPage: React.FC = () => {
       const params = new URLSearchParams();
       params.append('page', currentPage.toString());
       params.append('limit', pageSize.toString());
+      params.append('include_stats', 'true');
       if (searchTerm) params.append('search_string', searchTerm);
       if (statusFilter) params.append('order_status', statusFilter);
 
@@ -95,6 +97,9 @@ const ShopOrderPage: React.FC = () => {
         setOrders(data.data || []);
         setTotalItems(data.total || 0);
         setTotalPagesFromApi(data.total_pages || 0);
+        if (data.pending_stats) {
+          setPendingStats(data.pending_stats);
+        }
       } else {
         const errorData = await response.json();
         showToast(errorData.error || 'Failed to fetch shop orders', 'error');
@@ -234,6 +239,18 @@ const ShopOrderPage: React.FC = () => {
               </select>
             </div>
           )}
+        </div>
+
+        {/* Pending Orders Summary - Right side, mobile pe cols */}
+        <div className="flex gap-4">
+          <div className="px-4 py-2 bg-yellow-100 border border-yellow-300 rounded-lg">
+            <span className="text-sm font-medium text-yellow-800">Pending Orders: </span>
+            <span className="text-lg font-bold text-yellow-900">{pendingStats.pending_orders_count}</span>
+          </div>
+          <div className="px-4 py-2 bg-orange-100 border border-orange-300 rounded-lg">
+            <span className="text-sm font-medium text-orange-800">Pending Pieces: </span>
+            <span className="text-lg font-bold text-orange-900">{pendingStats.total_pending_quantity}</span>
+          </div>
         </div>
       </div>
 

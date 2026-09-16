@@ -256,7 +256,7 @@ const ShopOrderPage: React.FC = () => {
                   <th className="px-3 py-5 text-left w-32">Barcode</th>
                   <th className="px-3 py-5 text-left w-28">Category</th>
                   <th className="px-3 py-5 text-left w-20">Qty</th>
-                  <th className="px-3 py-5 text-left w-32">Note</th>
+                  <th className="px-3 py-5 text-left w-28">Note</th>
                   <th className="px-3 py-5 text-left w-28">Status</th>
                   <th className="px-3 py-5 text-left w-32">Order Placed</th>
                 </tr>

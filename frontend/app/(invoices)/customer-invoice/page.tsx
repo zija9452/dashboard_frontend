@@ -267,6 +267,10 @@ const CustomerInvoicePage: React.FC = () => {
       const res = await fetch(`/api/customerinvoice/receipt/${invoiceId}`, {
         method: 'POST',
         credentials: 'include',
+        // A stalled connection (e.g. internet drops mid-request) can otherwise hang
+        // indefinitely — fetch() doesn't fail on its own until the request settles,
+        // so without this the loading overlay could get stuck forever.
+        signal: AbortSignal.timeout(20000),
       });
       if (!res.ok) return false;
       const data = await res.json();
@@ -340,7 +344,9 @@ const CustomerInvoicePage: React.FC = () => {
 
   // Separately, recover a receipt that never got shown (invoice creation itself
   // already succeeded — this is a plain re-fetch, so it never blocks Submit).
-  useEffect(() => {
+  // Called on mount, and again whenever the browser regains connectivity (see the
+  // 'online' listener below) — so recovery doesn't require a manual refresh.
+  const recoverLastCreatedReceipt = async () => {
     let stored: { invoiceId: string; invoiceNo: string } | null = null;
     try {
       stored = JSON.parse(localStorage.getItem(CUSTOMER_LAST_CREATED_STORAGE) || 'null');
@@ -349,15 +355,22 @@ const CustomerInvoicePage: React.FC = () => {
     }
     if (!stored) return;
 
-    (async () => {
-      const shown = await fetchAndShowCustomerReceipt(stored!.invoiceId);
-      if (shown) {
-        try { localStorage.removeItem(CUSTOMER_LAST_CREATED_STORAGE); } catch { /* ignore */ }
-        showToast(`Recovered receipt for invoice ${stored!.invoiceNo}`, 'success');
-      }
-      // If it still fails (e.g. net is still down), leave it — next successful
-      // mount, or Duplicate Bill, can recover it. We don't retry-loop or block anything.
-    })();
+    const shown = await fetchAndShowCustomerReceipt(stored.invoiceId);
+    if (shown) {
+      try { localStorage.removeItem(CUSTOMER_LAST_CREATED_STORAGE); } catch { /* ignore */ }
+      showToast(`Recovered receipt for invoice ${stored.invoiceNo}`, 'success');
+    }
+    // If it still fails (e.g. net is still down), leave it — the 'online' event,
+    // next mount, or Duplicate Bill, can recover it. We don't retry-loop or block.
+  };
+
+  useEffect(() => {
+    recoverLastCreatedReceipt();
+
+    // The browser fires this the moment connectivity is restored — retry right
+    // then instead of making the cashier remember to refresh the page.
+    window.addEventListener('online', recoverLastCreatedReceipt);
+    return () => window.removeEventListener('online', recoverLastCreatedReceipt);
   }, []);
 
   const fetchCustomerCategories = async () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
@@ -199,6 +199,27 @@ const CustomerInvoicePage: React.FC = () => {
   const [balance, setBalance] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [submitting, setSubmitting] = useState(false);
+  // Idempotency: identifies one checkout attempt so a lost-response retry (or a
+  // resubmit after a page refresh) is recognized by the backend instead of creating
+  // a duplicate invoice. Cleared as soon as create() confirms success (returns an
+  // invoice_id) — after that point there's no more duplicate-creation risk.
+  const idempotencyKeyRef = useRef<string | null>(null);
+  const CUSTOMER_PENDING_KEY_STORAGE = 'customer-invoice-pending-key';
+  // True while resolving a leftover pending key from localStorage on page load. Submit
+  // stays disabled until this resolves, otherwise a fresh submit could race the check.
+  const [checkingPendingInvoice, setCheckingPendingInvoice] = useState(false);
+  const [pendingCheckError, setPendingCheckError] = useState(false);
+  // True while fetchAndShowCustomerReceipt() is in flight — shows a full-screen
+  // blurred loading overlay so the cashier isn't left staring at a blank screen
+  // while the PDF (a separate, sometimes-slow call) is generated and fetched.
+  const [loadingReceipt, setLoadingReceipt] = useState(false);
+
+  // Separate from the idempotency key above: once create() succeeds there's no more
+  // duplicate risk, but the receipt (PDF) step is a second, independent call that can
+  // still fail or be interrupted by a refresh. This remembers "invoice X exists but its
+  // receipt hasn't been shown yet" so a refresh can quietly recover it — unlike the
+  // idempotency key, this never blocks Submit, since there's nothing ambiguous to guard.
+  const CUSTOMER_LAST_CREATED_STORAGE = 'customer-invoice-last-created';
 
   // Add customer modal state
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
@@ -215,6 +236,7 @@ const CustomerInvoicePage: React.FC = () => {
   // Receipt modal state - using ReportModal component
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [invoiceIdForReceipt, setInvoiceIdForReceipt] = useState('');
+  const [receiptPdfData, setReceiptPdfData] = useState('');
 
   // Customer categories state (dynamic)
   const [customerCategories, setCustomerCategories] = useState<CustomerCategoryGrouped[]>([]);
@@ -232,6 +254,110 @@ const CustomerInvoicePage: React.FC = () => {
     fetchCustomers();
     fetchSalesmans();
     fetchCustomerCategories();
+  }, []);
+
+  // Fetch a receipt PDF for an already-created invoice and show it. This is a plain
+  // read (no side effects), so unlike the create step it's always safe to retry.
+  // Fetches explicitly (rather than handing reportUrl to ReportModal) so the caller
+  // knows whether it actually succeeded, e.g. to decide whether to clear the
+  // "receipt not shown yet" recovery record.
+  const fetchAndShowCustomerReceipt = async (invoiceId: string): Promise<boolean> => {
+    setLoadingReceipt(true);
+    try {
+      const res = await fetch(`/api/customerinvoice/receipt/${invoiceId}`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      const pdf = typeof data === 'string' ? data : data.pdf;
+      if (!pdf) return false;
+      setReceiptPdfData(pdf);
+      setInvoiceIdForReceipt(invoiceId);
+      setShowReceiptModal(true);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setLoadingReceipt(false);
+    }
+  };
+
+  // On load, resolve any "pending" checkout attempt left over from a previous visit
+  // (its response never arrived — e.g. lost connection or the page was refreshed
+  // mid-submit). We never guess from cart content — we ask the backend for the
+  // authoritative outcome, then clear the pending key either way. Submit stays
+  // disabled until this resolves so a fresh submit can't race it.
+  const resolvePendingInvoice = async () => {
+    let pendingKey: string | null = null;
+    try {
+      pendingKey = localStorage.getItem(CUSTOMER_PENDING_KEY_STORAGE);
+    } catch {
+      pendingKey = null;
+    }
+    if (!pendingKey) return;
+
+    setCheckingPendingInvoice(true);
+    setPendingCheckError(false);
+    try {
+      const res = await fetch(`/api/customerinvoice/by-idempotency-key/${pendingKey}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (res.status === 404) {
+        // That attempt never actually reached the database — safe to discard.
+        idempotencyKeyRef.current = null;
+        try { localStorage.removeItem(CUSTOMER_PENDING_KEY_STORAGE); } catch { /* ignore */ }
+        setCheckingPendingInvoice(false);
+        return;
+      }
+
+      if (!res.ok) {
+        // Ambiguous (server error) — don't guess, let the user retry the check.
+        setPendingCheckError(true);
+        setCheckingPendingInvoice(false);
+        return;
+      }
+
+      const data = await res.json();
+      idempotencyKeyRef.current = null;
+      try { localStorage.removeItem(CUSTOMER_PENDING_KEY_STORAGE); } catch { /* ignore */ }
+
+      showToast(`Your last invoice was already created: ${data.invoice_no}`, 'success');
+      await fetchAndShowCustomerReceipt(data.invoice_id);
+      setCheckingPendingInvoice(false);
+    } catch {
+      // Network still down — don't guess, keep the key and let the user retry.
+      setPendingCheckError(true);
+      setCheckingPendingInvoice(false);
+    }
+  };
+
+  useEffect(() => {
+    resolvePendingInvoice();
+  }, []);
+
+  // Separately, recover a receipt that never got shown (invoice creation itself
+  // already succeeded — this is a plain re-fetch, so it never blocks Submit).
+  useEffect(() => {
+    let stored: { invoiceId: string; invoiceNo: string } | null = null;
+    try {
+      stored = JSON.parse(localStorage.getItem(CUSTOMER_LAST_CREATED_STORAGE) || 'null');
+    } catch {
+      stored = null;
+    }
+    if (!stored) return;
+
+    (async () => {
+      const shown = await fetchAndShowCustomerReceipt(stored!.invoiceId);
+      if (shown) {
+        try { localStorage.removeItem(CUSTOMER_LAST_CREATED_STORAGE); } catch { /* ignore */ }
+        showToast(`Recovered receipt for invoice ${stored!.invoiceNo}`, 'success');
+      }
+      // If it still fails (e.g. net is still down), leave it — next successful
+      // mount, or Duplicate Bill, can recover it. We don't retry-loop or block anything.
+    })();
   }, []);
 
   const fetchCustomerCategories = async () => {
@@ -627,7 +753,20 @@ const handleAddCustomer = async () => {
       return;
     }
 
+    if (submitting || checkingPendingInvoice) return;
     setSubmitting(true);
+
+    // A fresh key per attempt — never inferred from cart content. Persisted in
+    // localStorage (not just memory) so a page refresh mid-request can still be
+    // resolved by resolvePendingInvoice() on next load instead of retrying blind.
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = crypto.randomUUID();
+      try {
+        localStorage.setItem(CUSTOMER_PENDING_KEY_STORAGE, idempotencyKeyRef.current);
+      } catch {
+        // localStorage unavailable (e.g. private mode) — in-memory retry still works this session
+      }
+    }
 
     try {
       // Prepare items for backend with all category-specific fields
@@ -663,6 +802,7 @@ const handleAddCustomer = async () => {
         salesman_id: null,
         timezone: 'Asia/Karachi',
         date: new Date().toISOString().split('T')[0],
+        idempotency_key: idempotencyKeyRef.current,
       };
 
       const response = await fetch('/api/customerinvoice/', {
@@ -677,6 +817,10 @@ const handleAddCustomer = async () => {
       if (response.ok) {
         const result = await response.json();
 
+        // Invoice is confirmed created — the duplicate-creation risk is over.
+        idempotencyKeyRef.current = null;
+        try { localStorage.removeItem(CUSTOMER_PENDING_KEY_STORAGE); } catch { /* ignore */ }
+
         // Reset form
         setCart([]);
         setSelectedCustomer('');
@@ -686,9 +830,37 @@ const handleAddCustomer = async () => {
 
         // Show receipt modal using report URL (consistent with customer details)
         if (result.invoice_id) {
-          setInvoiceIdForReceipt(result.invoice_id);
+          // Immediate confirmation that the sale itself is safe, shown before we even
+          // attempt to fetch the printable receipt — so a slow/failed receipt fetch
+          // never leaves the cashier wondering whether the sale went through.
+          Swal.fire({
+            title: 'Invoice Created!',
+            text: `Invoice ${result.invoice_no} has been recorded.`,
+            icon: 'success',
+            timer: 1500,
+            showConfirmButton: false
+          });
 
-          setShowReceiptModal(true);
+          // Remember this invoice separately until its receipt is actually shown — if
+          // the fetch below fails or a refresh interrupts it, the mount-time recovery
+          // effect can find it and quietly re-fetch, without needing to guard against
+          // duplicate creation (the invoice already, unambiguously, exists).
+          try {
+            localStorage.setItem(CUSTOMER_LAST_CREATED_STORAGE, JSON.stringify({
+              invoiceId: result.invoice_id,
+              invoiceNo: result.invoice_no
+            }));
+          } catch { /* ignore */ }
+
+          const shown = await fetchAndShowCustomerReceipt(result.invoice_id);
+          if (shown) {
+            try { localStorage.removeItem(CUSTOMER_LAST_CREATED_STORAGE); } catch { /* ignore */ }
+          } else {
+            showToast(
+              `Invoice ${result.invoice_no} was created, but the receipt could not be loaded. Check your internet connection and reopen it from Duplicate Bill.`,
+              'error'
+            );
+          }
         } else {
           Swal.fire({
             title: 'Success!',
@@ -703,9 +875,15 @@ const handleAddCustomer = async () => {
         const errorData = await response.json();
         showToast(errorData.error || 'Failed to create invoice', 'error');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating invoice:', error);
-      showToast('Failed to create invoice', 'error');
+      const isNetworkError = error instanceof TypeError && /fetch/i.test(error.message || '');
+      showToast(
+        isNetworkError
+          ? 'Internet connection problem. Please check your connection and try again.'
+          : (error.message || 'Failed to create invoice'),
+        'error'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -713,6 +891,17 @@ const handleAddCustomer = async () => {
 
   return (
     <div className=" bg-white min-h-screen">
+      {pendingCheckError && (
+        <div className="bg-red-100 border-b-2 border-red-400 text-red-800 px-4 py-2 flex items-center justify-between gap-3 text-sm">
+          <span>Couldn't verify your last transaction. Check your internet connection.</span>
+          <button
+            onClick={resolvePendingInvoice}
+            className="regal-btn bg-red-600 text-white px-3 py-1 text-xs"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {/* Navbar Header */}
       <nav className="flex px-4 md:px-6 mb-4 md:mb-6 py-2 md:py-1 bg-regal-yellow shadow-lg relative">
         <div className="flex items-center">
@@ -1225,8 +1414,8 @@ const handleAddCustomer = async () => {
                 {/* Pay and Bill Button */}
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className={`regal-btn bg-regal-yellow text-regal-black w-full py-3 text-lg font-semibold ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  disabled={submitting || checkingPendingInvoice}
+                  className={`regal-btn bg-regal-yellow text-regal-black w-full py-3 text-lg font-semibold ${(submitting || checkingPendingInvoice) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   {submitting ? (
                     <span className="flex items-center justify-center gap-2">
@@ -1236,6 +1425,8 @@ const handleAddCustomer = async () => {
                       </svg>
                       Processing...
                     </span>
+                  ) : checkingPendingInvoice ? (
+                    'Checking previous transaction...'
                   ) : (
                     'Pay and Bill'
                   )}
@@ -1355,15 +1546,28 @@ const handleAddCustomer = async () => {
         </div>
       )}
 
+      {loadingReceipt && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-[100]">
+          <div className="bg-white rounded-lg px-8 py-6 shadow-xl flex flex-col items-center gap-3">
+            <svg className="animate-spin h-8 w-8 text-regal-orange" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span className="text-regal-black font-medium">Loading receipt...</span>
+          </div>
+        </div>
+      )}
+
       {/* Receipt Modal - Using shared ReportModal component with report URL (consistent with customer details) */}
       <ReportModal
         isOpen={showReceiptModal}
         onClose={() => {
           setShowReceiptModal(false);
           setInvoiceIdForReceipt('');
+          setReceiptPdfData('');
         }}
         title="Invoice Receipt"
-        reportUrl={`/api/customerinvoice/receipt/${invoiceIdForReceipt}`}
+        pdfData={receiptPdfData}
       />
 
       {/* Image Modal */}

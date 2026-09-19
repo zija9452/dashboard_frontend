@@ -35,7 +35,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, duration = 5000, onClose }
   if (!visible) return null;
 
   return (
-    <div className={`fixed top-4 right-4 ${typeStyles[type]} text-white px-4 py-3 rounded-md shadow-lg z-50`}>
+    <div className={`fixed top-4 right-4 ${typeStyles[type]} text-white px-4 py-3 rounded-md shadow-lg z-[9999]`}>
       <div className="flex items-center">
         <span>{message}</span>
         <button

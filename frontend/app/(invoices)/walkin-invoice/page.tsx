@@ -147,6 +147,29 @@ const WalkInInvoicePage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [manualDiscount, setManualDiscount] = useState<number>(0); // Manual discount at payment time
 
+  // Idempotency: identifies one checkout attempt so a lost-response retry (or a
+  // resubmit after a page refresh) is recognized by the backend instead of creating
+  // a duplicate invoice. Cleared as soon as create() confirms success (returns an
+  // invoice_id) — after that point there's no more duplicate-creation risk.
+  const idempotencyKeyRef = useRef<string | null>(null);
+  const WALKIN_PENDING_KEY_STORAGE = 'walkin-invoice-pending-key';
+  // True while resolving a leftover pending key from localStorage on page load (see
+  // the mount effect below). Submit stays disabled until this resolves, otherwise a
+  // fresh submit could race the recovery check.
+  const [checkingPendingInvoice, setCheckingPendingInvoice] = useState(false);
+  const [pendingCheckError, setPendingCheckError] = useState(false);
+  // True while fetchAndShowReceipt() is in flight — shows a full-screen blurred
+  // loading overlay so the cashier isn't left staring at a blank screen while the
+  // PDF (a separate, sometimes-slow call) is generated and fetched.
+  const [loadingReceipt, setLoadingReceipt] = useState(false);
+
+  // Separate from the idempotency key above: once create() succeeds there's no more
+  // duplicate risk, but the receipt (PDF) step is a second, independent call that can
+  // still fail or be interrupted by a refresh. This remembers "invoice X exists but its
+  // receipt hasn't been shown yet" so a refresh can quietly recover it — unlike the
+  // idempotency key, this never blocks Submit, since there's nothing ambiguous to guard.
+  const WALKIN_LAST_CREATED_STORAGE = 'walkin-invoice-last-created';
+
   // Stock view modal
   const [showStockModal, setShowStockModal] = useState(false);
   const [stockSearchTerm, setStockSearchTerm] = useState('');
@@ -325,6 +348,106 @@ const WalkInInvoicePage: React.FC = () => {
     fetchSalesmans();
     checkOpeningStatus();
     checkClosingStatus();
+  }, []);
+
+  // Fetch a receipt PDF for an already-created invoice and show it. This is a plain
+  // read (no side effects), so unlike the create step it's always safe to retry.
+  const fetchAndShowReceipt = async (invoiceId: string, billTypeLabel: string): Promise<boolean> => {
+    setLoadingReceipt(true);
+    try {
+      const res = await fetch(
+        `/api/walkin-invoices/${invoiceId}/receipt?bill_type=${encodeURIComponent(billTypeLabel)}`,
+        { method: 'GET', credentials: 'include' }
+      );
+      if (!res.ok) return false;
+      const data = await res.json();
+      const pdfBlob = base64ToBlob(data.pdf, 'application/pdf');
+      setPdfUrl(URL.createObjectURL(pdfBlob));
+      setBillType(billTypeLabel);
+      setShowPdfModal(true);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setLoadingReceipt(false);
+    }
+  };
+
+  // On load, resolve any "pending" checkout attempt left over from a previous visit
+  // (its response never arrived — e.g. lost connection or the page was refreshed
+  // mid-submit). We never guess from cart content — we ask the backend for the
+  // authoritative outcome, then clear the pending key either way. Submit stays
+  // disabled until this resolves so a fresh submit can't race it.
+  const resolvePendingInvoice = async () => {
+    let pendingKey: string | null = null;
+    try {
+      pendingKey = localStorage.getItem(WALKIN_PENDING_KEY_STORAGE);
+    } catch {
+      pendingKey = null;
+    }
+    if (!pendingKey) return;
+
+    setCheckingPendingInvoice(true);
+    setPendingCheckError(false);
+    try {
+      const res = await fetch(`/api/walkin-invoices/by-idempotency-key/${pendingKey}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (res.status === 404) {
+        // That attempt never actually reached the database — safe to discard.
+        idempotencyKeyRef.current = null;
+        try { localStorage.removeItem(WALKIN_PENDING_KEY_STORAGE); } catch { /* ignore */ }
+        setCheckingPendingInvoice(false);
+        return;
+      }
+
+      if (!res.ok) {
+        // Ambiguous (server error) — don't guess, let the user retry the check.
+        setPendingCheckError(true);
+        setCheckingPendingInvoice(false);
+        return;
+      }
+
+      const data = await res.json();
+      idempotencyKeyRef.current = null;
+      try { localStorage.removeItem(WALKIN_PENDING_KEY_STORAGE); } catch { /* ignore */ }
+
+      showToast(`Your last invoice was already created: ${data.invoice_no}`, 'success');
+      await fetchAndShowReceipt(data.invoice_id, 'SALE RECEIPT');
+      setCheckingPendingInvoice(false);
+    } catch {
+      // Network still down — don't guess, keep the key and let the user retry.
+      setPendingCheckError(true);
+      setCheckingPendingInvoice(false);
+    }
+  };
+
+  useEffect(() => {
+    resolvePendingInvoice();
+  }, []);
+
+  // Separately, recover a receipt that never got shown (invoice creation itself
+  // already succeeded — this is a plain re-fetch, so it never blocks Submit).
+  useEffect(() => {
+    let stored: { invoiceId: string; invoiceNo: string } | null = null;
+    try {
+      stored = JSON.parse(localStorage.getItem(WALKIN_LAST_CREATED_STORAGE) || 'null');
+    } catch {
+      stored = null;
+    }
+    if (!stored) return;
+
+    (async () => {
+      const shown = await fetchAndShowReceipt(stored!.invoiceId, 'SALE RECEIPT');
+      if (shown) {
+        try { localStorage.removeItem(WALKIN_LAST_CREATED_STORAGE); } catch { /* ignore */ }
+        showToast(`Recovered receipt for invoice ${stored!.invoiceNo}`, 'success');
+      }
+      // If it still fails (e.g. net is still down), leave it — next successful
+      // mount, or Duplicate Bill, can recover it. We don't retry-loop or block anything.
+    })();
   }, []);
 
   // Check if opening is done for today (from database)
@@ -575,8 +698,20 @@ const WalkInInvoicePage: React.FC = () => {
       return;
     }
 
-    if (submitting) return;
+    if (submitting || checkingPendingInvoice) return;
     setSubmitting(true);
+
+    // A fresh key per attempt — never inferred from cart content. Persisted in
+    // localStorage (not just memory) so a page refresh mid-request can still be
+    // resolved by resolvePendingInvoice() on next load instead of retrying blind.
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = crypto.randomUUID();
+      try {
+        localStorage.setItem(WALKIN_PENDING_KEY_STORAGE, idempotencyKeyRef.current);
+      } catch {
+        // localStorage unavailable (e.g. private mode) — in-memory retry still works this session
+      }
+    }
 
     try {
       const response = await fetch('/api/walkin-invoices', {
@@ -599,25 +734,40 @@ const WalkInInvoicePage: React.FC = () => {
           payment_method: paymentMethod.toLowerCase(),
           payment_date: paymentDate,
           manual_discount: manualDiscount,
-          notes: ''
+          notes: '',
+          idempotency_key: idempotencyKeyRef.current
         }),
       });
 
       if (response.ok) {
-        // Get PDF data from JSON response (same as customer_invoice)
         const data = await response.json();
-        const pdfBase64 = data.pdf;
 
-        // Convert base64 to blob
-        const pdfBlob = base64ToBlob(pdfBase64, 'application/pdf');
-        const pdfObjectUrl = URL.createObjectURL(pdfBlob);
+        // Invoice is confirmed created — the duplicate-creation risk is over, so
+        // clear the pending key now, before even fetching the receipt.
+        idempotencyKeyRef.current = null;
+        try { localStorage.removeItem(WALKIN_PENDING_KEY_STORAGE); } catch { /* ignore */ }
 
-        // Set PDF state
-        setPdfUrl(pdfObjectUrl);
-        setBillType('SALE RECEIPT');
+        // Remember this invoice separately until its receipt is actually shown — if
+        // the fetch below fails or a refresh interrupts it, the mount-time recovery
+        // effect can find it and quietly re-fetch, without needing to guard against
+        // duplicate creation (the invoice already, unambiguously, exists).
+        try {
+          localStorage.setItem(WALKIN_LAST_CREATED_STORAGE, JSON.stringify({
+            invoiceId: data.invoice_id,
+            invoiceNo: data.invoice_no
+          }));
+        } catch { /* ignore */ }
 
-        // Show PDF modal directly (no SweetAlert)
-        setShowPdfModal(true);
+        // Immediate confirmation that the sale itself is safe, shown before we even
+        // attempt to fetch the printable receipt — so a slow/failed receipt fetch
+        // (see below) never leaves the cashier wondering whether the sale went through.
+        Swal.fire({
+          title: 'Invoice Created!',
+          text: `Invoice ${data.invoice_no} has been recorded.`,
+          icon: 'success',
+          timer: 1500,
+          showConfirmButton: false
+        });
 
         // Reset form
         clearAll();
@@ -633,13 +783,31 @@ const WalkInInvoicePage: React.FC = () => {
 
         // Refresh products to update stock
         fetchDefaultProducts();
+
+        // Fetch and show the receipt — a plain read, separate from the create step
+        // above, so it's always safe to retry on its own if this part fails.
+        const shown = await fetchAndShowReceipt(data.invoice_id, 'SALE RECEIPT');
+        if (shown) {
+          try { localStorage.removeItem(WALKIN_LAST_CREATED_STORAGE); } catch { /* ignore */ }
+        } else {
+          showToast(
+            `Invoice ${data.invoice_no} was created, but the receipt could not be loaded. Check your internet connection and reopen it from Duplicate Bill.`,
+            'error'
+          );
+        }
       } else {
         const errorData = await response.json();
         showToast(errorData.error || errorData.detail || 'Failed to create invoice', 'error');
       }
     } catch (error: any) {
       console.error('Error creating invoice:', error);
-      showToast(error.message || 'Failed to create invoice', 'error');
+      const isNetworkError = error instanceof TypeError && /fetch/i.test(error.message || '');
+      showToast(
+        isNetworkError
+          ? 'Internet connection problem. Please check your connection and try again.'
+          : (error.message || 'Failed to create invoice'),
+        'error'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -859,6 +1027,17 @@ const WalkInInvoicePage: React.FC = () => {
     <>
       <style dangerouslySetInnerHTML={{ __html: printStyles }} />
       <div className="bg-white min-h-screen">
+      {pendingCheckError && (
+        <div className="bg-red-100 border-b-2 border-red-400 text-red-800 px-4 py-2 flex items-center justify-between gap-3 text-sm">
+          <span>Couldn't verify your last transaction. Check your internet connection.</span>
+          <button
+            onClick={resolvePendingInvoice}
+            className="regal-btn bg-red-600 text-white px-3 py-1 text-xs"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {/* Navbar Header */}
       <nav className="flex items-center justify-between mb-4 md:mb-6 px-4 md:px-6 py-2 md:py-1 bg-regal-yellow shadow-lg relative">
         <div className="flex items-center">
@@ -1303,10 +1482,14 @@ const WalkInInvoicePage: React.FC = () => {
             <div className="flex gap-2">
               <button
                 onClick={submitPayment}
-                disabled={submitting}
+                disabled={submitting || checkingPendingInvoice}
                 className="regal-btn bg-regal-yellow text-regal-black flex-1 disabled:opacity-50"
               >
-                {submitting ? 'Processing...' : 'Confirm Payment'}
+                {submitting
+                  ? 'Processing...'
+                  : checkingPendingInvoice
+                  ? 'Checking previous transaction...'
+                  : 'Confirm Payment'}
               </button>
               <button
                 onClick={() => setShowPaymentModal(false)}
@@ -1761,6 +1944,18 @@ const WalkInInvoicePage: React.FC = () => {
       )}
 
       {/* PDF View Modal */}
+      {loadingReceipt && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-[100]">
+          <div className="bg-white rounded-lg px-8 py-6 shadow-xl flex flex-col items-center gap-3">
+            <svg className="animate-spin h-8 w-8 text-regal-orange" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span className="text-regal-black font-medium">Loading receipt...</span>
+          </div>
+        </div>
+      )}
+
       {showPdfModal && pdfUrl && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm"

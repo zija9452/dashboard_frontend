@@ -21,7 +21,7 @@ interface AttendanceOverview {
   pending_count: number;
 }
 
-const POLL_INTERVAL_MS = 45000;
+const POLL_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
 function todayKey(): string {
   const now = new Date();

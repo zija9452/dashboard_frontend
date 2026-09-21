@@ -6,7 +6,7 @@ import { db } from '@/lib/firebase';
 
 // Shop order data lives on Neon - keep polling infrequent so the badge
 // doesn't burn extra queries against it while an admin is just logged in.
-const POLL_INTERVAL_MS = 12 * 60 * 1000; // 12 minutes
+const POLL_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
 const ShopOrderApprovalBadge: React.FC = () => {
   const [count, setCount] = useState(0);

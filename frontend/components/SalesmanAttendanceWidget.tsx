@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { useToast } from '@/components/ui/Toast';
 
 interface AttendanceEntry {
@@ -110,11 +112,10 @@ const SalesmanAttendanceWidget: React.FC = () => {
 
   // Instant push the moment anyone checks in/out on any machine, instead of
   // waiting for the next 45s poll - the interval above stays as a fallback
-  // in case the stream connection ever drops silently (e.g. behind a proxy).
+  // in case the Firestore listener ever misses an update (e.g. offline tab).
   useEffect(() => {
-    const source = new EventSource('/api/salesman-attendance/stream');
-    source.onmessage = () => fetchOverview();
-    return () => source.close();
+    const unsubscribe = onSnapshot(doc(db, 'signals', 'salesman_attendance'), () => fetchOverview());
+    return () => unsubscribe();
   }, [fetchOverview]);
 
   const handleCheckIn = async (salesmanId: string, name: string) => {

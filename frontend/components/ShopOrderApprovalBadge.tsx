@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 // Shop order data lives on Neon - keep polling infrequent so the badge
 // doesn't burn extra queries against it while an admin is just logged in.
@@ -32,11 +34,10 @@ const ShopOrderApprovalBadge: React.FC = () => {
 
   // Instant push the moment a new order is placed by anyone, instead of
   // waiting for the next poll - the interval above stays as a fallback in
-  // case the stream connection ever drops silently (e.g. behind a proxy).
+  // case the Firestore listener ever misses an update (e.g. offline tab).
   useEffect(() => {
-    const source = new EventSource('/api/shoporder/approval/stream');
-    source.onmessage = () => fetchCount();
-    return () => source.close();
+    const unsubscribe = onSnapshot(doc(db, 'signals', 'shop_order_approval'), () => fetchCount());
+    return () => unsubscribe();
   }, [fetchCount]);
 
   // The approval page marks everything seen as soon as it's opened - clear

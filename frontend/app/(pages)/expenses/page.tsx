@@ -15,6 +15,7 @@ interface Expense {
   branch: string;
   created_by: string;
   created_at: string;
+  is_admin_only: boolean;
 }
 
 const ExpensesPage: React.FC = () => {
@@ -22,6 +23,7 @@ const ExpensesPage: React.FC = () => {
   const { showToast } = useToast();
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null); // Track which expense is being deleted
@@ -43,7 +45,8 @@ const ExpensesPage: React.FC = () => {
     expense: '',
     amount: 0,
     date: '',
-    branch: ''
+    branch: '',
+    is_admin_only: false
   });
 
   // Predefined branch options
@@ -89,12 +92,29 @@ const ExpensesPage: React.FC = () => {
     fetchExpenses();
   }, [currentPage, pageSize, searchTerm]);
 
+  // Only admins can mark an expense as private (hidden from cashiers)
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      try {
+        const response = await fetch('/api/auth/session', { credentials: 'include' });
+        if (response.ok) {
+          const data = await response.json();
+          setIsAdmin(data.user?.role === 'admin');
+        }
+      } catch (error) {
+        console.error('Error fetching user role:', error);
+      }
+    };
+    fetchUserRole();
+  }, []);
+
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
+    const isCheckbox = type === 'checkbox';
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'number' ? Number(value) : value
+      [name]: isCheckbox ? (e.target as HTMLInputElement).checked : type === 'number' ? Number(value) : value
     }));
   };
 
@@ -104,7 +124,8 @@ const ExpensesPage: React.FC = () => {
       expense: '',
       amount: 0,
       date: new Date().toISOString().split('T')[0],
-      branch: ''
+      branch: '',
+      is_admin_only: false
     });
     setEditingExpense(null);
     setShowAddForm(false);
@@ -127,7 +148,8 @@ const ExpensesPage: React.FC = () => {
         amount: formData.amount,
         expense_date: formData.date || new Date().toISOString().split('T')[0],
         branch: formData.branch,
-        created_by: currentUser?.id
+        created_by: currentUser?.id,
+        is_admin_only: isAdmin ? formData.is_admin_only : false
       };
 
       if (editingExpense) {
@@ -216,7 +238,8 @@ const ExpensesPage: React.FC = () => {
       expense: expense.expense,
       amount: expense.amount,
       date: expense.expense_date,
-      branch: expense.branch
+      branch: expense.branch,
+      is_admin_only: expense.is_admin_only
     });
     setShowAddForm(true);
 
@@ -292,7 +315,8 @@ const ExpensesPage: React.FC = () => {
                   expense: '',
                   amount: 0,
                   date: new Date().toISOString().split('T')[0],
-                  branch: ''
+                  branch: '',
+                  is_admin_only: false
                 });
                 setEditingExpense(null);
                 setShowAddForm(true);
@@ -410,6 +434,19 @@ const ExpensesPage: React.FC = () => {
               </div>
             </div>
 
+            {isAdmin && (
+              <label className="mt-4 flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  name="is_admin_only"
+                  checked={formData.is_admin_only}
+                  onChange={handleInputChange}
+                  className="h-4 w-4"
+                />
+                Keep this private (Admin only) - cashiers won&apos;t see this expense
+              </label>
+            )}
+
             <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="submit"
@@ -468,7 +505,14 @@ const ExpensesPage: React.FC = () => {
                 {expenses.map((expense, index) => (
                   <tr key={expense.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm text-gray-900">{((currentPage - 1) * pageSize) + index + 1}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{expense.expense}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900">
+                      {expense.expense}
+                      {isAdmin && expense.is_admin_only && (
+                        <span className="ml-2 inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+                          Private
+                        </span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-sm text-gray-900">{expense.amount}</td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {new Date(expense.expense_date).toLocaleDateString()}

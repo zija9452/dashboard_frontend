@@ -1,5 +1,5 @@
 'use client';
-
+// https://claude.ai/code/artifact/2f2032e5-82ef-4d61-ab52-d3e71672771f
 import React, { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import PageHeader from '@/components/ui/PageHeader';
@@ -7,29 +7,11 @@ import Pagination from '@/components/ui/Pagination';
 import ReportModal from '@/components/ui/ReportModal';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
-import { Line } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-} from 'chart.js';
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-);
+import DemandTrendPanel, {
+  MAX_COMPARE_ITEMS,
+  type DemandTopItem,
+  type DemandStatsResponse,
+} from '@/components/demand/DemandTrendPanel';
 
 interface Demand {
   id: string;
@@ -51,18 +33,6 @@ interface DemandItemOption {
   name: string;
   category: string;
   demand_count: number;
-}
-
-interface TopDemandItem {
-  id: string;
-  name: string;
-  category: string;
-  count: number;
-}
-
-interface DemandStats {
-  chartData: { dates: string[]; counts: number[] };
-  topItems: TopDemandItem[];
 }
 
 interface Customer {
@@ -122,10 +92,11 @@ const DemandPage: React.FC = () => {
   const firstDayOfMonth = toLocalDateStr(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [fromDate, setFromDate] = useState<string>(firstDayOfMonth);
   const [toDate, setToDate] = useState<string>(today);
-  const [stats, setStats] = useState<DemandStats | null>(null);
+  const [stats, setStats] = useState<DemandStatsResponse | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
-  const [itemFilter, setItemFilter] = useState<TopDemandItem | null>(null);
-  const hasAutoSelectedTopItem = React.useRef(false);
+  // Empty = default view (top 8). 1+ = an explicit comparison the user built
+  // by clicking rows in the Top Demanded Items list.
+  const [selectedItems, setSelectedItems] = useState<DemandTopItem[]>([]);
 
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [generatingExcel, setGeneratingExcel] = useState(false);
@@ -147,12 +118,6 @@ const DemandPage: React.FC = () => {
   const [itemQuery, setItemQuery] = useState('');
   const [itemSuggestions, setItemSuggestions] = useState<DemandItemOption[]>([]);
   const [showItemSuggestions, setShowItemSuggestions] = useState(false);
-
-  // Search any demanded article to graph (independent of the Top 8 ranking,
-  // which only surfaces the most-demanded ones in the current date range)
-  const [chartItemQuery, setChartItemQuery] = useState('');
-  const [chartItemSuggestions, setChartItemSuggestions] = useState<DemandItemOption[]>([]);
-  const [showChartItemSuggestions, setShowChartItemSuggestions] = useState(false);
 
   // Right-side details/edit panel
   const [selectedDemand, setSelectedDemand] = useState<Demand | null>(null);
@@ -265,43 +230,20 @@ const DemandPage: React.FC = () => {
       if (showItemSuggestions) searchDemandItems(itemQuery, setItemSuggestions);
     }, 250);
     return () => clearTimeout(handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemQuery, showItemSuggestions]);
-
-  useEffect(() => {
-    const handle = setTimeout(() => {
-      if (showChartItemSuggestions) searchDemandItems(chartItemQuery, setChartItemSuggestions);
-    }, 250);
-    return () => clearTimeout(handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartItemQuery, showChartItemSuggestions]);
-
-  const handlePickChartItem = (item: DemandItemOption) => {
-    setItemFilter({ id: item.id, name: item.name, category: item.category, count: item.demand_count });
-    setChartItemQuery(item.name);
-    setShowChartItemSuggestions(false);
-  };
 
   const fetchStats = async () => {
     try {
       setStatsLoading(true);
-      const isFilteredRequest = !!itemFilter;
       const params = new URLSearchParams({ from_date: fromDate, to_date: toDate });
-      if (itemFilter) params.append('demand_item_id', itemFilter.id);
+      if (selectedItems.length > 0) {
+        params.append('demand_item_ids', selectedItems.map((i) => i.id).join(','));
+      }
 
       const response = await fetch(`/api/demand/stats?${params.toString()}`, { credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
         setStats(data);
-
-        // First unfiltered load: default the graph to the highest-volume
-        // article instead of the "everything combined" total.
-        if (!isFilteredRequest && !hasAutoSelectedTopItem.current && data.topItems?.length > 0) {
-          hasAutoSelectedTopItem.current = true;
-          const top = data.topItems[0];
-          setItemFilter({ id: top.id, name: top.name, category: top.category, count: top.count });
-          setChartItemQuery(top.name);
-        }
       } else {
         showToast('Failed to fetch demand trends', 'error');
       }
@@ -649,13 +591,19 @@ const DemandPage: React.FC = () => {
     }
   };
 
-  const handleSelectTopItem = (item: TopDemandItem) => {
-    setItemFilter((prev) => {
-      const next = prev?.id === item.id ? null : item;
-      setChartItemQuery(next ? next.name : '');
-      return next;
+  const handleSelectTopItem = (item: DemandTopItem) => {
+    setSelectedItems((prev) => {
+      const isSelected = prev.some((i) => i.id === item.id);
+      if (isSelected) return prev.filter((i) => i.id !== item.id);
+      if (prev.length >= MAX_COMPARE_ITEMS) {
+        showToast(`You can compare up to ${MAX_COMPARE_ITEMS} articles at once`, 'warning');
+        return prev;
+      }
+      return [...prev, item];
     });
   };
+
+  const clearSelection = () => setSelectedItems([]);
 
   // Cashiers get a fast, entry-focused page - no trend/analytics fetch for them
   const showAnalytics = userRole === 'admin' || userRole === 'employee';
@@ -663,7 +611,7 @@ const DemandPage: React.FC = () => {
   useEffect(() => {
     if (showAnalytics) fetchStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itemFilter, userRole]);
+  }, [selectedItems, userRole]);
 
   const viewReport = async () => {
     try {
@@ -729,97 +677,6 @@ const DemandPage: React.FC = () => {
     }
   };
 
-  // ---- Trend chart bucketing: same daily -> weekly/monthly rollup logic as
-  // the main Dashboard, so both pages behave identically for the same range ----
-  const monthAbbrs = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const isSameMonth = fromDate && toDate &&
-    new Date(fromDate).getMonth() === new Date(toDate).getMonth() &&
-    new Date(fromDate).getFullYear() === new Date(toDate).getFullYear();
-  const isSameYear = fromDate && toDate &&
-    new Date(fromDate).getFullYear() === new Date(toDate).getFullYear();
-
-  const buildChartData = () => {
-    if (!stats || !stats.chartData || stats.chartData.dates.length === 0) return null;
-    const { dates, counts } = stats.chartData;
-
-    let labels: string[];
-    let values: number[];
-
-    if (isSameMonth) {
-      labels = dates.map((d) => {
-        const date = new Date(d);
-        return `${date.getDate()}-${monthAbbrs[date.getMonth()]}`;
-      });
-      values = counts;
-    } else if (isSameYear) {
-      const weeks: { [key: string]: number } = {};
-      const weekLabels: string[] = [];
-      dates.forEach((d, idx) => {
-        const date = new Date(d);
-        const monthAbbr = monthAbbrs[date.getMonth()];
-        const dayOfMonth = date.getDate();
-        const monthLastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-        let weekStart = 22, weekEnd = monthLastDay;
-        if (dayOfMonth <= 7) { weekStart = 1; weekEnd = 7; }
-        else if (dayOfMonth <= 14) { weekStart = 8; weekEnd = 14; }
-        else if (dayOfMonth <= 21) { weekStart = 15; weekEnd = 21; }
-        const key = `${monthAbbr} ${weekStart}-${weekEnd}`;
-        if (!(key in weeks)) { weeks[key] = 0; weekLabels.push(key); }
-        weeks[key] += counts[idx];
-      });
-      labels = weekLabels;
-      values = weekLabels.map((k) => weeks[k]);
-    } else {
-      const months: { [key: string]: number } = {};
-      const monthLabels: string[] = [];
-      dates.forEach((d, idx) => {
-        const key = monthAbbrs[new Date(d).getMonth()];
-        if (!(key in months)) { months[key] = 0; monthLabels.push(key); }
-        months[key] += counts[idx];
-      });
-      labels = monthLabels;
-      values = monthLabels.map((k) => months[k]);
-    }
-
-    return {
-      labels,
-      datasets: [
-        {
-          label: itemFilter ? itemFilter.name : 'Demand count',
-          data: values,
-          borderColor: 'rgb(15, 157, 142)',
-          backgroundColor: 'rgba(15, 157, 142, 0.2)',
-          fill: true,
-          tension: 0,
-        },
-      ],
-    };
-  };
-
-  const chartData = buildChartData();
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        mode: 'index' as const,
-        intersect: false,
-        callbacks: {
-          label: function (context: any) {
-            return `${context.parsed.y} demand(s)`;
-          },
-        },
-      },
-    },
-    scales: {
-      y: { beginAtZero: true, ticks: { stepSize: 1 } },
-      x: { ticks: { maxRotation: 45, minRotation: 45, autoSkip: false } },
-    },
-  };
-
-  const maxTopItemCount = Math.max(1, ...(stats?.topItems.map((i) => i.count) || [1]));
-
   const isDirty = selectedDemand
     ? editDraft.demand_text !== selectedDemand.demand_text ||
       editDraft.category !== (selectedDemand.category || '') ||
@@ -841,14 +698,12 @@ const DemandPage: React.FC = () => {
         >
           {showAddForm ? 'Cancel' : '+ Add Demand'}
         </button>
-        {showAnalytics && (
-          <button
-            onClick={() => router.push('/demand-category')}
-            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap px-4 py-2 flex items-center gap-2"
-          >
-            Demand Category
-          </button>
-        )}
+        <button
+          onClick={() => router.push('/demand-category')}
+          className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap px-4 py-2 flex items-center gap-2"
+        >
+          Demand Category
+        </button>
       </div>
 
       {/* Add Demand Form - opens right under the toolbar, not below the analytics block */}
@@ -1003,53 +858,23 @@ const DemandPage: React.FC = () => {
         <>
           {/* Date range + report actions */}
           <div className="regal-card p-4 mb-4 flex flex-wrap items-end gap-3">
-            <div className="relative">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Graph a specific article</label>
-              <input
-                type="text"
-                value={chartItemQuery}
-                onChange={(e) => {
-                  setChartItemQuery(e.target.value);
-                  setShowChartItemSuggestions(true);
-                  if (itemFilter) setItemFilter(null);
-                }}
-                onFocus={() => setShowChartItemSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowChartItemSuggestions(false), 150)}
-                className="regal-input text-sm w-56"
-                placeholder="Search any demanded article..."
-                autoComplete="off"
-              />
-              {showChartItemSuggestions && chartItemSuggestions.length > 0 && (
-                <div className="absolute z-10 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
-                  {chartItemSuggestions.map((item) => (
-                    <div
-                      key={item.id}
-                      onMouseDown={() => handlePickChartItem(item)}
-                      className="flex items-center justify-between px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 border-b border-gray-100 last:border-0"
-                    >
-                      <span className="truncate">{item.name}</span>
-                      <span className="text-xs text-gray-400 shrink-0 ml-2">{item.demand_count}x</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="flex items-end gap-2 flex-nowrap">
+              <div className="w-[112px] sm:w-32">
+                <label className="block text-xs font-medium text-gray-600 mb-1">From Date</label>
+                <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="regal-input text-xs sm:text-sm px-2 w-full" />
+              </div>
+              <div className="w-[112px] sm:w-32">
+                <label className="block text-xs font-medium text-gray-600 mb-1">To Date</label>
+                <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="regal-input text-xs sm:text-sm px-2 w-full" />
+              </div>
+              <button
+                onClick={handleFetchTrends}
+                disabled={statsLoading}
+                className="shrink-0 bg-regal-yellow text-regal-black px-3 sm:px-4 py-3 rounded-md text-xs sm:text-sm font-semibold hover:bg-yellow-400 transition disabled:opacity-50 whitespace-nowrap"
+              >
+                {statsLoading ? '...' : 'Fetch'}
+              </button>
             </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">From Date</label>
-              <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="regal-input text-sm" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">To Date</label>
-              <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="regal-input text-sm" />
-            </div>
-            <button
-              onClick={handleFetchTrends}
-              disabled={statsLoading}
-              className="bg-regal-yellow text-regal-black px-4 py-3 rounded-md text-sm font-semibold hover:bg-yellow-400 transition disabled:opacity-50"
-            >
-              {statsLoading ? 'Fetching...' : 'Fetch'}
-            </button>
 
             <div className="flex-1"></div>
             <button
@@ -1069,71 +894,17 @@ const DemandPage: React.FC = () => {
           </div>
 
           {/* Trend chart + Top Demanded Items */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-            <div className="lg:col-span-2 regal-card p-3 md:p-6">
-              <h3 className="text-base md:text-lg font-semibold text-gray-700 mb-2">
-                Demand Volume{itemFilter ? ` — ${itemFilter.name}` : ''}
-              </h3>
-              {statsLoading ? (
-                <div className="h-64 md:h-80 flex items-center justify-center">
-                  <div className="h-8 w-8 border-4 border-regal-yellow border-t-transparent rounded-full animate-spin"></div>
-                </div>
-              ) : chartData ? (
-                <>
-                  <div className="h-64 md:h-80">
-                    <Line data={chartData} options={chartOptions} />
-                  </div>
-                  <p className="text-xs md:text-sm text-gray-500 mt-3 text-center">
-                    {isSameMonth
-                      ? `Daily trend from ${fromDate} to ${toDate}`
-                      : isSameYear
-                      ? `Weekly trend from ${fromDate} to ${toDate}`
-                      : `Monthly trend from ${fromDate} to ${toDate}`}
-                  </p>
-                </>
-              ) : (
-                <div className="h-64 md:h-80 flex items-center justify-center">
-                  <p className="text-gray-500 text-sm">No demand data for the selected period</p>
-                </div>
-              )}
-            </div>
-
-            <div className="regal-card p-3 md:p-6">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-base md:text-lg font-semibold text-gray-700">Top Demanded Items</h3>
-              </div>
-              {statsLoading ? (
-                <div className="animate-pulse space-y-2">
-                  {[...Array(5)].map((_, i) => <div key={i} className="h-10 bg-gray-100 rounded"></div>)}
-                </div>
-              ) : stats && stats.topItems.length > 0 ? (
-                <div className="space-y-1 max-h-[340px] overflow-y-auto pr-1">
-                  {stats.topItems.map((item, idx) => (
-                    <div
-                      key={item.id}
-                      onClick={() => handleSelectTopItem(item)}
-                      className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer border transition-colors ${
-                        itemFilter?.id === item.id ? 'border-regal-yellow bg-yellow-50' : 'border-transparent hover:bg-gray-50'
-                      }`}
-                    >
-                      <span className={`w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold ${
-                        itemFilter?.id === item.id ? 'bg-regal-yellow text-regal-black' : 'bg-gray-100 text-gray-500'
-                      }`}>{idx + 1}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
-                        <p className="text-[11px] text-gray-400">{item.category || 'Uncategorized'}</p>
-                        <div className="h-1 bg-gray-100 rounded-full mt-1 overflow-hidden">
-                          <div className="h-full bg-[rgb(15,157,142)] rounded-full" style={{ width: `${(item.count / maxTopItemCount) * 100}%` }}></div>
-                        </div>
-                      </div>
-                      <span className="text-sm font-bold text-gray-900">{item.count}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500 py-8 text-center">No demand items recorded in this range yet</p>
-              )}
-            </div>
+          <div className="mb-6">
+            <DemandTrendPanel
+              stats={stats}
+              loading={statsLoading}
+              fromDate={fromDate}
+              toDate={toDate}
+              interactive
+              selectedItems={selectedItems}
+              onToggleItem={handleSelectTopItem}
+              onClearSelection={clearSelection}
+            />
           </div>
         </>
       )}

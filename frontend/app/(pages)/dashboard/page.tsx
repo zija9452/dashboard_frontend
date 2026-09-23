@@ -17,6 +17,7 @@ import {
 import Link from 'next/link';
 import PageHeader from '@/components/ui/PageHeader';
 import ReportModal from '@/components/ui/ReportModal';
+import DemandTrendPanel, { type DemandStatsResponse } from '@/components/demand/DemandTrendPanel';
 
 ChartJS.register(
   CategoryScale,
@@ -91,8 +92,10 @@ const DashboardPage: React.FC = () => {
   const [upcomingTournaments, setUpcomingTournaments] = useState<UpcomingTournament[]>([]);
   const [tournamentsLoading, setTournamentsLoading] = useState(true);
 
+  const [demandStats, setDemandStats] = useState<DemandStatsResponse | null>(null);
+  const [demandStatsLoading, setDemandStatsLoading] = useState(false);
+
   // Single Date Range for both KPI cards and Chart - defaults to TODAY (daily view)
-  const today = new Date();
   const todayStr = new Date().toISOString().split('T')[0];
   const [fromDate, setFromDate] = useState<string>(todayStr);
   const [toDate, setToDate] = useState<string>(todayStr);
@@ -144,6 +147,7 @@ const DashboardPage: React.FC = () => {
             } else {
               // ADMIN/EMPLOYEE: Auto-fetch TODAY's data with chart on mount
               fetchDashboardData(todayStr, todayStr, true);
+              fetchDemandStats(todayStr, todayStr);
             }
           }
         }
@@ -215,6 +219,26 @@ const DashboardPage: React.FC = () => {
   const handleFetchClick = () => {
     if (fromDate && toDate) {
       fetchDashboardData(fromDate, toDate, !isCashierLike);
+      if (!isCashierLike) fetchDemandStats(fromDate, toDate);
+    }
+  };
+
+  // Top-demanded-articles summary - same date range as the KPI/sales chart
+  // above, Admin/Employee only (Cashier/Order Booker skip it, same gate as
+  // the sales chart).
+  const fetchDemandStats = async (from: string, to: string) => {
+    try {
+      setDemandStatsLoading(true);
+      const params = new URLSearchParams({ from_date: from, to_date: to });
+      const response = await fetch(`/api/demand/stats?${params.toString()}`, { credentials: 'include' });
+      if (response.ok) {
+        const data = await response.json();
+        setDemandStats(data);
+      }
+    } catch (error) {
+      console.error('Error fetching demand stats:', error);
+    } finally {
+      setDemandStatsLoading(false);
     }
   };
 
@@ -659,6 +683,19 @@ const DashboardPage: React.FC = () => {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Top Demand - same date range as the KPI/sales chart above; Admin/Employee only */}
+        {!isCashierLike && (
+          <div className="mb-4 md:mb-6">
+            <DemandTrendPanel
+              stats={demandStats}
+              loading={demandStatsLoading}
+              fromDate={fromDate}
+              toDate={toDate}
+              viewAllHref="/demand"
+            />
           </div>
         )}
 

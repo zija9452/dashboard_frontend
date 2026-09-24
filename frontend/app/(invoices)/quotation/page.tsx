@@ -1,0 +1,548 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useToast } from '@/components/ui/Toast';
+import Swal from 'sweetalert2';
+import { useRouter } from 'next/navigation';
+
+interface Customer {
+  cus_id: string;
+  cus_name: string;
+  cus_phone: string;
+}
+
+interface SubCategoryOption {
+  sub_category: string;
+  options: string[];
+  is_modifier?: boolean; // true = a price adjustment dimension (Sleeves, Size Type...), not part of the base combination
+}
+
+interface ModifierValue {
+  type: 'flat' | 'multiply';
+  value: number;
+}
+
+interface CustomerCategoryGrouped {
+  id: string;
+  main_category: string;
+  sub_categories: SubCategoryOption[];
+  ideal_prices?: Record<string, Record<string, number>>;
+  modifiers?: Record<string, Record<string, ModifierValue>>;
+}
+
+interface CartItem {
+  id: string;
+  category: string;
+  unitPrice: number;
+  quantity: number;
+  totalPrice: number;
+  category_fields?: Record<string, string>;
+}
+
+const BULK_MIN_QTY = 5;
+
+// Looks up the price for the selected options + quantity tier. "Base" sub-categories
+// (not flagged is_modifier) form the priced combination (bulk 5+ rate once quantity
+// reaches it, else 1-piece); "modifier" sub-categories (Sleeves, Size Type...) are
+// adjustments applied on top: final = (base + sum of flat adjustments) × product of
+// multiply adjustments. Returns null until quantity + every option is selected, or
+// when nothing is fixed for that exact base combination yet.
+function lookupIdealPrice(
+  categoryData: CustomerCategoryGrouped | undefined,
+  dynamicCategoryFields: Record<string, string>,
+  quantity: number | ''
+): number | null {
+  if (!categoryData?.ideal_prices) return null;
+
+  // Quantity must be entered first — it's what decides which tier (bulk vs
+  // single-piece) applies, so no price should be suggested before it's known.
+  if (quantity === '' || quantity <= 0) return null;
+
+  const allSelected = categoryData.sub_categories.every(sc => !!dynamicCategoryFields[sc.sub_category]);
+  if (!allSelected) return null;
+
+  const baseSubCats = categoryData.sub_categories.filter(sc => !sc.is_modifier);
+  const modifierSubCats = categoryData.sub_categories.filter(sc => sc.is_modifier);
+
+  const combinationKey = baseSubCats.map(sc => dynamicCategoryFields[sc.sub_category]).join('|');
+  const tiers = categoryData.ideal_prices[combinationKey];
+  if (!tiers) return null;
+
+  const basePrice = (quantity >= BULK_MIN_QTY && tiers[String(BULK_MIN_QTY)] !== undefined)
+    ? tiers[String(BULK_MIN_QTY)]
+    : tiers['1'];
+  if (basePrice === undefined) return null;
+
+  let flatSum = 0;
+  let multiplyProduct = 1;
+  for (const sc of modifierSubCats) {
+    const selectedOption = dynamicCategoryFields[sc.sub_category];
+    const modifier = categoryData.modifiers?.[sc.sub_category]?.[selectedOption];
+    if (!modifier) continue;
+    if (modifier.type === 'multiply') {
+      multiplyProduct *= modifier.value;
+    } else {
+      flatSum += modifier.value;
+    }
+  }
+
+  return (basePrice + flatSum) * multiplyProduct;
+}
+
+const QuotationPage: React.FC = () => {
+  const router = useRouter();
+  const { showToast } = useToast();
+
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerCategories, setCustomerCategories] = useState<CustomerCategoryGrouped[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+
+  const [selectedCustomer, setSelectedCustomer] = useState('');
+  const [teamName, setTeamName] = useState('');
+  const [requiredByDate, setRequiredByDate] = useState('');
+
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [dynamicCategoryFields, setDynamicCategoryFields] = useState<Record<string, string>>({});
+  const [unitPrice, setUnitPrice] = useState<number | ''>('');
+  const [priceWasAutoFilled, setPriceWasAutoFilled] = useState(false);
+  const [quantity, setQuantity] = useState<number | ''>('');
+  const [price, setPrice] = useState<number>(0);
+
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Fetched once so the rush charge can be previewed live in the UI, the same way
+  // the backend will compute it on submit (deadline within threshold_days => rush).
+  const [rushRatePerPiece, setRushRatePerPiece] = useState<number | null>(null);
+  const [rushThresholdDays, setRushThresholdDays] = useState<number | null>(null);
+
+  const categoryData = customerCategories.find(cat => cat.main_category === selectedCategory);
+  const allOptionsSelected = !!categoryData && categoryData.sub_categories.length > 0 &&
+    categoryData.sub_categories.every(sc => !!dynamicCategoryFields[sc.sub_category]);
+  const matchedIdealPrice = lookupIdealPrice(categoryData, dynamicCategoryFields, quantity);
+
+  // Whenever the selected combination (or the quantity, which can flip the bulk
+  // tier) resolves to a fixed price, fill it straight into the editable Rate field
+  // — no separate read-only "ideal price" box. Staff can still type over it.
+  useEffect(() => {
+    if (matchedIdealPrice !== null) {
+      setUnitPrice(matchedIdealPrice);
+      setPriceWasAutoFilled(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchedIdealPrice]);
+
+  useEffect(() => {
+    fetchCustomers();
+    fetchCustomerCategories();
+    fetchRushSettings();
+  }, []);
+
+  useEffect(() => {
+    if (unitPrice !== '' && quantity !== '') {
+      setPrice(unitPrice * quantity);
+    } else {
+      setPrice(0);
+    }
+  }, [unitPrice, quantity]);
+
+  const fetchCustomers = async () => {
+    try {
+      const response = await fetch('/api/customers/viewcustomer?page=1&limit=1000', {
+        method: 'GET',
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCustomers(Array.isArray(data.data) ? data.data : []);
+      }
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+    }
+  };
+
+  const fetchCustomerCategories = async () => {
+    try {
+      setLoadingCategories(true);
+      const response = await fetch('/api/customer-category/grouped', { method: 'GET', credentials: 'include' });
+      if (response.ok) {
+        const data = await response.json();
+        setCustomerCategories(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching customer categories:', error);
+    } finally {
+      setLoadingCategories(false);
+    }
+  };
+
+  const fetchRushSettings = async () => {
+    try {
+      const response = await fetch('/api/rush-pricing/', { method: 'GET', credentials: 'include' });
+      if (response.ok) {
+        const data = await response.json();
+        setRushRatePerPiece(typeof data.price_per_piece === 'number' ? data.price_per_piece : Number(data.price_per_piece));
+        setRushThresholdDays(typeof data.threshold_days === 'number' ? data.threshold_days : Number(data.threshold_days));
+      }
+    } catch (error) {
+      console.error('Error fetching rush settings:', error);
+    }
+  };
+
+  const clearItemForm = () => {
+    setSelectedCategory('');
+    setUnitPrice('');
+    setPriceWasAutoFilled(false);
+    setQuantity('');
+    setPrice(0);
+    setDynamicCategoryFields({});
+  };
+
+  const addToCart = () => {
+    if (!selectedCategory) {
+      showToast('Please select a category', 'error');
+      return;
+    }
+
+    if (categoryData && categoryData.sub_categories.length > 0) {
+      const missingFields = categoryData.sub_categories.filter(
+        sc => !dynamicCategoryFields[sc.sub_category] || !dynamicCategoryFields[sc.sub_category].trim()
+      );
+      if (missingFields.length > 0) {
+        showToast(`Please select: ${missingFields.map(sc => sc.sub_category).join(', ')}`, 'error');
+        return;
+      }
+    }
+
+    if (unitPrice === '' || unitPrice <= 0) {
+      showToast('Please enter a valid unit price', 'error');
+      return;
+    }
+    if (quantity === '' || quantity <= 0) {
+      showToast('Please enter a valid quantity', 'error');
+      return;
+    }
+
+    const newItem: CartItem = {
+      id: Date.now().toString(),
+      category: selectedCategory,
+      unitPrice,
+      quantity,
+      totalPrice: price,
+      category_fields: { ...dynamicCategoryFields },
+    };
+
+    setCart([...cart, newItem]);
+    clearItemForm();
+    showToast('Item added', 'success');
+  };
+
+  const removeFromCart = (id: string) => {
+    setCart(cart.filter(item => item.id !== id));
+  };
+
+  const cartSubtotal = cart.reduce((sum, item) => sum + item.totalPrice, 0);
+  const totalPieces = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+  // Live preview of what the backend will compute on submit: rush applies when the
+  // deadline falls within threshold_days of today (inclusive), charged per piece
+  // across the whole cart.
+  let estimatedIsRush = false;
+  if (requiredByDate && rushThresholdDays !== null) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const deadline = new Date(`${requiredByDate}T00:00:00`);
+    const daysUntil = Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    estimatedIsRush = daysUntil <= rushThresholdDays;
+  }
+  const estimatedRushCharge = estimatedIsRush && rushRatePerPiece !== null ? rushRatePerPiece * totalPieces : 0;
+  const estimatedTotal = cartSubtotal + estimatedRushCharge;
+
+  const handleSubmit = async () => {
+    if (cart.length === 0) {
+      showToast('Please add at least one item', 'error');
+      return;
+    }
+    if (!requiredByDate) {
+      showToast('Please enter the deadline (Required By date)', 'error');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const customer = customers.find(c => c.cus_id === selectedCustomer);
+
+      const items = cart.map(item => ({
+        pro_name: item.category,
+        cat_name: item.category,
+        unit_price: item.unitPrice,
+        pro_quantity: item.quantity,
+        total_price: item.totalPrice,
+        category_fields: JSON.stringify(item.category_fields || {}),
+      }));
+
+      const payload = {
+        customer_id: selectedCustomer || null,
+        customer_name: customer?.cus_name || null,
+        team_name: teamName || null,
+        items: JSON.stringify(items),
+        required_by_date: requiredByDate,
+      };
+
+      const response = await fetch('/api/quotation/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        await Swal.fire({
+          title: 'Quotation Created!',
+          html: `<p><strong>${result.quotation_no}</strong></p>` +
+                (result.is_rush ? `<p style="color:#B91C1C;font-weight:bold;">RUSH ORDER — Rs. ${result.rush_charge} rush charge applied</p>` : '<p>Normal order (not rush)</p>') +
+                `<p>Total: Rs. ${result.total_amount}</p>`,
+          icon: 'success',
+        });
+        setCart([]);
+        setSelectedCustomer('');
+        setTeamName('');
+        setRequiredByDate('');
+        router.push('/view-quotation');
+      } else {
+        showToast(result.error || result.detail || 'Failed to create quotation', 'error');
+      }
+    } catch (error) {
+      console.error('Error creating quotation:', error);
+      showToast('Failed to create quotation', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="max-w-[98%] md:max-w-[95%] mx-auto px-2 md:px-4 py-4">
+      <div className="flex items-center justify-between mb-4 md:mb-6">
+        <div>
+          <h1 className="text-xl md:text-2xl font-bold text-regal-black">New Quotation</h1>
+          <p className="text-sm text-gray-500 mt-0.5">A price offer for the customer — converts into a real order once approved.</p>
+        </div>
+        <button onClick={() => router.push('/view-quotation')} className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap">
+          View Quotations
+        </button>
+      </div>
+
+      {/* Left: build what's being ordered (category, options, price, quantity) first.
+          Right: cart on top, customer/deadline + submit at the bottom — same split as
+          the Customer Invoice builder, so item entry always comes before customer info. */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+
+        {/* Left Side - Add Item Form */}
+        <div className="lg:col-span-1">
+          <div className="regal-card p-3 md:p-6 sticky lg:top-16">
+            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Add Item</h2>
+
+            <div className="space-y-3 md:space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Category</label>
+                {loadingCategories ? (
+                  <div className="animate-pulse h-10 bg-gray-200 rounded"></div>
+                ) : (
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => { setSelectedCategory(e.target.value); setDynamicCategoryFields({}); setUnitPrice(''); setPriceWasAutoFilled(false); }}
+                    className="regal-input w-full"
+                  >
+                    <option value="">-- Select Category --</option>
+                    {customerCategories.map((cat) => (
+                      <option key={cat.id} value={cat.main_category}>{cat.main_category}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {selectedCategory && categoryData && (
+                <div className="p-4 bg-regal-yellow rounded">
+                  <h3 className="text-sm font-semibold text-regal-black border-b-2 border-regal-black pb-2 mb-3">{selectedCategory}</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                  {categoryData.sub_categories.map((subCat, index) => (
+                    <div key={index}>
+                      <label className="block text-sm font-medium text-regal-black mb-1">{subCat.sub_category}</label>
+                      <select
+                        value={dynamicCategoryFields[subCat.sub_category] || ''}
+                        onChange={(e) => setDynamicCategoryFields(prev => ({ ...prev, [subCat.sub_category]: e.target.value }))}
+                        className="regal-input w-full"
+                      >
+                        <option value="">Select {subCat.sub_category}</option>
+                        {subCat.options.map((option, optIndex) => (
+                          <option key={optIndex} value={option}>{option}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Quantity</label>
+                <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value === '' ? '' : Number(e.target.value))} className="regal-input w-full" min="1" step="1" placeholder="0" />
+                <p className="text-xs text-gray-500 mt-1">Enter quantity first — it decides whether the bulk (5+) or single-piece rate applies.</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Rate (Unit Price)</label>
+                <input
+                  type="number"
+                  value={unitPrice}
+                  onChange={(e) => { setUnitPrice(e.target.value === '' ? '' : Number(e.target.value)); setPriceWasAutoFilled(false); }}
+                  className="regal-input w-full"
+                  min="0"
+                  step="1"
+                  placeholder="0"
+                />
+                {allOptionsSelected && matchedIdealPrice !== null && priceWasAutoFilled && (
+                  <p className="text-xs font-normal text-green-700 mt-1">✓ filled from price list</p>
+                )}
+                {allOptionsSelected && matchedIdealPrice === null && (quantity === '' || quantity <= 0) && (
+                  <p className="text-xs text-gray-500 mt-1">Enter quantity above to see the fixed price for this combination.</p>
+                )}
+                {allOptionsSelected && matchedIdealPrice === null && quantity !== '' && quantity > 0 && (
+                  <p className="text-xs text-amber-600 mt-1">No fixed price set for this combination — enter manually.</p>
+                )}
+                {quantity !== '' && quantity > 0 && (
+                  <p className={`text-xs mt-1 font-medium ${quantity >= BULK_MIN_QTY ? 'text-purple-700' : 'text-gray-500'}`}>
+                    {quantity >= BULK_MIN_QTY
+                      ? `Bulk rate — charged as ${BULK_MIN_QTY}+ pieces`
+                      : 'Single piece rate — normal charge'}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Line Total</label>
+                <input type="text" value={price} disabled className="regal-input w-full bg-gray-100 font-semibold" />
+              </div>
+
+              <button onClick={addToCart} className="regal-btn bg-regal-yellow text-regal-black w-full">
+                + Add to Quotation
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side - Items Table (Top) + Customer & Deadline + Submit (Bottom) */}
+        <div className="lg:col-span-2 space-y-4 md:space-y-6">
+
+          <div className="regal-card p-3 md:p-6" style={{ minHeight: '220px' }}>
+            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Items ({cart.length})</h2>
+            {cart.length === 0 ? (
+              <div className="text-center py-10 text-gray-400 text-sm">No items added yet — build the order on the left.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-100">
+                    <tr className="text-left text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-3">Category</th>
+                      <th className="px-4 py-3 text-right">Rate</th>
+                      <th className="px-4 py-3 text-right">Qty</th>
+                      <th className="px-4 py-3 text-right">Total</th>
+                      <th className="px-4 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white">
+                    {cart.map((item) => (
+                      <tr key={item.id}>
+                        <td className="px-4 py-3">
+                          <div className="font-medium">{item.category}</div>
+                          {item.category_fields && Object.keys(item.category_fields).length > 0 && (
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              {Object.entries(item.category_fields).map(([k, v]) => `${k}: ${v}`).join(' · ')}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">{item.unitPrice}</td>
+                        <td className="px-4 py-3 text-right">{item.quantity}</td>
+                        <td className="px-4 py-3 text-right font-medium">{item.totalPrice}</td>
+                        <td className="px-4 py-3 text-right">
+                          <button onClick={() => removeFromCart(item.id)} className="text-red-600 hover:underline text-xs">Remove</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="regal-card p-3 md:p-6">
+            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Customer & Deadline</h2>
+            <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Customer <span className="text-gray-400 font-normal">(optional)</span>
+                  </label>
+                  <select value={selectedCustomer} onChange={(e) => setSelectedCustomer(e.target.value)} className="regal-input w-full">
+                    <option value="">Walk-in / prospect — not selected</option>
+                    {customers.map((c) => (
+                      <option key={c.cus_id} value={c.cus_id}>{c.cus_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Team Name <span className="text-gray-400 font-normal">(optional)</span>
+                  </label>
+                  <input type="text" value={teamName} onChange={(e) => setTeamName(e.target.value)} className="regal-input w-full" placeholder="e.g. City Warriors FC" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Deadline (Required By) *
+                    {estimatedIsRush && (
+                      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800">RUSH</span>
+                    )}
+                  </label>
+                  <input type="date" value={requiredByDate} onChange={(e) => setRequiredByDate(e.target.value)} className="regal-input w-full" min={new Date().toISOString().split('T')[0]} />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mb-4">
+                Rush status and rush charge are decided automatically from the deadline above — there is no manual "Rush" toggle.
+                {rushThresholdDays !== null && ` A deadline within ${rushThresholdDays} day(s) of today makes it a rush order.`}
+              </p>
+
+              <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 mb-4">
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>Subtotal ({totalPieces} pcs)</span>
+                  <span>Rs. {cartSubtotal}</span>
+                </div>
+                {estimatedIsRush && (
+                  <div className="flex justify-between text-sm text-red-700 font-medium">
+                    <span>Rush Charge (Rs. {rushRatePerPiece ?? 0} × {totalPieces} pcs)</span>
+                    <span>+ Rs. {estimatedRushCharge}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-lg mt-2 pt-2 border-t border-gray-200">
+                  <span>Estimated Total</span>
+                  <span>Rs. {estimatedTotal}</span>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting || cart.length === 0}
+                className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed w-full py-3 text-lg font-semibold"
+              >
+                {submitting ? 'Creating...' : 'Create Quotation'}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default QuotationPage;

@@ -86,14 +86,16 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
                       Administration
                     </SidebarLink>
                   )}
-                  {userRole !== 'order_booker' && (
+                  {userRole !== 'order_booker' && userRole !== 'sales' && (
                     <SidebarLink href="/products" className="text-base py-3 border-b border-gray-200">
                       Products
                     </SidebarLink>
                   )}
+                  {userRole !== 'production' && (
                   <SidebarLink href="/customers" className="text-base py-3 border-b border-gray-200">
                     Customers
                   </SidebarLink>
+                  )}
                   {userRole === 'admin' && (
                   <SidebarLink href="/vendors" className="text-base py-3 border-b border-gray-200">
                     Vendors
@@ -104,12 +106,12 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
                     Salesman
                   </SidebarLink>
                   )}
-                  {(userRole === 'admin' || userRole === 'employee') && (
+                  {(userRole === 'admin' || userRole === 'employee' || userRole === 'production') && (
                   <SidebarLink href="/stock" className="text-base py-3 border-b border-gray-200">
                     Stock
                   </SidebarLink>
                    )}
-                  {userRole === 'admin' && (
+                  {(userRole === 'admin' || userRole === 'production') && (
                   <SidebarLink href="/shop-order-approval" className="text-base py-3 border-b border-gray-200">
                     <span className="flex items-center">
                       Shop Order Approval
@@ -127,31 +129,33 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
                     Tournaments
                   </SidebarLink>
                    )}
-                  {userRole !== 'order_booker' && (
+                  {userRole !== 'order_booker' && userRole !== 'production' && (
                     <SidebarLink href="/expenses" className="text-base py-3 border-b border-gray-200">
                       Expenses
                     </SidebarLink>
                   )}
+                  {userRole !== 'production' && userRole !== 'sales' && (
                   <SidebarLink href="/customer-invoice" className="text-base py-3 border-b border-gray-200" target="_blank" rel="noopener noreferrer">
                     Customer Invoice
                   </SidebarLink>
+                  )}
                   {(userRole === 'admin' || userRole === 'employee') && (
                     <SidebarLink href="/customer-category" className="text-base py-3 border-b border-gray-200">
                       Customer Category
                     </SidebarLink>
                   )}
-                  
+
                   <SidebarLink href="/view-customer-order" className="text-base py-3 border-b border-gray-200">
                     View Customer Order
                   </SidebarLink>
 
-                  {userRole !== 'order_booker' && (
+                  {userRole !== 'order_booker' && userRole !== 'production' && userRole !== 'sales' && (
                     <SidebarLink href="/walkin-invoice" className="text-base py-3 border-b border-gray-200" target="_blank" rel="noopener noreferrer">
                       Walk-in Invoice
                     </SidebarLink>
                   )}
 
-                  {(userRole === 'admin' || userRole === 'employee') && (
+                  {(userRole === 'admin' || userRole === 'employee' || userRole === 'production' || userRole === 'sales') && (
                     <SidebarLink href="/sales-view" className="text-base py-3 border-b border-gray-200">
                       Sales View
                     </SidebarLink>
@@ -159,9 +163,14 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
                   <SidebarLink href="/duplicate-bill" className="text-base py-3 border-b border-gray-200">
                     Duplicate Bill
                   </SidebarLink>
-                  {userRole !== 'order_booker' && (
+                  {userRole !== 'order_booker' && userRole !== 'production' && userRole !== 'sales' && (
                     <SidebarLink href="/refund" className="text-base py-3 border-b border-gray-200">
                       Refund
+                    </SidebarLink>
+                  )}
+                  {(userRole === 'admin' || userRole === 'cashier') && (
+                    <SidebarLink href="/view-quotation" className="text-base py-3 border-b border-gray-200" target="_blank" rel="noopener noreferrer">
+                      Quotation
                     </SidebarLink>
                   )}
                   <SidebarLink href="/logout" className="text-base py-3">

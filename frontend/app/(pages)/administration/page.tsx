@@ -75,7 +75,9 @@ const AdministrationPage: React.FC = () => {
     {value: 'cashier', label: 'Cashier'},
     {value: 'employee', label: 'Employee'},
     {value: 'warehouse', label: 'Warehouse'},
-    {value: 'order_booker', label: 'Order Booker'}
+    {value: 'order_booker', label: 'Order Booker'},
+    {value: 'production', label: 'Production'},
+    {value: 'sales', label: 'Sales'}
   ];
 
   // Fetch all users (not just admins)
@@ -180,7 +182,7 @@ const AdministrationPage: React.FC = () => {
         // Update existing user using /users/ endpoint
 
         // Validate role name before sending
-        const validRoles = ['admin', 'cashier', 'employee', 'warehouse', 'order_booker'];
+        const validRoles = ['admin', 'cashier', 'employee', 'warehouse', 'order_booker', 'production', 'sales'];
         if (!validRoles.includes(formData.role_id)) {
           showToast('Invalid role selected', 'error');
           return;
@@ -582,6 +584,8 @@ const AdministrationPage: React.FC = () => {
                   <option value="employee">Employee</option>
                   <option value="warehouse">Warehouse</option>
                   <option value="order_booker">Order Booker</option>
+                  <option value="production">Production</option>
+                  <option value="sales">Sales</option>
                 </select>
               </div>
               <div>

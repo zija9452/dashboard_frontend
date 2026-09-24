@@ -607,8 +607,8 @@ const CustomersPage: React.FC = () => {
                   <tr key={customer.cus_id} className="hover:bg-gray-50 text-sm">
                     <td className="px-4 py-4 overflow-hidden text-ellipsis">{customer.cus_name}</td>
                     <td className="px-4 py-4">{customer.cus_phone}</td>
-                    <td className="px-4 py-4 ">{customer.cus_cnic || '-'}</td>
-                    <td className="px-4 py-4">{customer.cus_address || '-'}</td>
+                    <td className="px-4 py-4 break-all">{customer.cus_cnic || '-'}</td>
+                    <td className="px-4 py-4 break-words">{customer.cus_address || '-'}</td>
                     <td className="px-4 py-4">
                       {calculatingBalance === customer.cus_id ? (
                         <span className="text-gray-500">Calculating...</span>

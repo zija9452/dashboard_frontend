@@ -87,7 +87,7 @@ const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState(false);
   const [userRole, setUserRole] = useState<string>('Admin');
-  const isCashierLike = userRole === 'Cashier' || userRole === 'Order Booker';
+  const isCashierLike = userRole === 'Cashier' || userRole === 'Order Booker' || userRole === 'Production' || userRole === 'Sales';
   const [showShopReportModal, setShowShopReportModal] = useState(false);
   const [upcomingTournaments, setUpcomingTournaments] = useState<UpcomingTournament[]>([]);
   const [tournamentsLoading, setTournamentsLoading] = useState(true);
@@ -120,6 +120,23 @@ const DashboardPage: React.FC = () => {
     },
   });
 
+  const fetchUpcomingTournaments = async () => {
+    try {
+      const response = await fetch('/api/tournament/upcoming?days_ahead=90', {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUpcomingTournaments(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching upcoming tournaments:', error);
+    } finally {
+      setTournamentsLoading(false);
+    }
+  };
+
   // Fetch current user role on mount
   useEffect(() => {
     const fetchUserRole = async () => {
@@ -141,13 +158,21 @@ const DashboardPage: React.FC = () => {
             setFromDate(todayStr);
             setToDate(todayStr);
 
-            // CASHIER / ORDER_BOOKER: Auto-fetch today's data only, no chart shown
-            if (role === 'cashier' || role === 'order_booker') {
+            // CASHIER / ORDER_BOOKER / PRODUCTION / SALES: Auto-fetch today's data only, no chart shown
+            if (role === 'cashier' || role === 'order_booker' || role === 'production' || role === 'sales') {
               fetchDashboardData(todayStr, todayStr, false);
             } else {
               // ADMIN/EMPLOYEE: Auto-fetch TODAY's data with chart on mount
               fetchDashboardData(todayStr, todayStr, true);
               fetchDemandStats(todayStr, todayStr);
+            }
+
+            // Tournaments card is hidden for Production/Sales - skip the call
+            // entirely instead of firing a request they don't have access to.
+            if (role === 'production' || role === 'sales') {
+              setTournamentsLoading(false);
+            } else {
+              fetchUpcomingTournaments();
             }
           }
         }
@@ -158,26 +183,6 @@ const DashboardPage: React.FC = () => {
     };
 
     fetchUserRole();
-  }, []);
-
-  useEffect(() => {
-    const fetchUpcomingTournaments = async () => {
-      try {
-        const response = await fetch('/api/tournament/upcoming?days_ahead=90', {
-          credentials: 'include',
-          cache: 'no-store',
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setUpcomingTournaments(data.data || []);
-        }
-      } catch (error) {
-        console.error('Error fetching upcoming tournaments:', error);
-      } finally {
-        setTournamentsLoading(false);
-      }
-    };
-    fetchUpcomingTournaments();
   }, []);
 
   const fetchDashboardData = async (kpiFrom: string, kpiTo: string, fetchChart: boolean) => {
@@ -602,10 +607,10 @@ const DashboardPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Out Of Stock */}
+          {/* Out Of Stock - Sales doesn't have Stock/Shop Order access, so keep this card informational-only for them */}
           <div
-            className="regal-card p-3 md:p-4 cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => router.push('/stock-order?filter=zero')}
+            className={`regal-card p-3 md:p-4 transition-shadow ${userRole !== 'Sales' ? 'cursor-pointer hover:shadow-md' : ''}`}
+            onClick={() => { if (userRole !== 'Sales') router.push('/stock-order?filter=zero'); }}
           >
             <div className="flex items-center justify-between">
               <div>
@@ -622,10 +627,10 @@ const DashboardPage: React.FC = () => {
 
         {/* Middle Row - 3 Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-4 md:mb-6">
-          {/* Short Stock */}
+          {/* Short Stock - Sales doesn't have Stock/Shop Order access, so keep this card informational-only for them */}
           <div
-            className="regal-card p-3 md:p-4 cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => router.push('/stock-order?filter=short')}
+            className={`regal-card p-3 md:p-4 transition-shadow ${userRole !== 'Sales' ? 'cursor-pointer hover:shadow-md' : ''}`}
+            onClick={() => { if (userRole !== 'Sales') router.push('/stock-order?filter=short'); }}
           >
             <div className="flex items-center justify-between">
               <div>
@@ -669,8 +674,8 @@ const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick Actions - Only for Admin and Employee */}
-        {(userRole === 'Admin' || userRole === 'Employee') && (
+        {/* Quick Actions - Admin, Employee, and Production */}
+        {(userRole === 'Admin' || userRole === 'Employee' || userRole === 'Production') && (
           <div className="grid grid-cols-1 gap-4 md:gap-6 mb-4 md:mb-6">
             <div className="regal-card p-3 md:p-4">
               <p className="text-xs md:text-sm font-medium text-gray-600 mb-3">Quick Actions</p>
@@ -699,7 +704,8 @@ const DashboardPage: React.FC = () => {
           </div>
         )}
 
-        {/* Upcoming Tournaments - auto-synced cricket/football schedule, for restock planning */}
+        {/* Upcoming Tournaments - auto-synced cricket/football schedule, for restock planning; not shown to Production/Sales */}
+        {userRole !== 'Production' && userRole !== 'Sales' && (
         <div className="regal-card p-3 md:p-4 mb-4 md:mb-6">
           <div className="flex items-center justify-between mb-3">
             <div>
@@ -747,6 +753,7 @@ const DashboardPage: React.FC = () => {
             </div>
           )}
         </div>
+        )}
 
         {/* Chart Section - Only for Admin/Employee */}
         {!isCashierLike && (

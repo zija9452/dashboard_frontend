@@ -236,13 +236,15 @@ const ViewCustomerOrderPage: React.FC = () => {
               </svg>
               Search
             </button>
-            <Link
-              href="/shop-order"
-              className="relative regal-btn bg-regal-yellow text-regal-black whitespace-nowrap px-4 py-2 flex items-center gap-2"
-            >
-              Shop Orders
-              <ShopOrdersUnseenBadge />
-            </Link>
+            {userRole !== 'sales' && (
+              <Link
+                href="/shop-order"
+                className="relative regal-btn bg-regal-yellow text-regal-black whitespace-nowrap px-4 py-2 flex items-center gap-2"
+              >
+                Shop Orders
+                <ShopOrdersUnseenBadge />
+              </Link>
+            )}
           </div>
 
           {/* Search Bar & Status Filter - Show on button click */}

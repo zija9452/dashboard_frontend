@@ -30,14 +30,23 @@ interface Salesman {
 interface SubCategoryOption {
   sub_category: string;
   options: string[];
+  is_modifier?: boolean; // true = a price adjustment dimension (Sleeves, Size Type...), not part of the base combination
+}
+
+interface ModifierValue {
+  type: 'flat' | 'multiply';
+  value: number;
 }
 
 interface CustomerCategoryGrouped {
   id: string;
   main_category: string;
   sub_categories: SubCategoryOption[];
-  ideal_prices?: Record<string, number>;
+  ideal_prices?: Record<string, Record<string, number>>;
+  modifiers?: Record<string, Record<string, ModifierValue>>;
 }
+
+const BULK_MIN_QTY = 5;
 
 interface CartItem {
   id: string;
@@ -60,8 +69,9 @@ const DynamicCategoryFields: React.FC<{
   customerCategories: CustomerCategoryGrouped[];
   dynamicCategoryFields: Record<string, string>;
   setDynamicCategoryFields: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  quantity: number | '';
   onIdealPriceChange?: (price: number) => void;
-}> = ({ selectedCategory, customerCategories, dynamicCategoryFields, setDynamicCategoryFields, onIdealPriceChange }) => {
+}> = ({ selectedCategory, customerCategories, dynamicCategoryFields, setDynamicCategoryFields, quantity, onIdealPriceChange }) => {
   // Find the selected category in the categories list
   const categoryData = customerCategories.find(cat => cat.main_category === selectedCategory);
 
@@ -75,34 +85,63 @@ const DynamicCategoryFields: React.FC<{
     }));
   };
 
-  // Calculate ideal price based on selected options
+  // Calculate price based on selected options. "Base" sub-categories (not flagged
+  // is_modifier) form the priced combination (bulk 5+ rate once quantity reaches it,
+  // else 1-piece); "modifier" sub-categories (Sleeves, Size Type...) are adjustments
+  // applied on top: final = (base + sum of flat adjustments) × product of multiply
+  // adjustments.
   const calculateIdealPrice = (): number | null => {
     if (!categoryData.ideal_prices || Object.keys(categoryData.ideal_prices).length === 0) {
       return null;
     }
 
-    // Build combination key from selected options
-    // Order must match sub_categories order
-    const selectedOptions = categoryData.sub_categories.map(subCat => 
-      dynamicCategoryFields[subCat.sub_category] || ''
-    );
-
     // Check if all sub-categories have been selected
-    if (selectedOptions.some(opt => opt === '')) {
+    const allSelected = categoryData.sub_categories.every(subCat => !!dynamicCategoryFields[subCat.sub_category]);
+    if (!allSelected) {
       return null;
     }
 
-    // Build combination key
-    const combinationKey = selectedOptions.join('|');
-    
-    // Lookup price
-    const price = categoryData.ideal_prices[combinationKey];
-    return price || null;
+    // Quantity must be entered first — it's what decides which tier (bulk vs
+    // single-piece) applies, so no price should be suggested before it's known.
+    if (quantity === '' || quantity <= 0) {
+      return null;
+    }
+
+    const baseSubCats = categoryData.sub_categories.filter(sc => !sc.is_modifier);
+    const modifierSubCats = categoryData.sub_categories.filter(sc => sc.is_modifier);
+
+    const combinationKey = baseSubCats.map(sc => dynamicCategoryFields[sc.sub_category]).join('|');
+
+    // Lookup tiered prices for this exact base combination: { "1": price, "5": bulkPrice }
+    const tiers = categoryData.ideal_prices[combinationKey];
+    if (!tiers) return null;
+
+    // Use the bulk (5+) rate once quantity reaches the bulk tier, falling back to the
+    // 1-piece rate if no bulk rate has been set for this combination yet.
+    const basePrice = (quantity >= BULK_MIN_QTY && tiers[String(BULK_MIN_QTY)] !== undefined)
+      ? tiers[String(BULK_MIN_QTY)]
+      : tiers['1'];
+    if (basePrice === undefined) return null;
+
+    let flatSum = 0;
+    let multiplyProduct = 1;
+    for (const sc of modifierSubCats) {
+      const selectedOption = dynamicCategoryFields[sc.sub_category];
+      const modifier = categoryData.modifiers?.[sc.sub_category]?.[selectedOption];
+      if (!modifier) continue;
+      if (modifier.type === 'multiply') {
+        multiplyProduct *= modifier.value;
+      } else {
+        flatSum += modifier.value;
+      }
+    }
+
+    return (basePrice + flatSum) * multiplyProduct;
   };
 
   const idealPrice = calculateIdealPrice();
 
-  // Notify parent of ideal price change
+  // Notify parent of ideal price change (re-evaluates whenever quantity crosses the bulk tier)
   useEffect(() => {
     if (onIdealPriceChange && idealPrice !== null) {
       onIdealPriceChange(idealPrice);
@@ -138,20 +177,22 @@ const DynamicCategoryFields: React.FC<{
         ))}
       </div>
 
-      {/* Ideal Price Display */}
-      {idealPrice !== null && (
-        <div className="mt-4 p-4 bg-regal-yellow rounded border-2 border-regal-black">
-          <label className="block text-sm font-semibold text-regal-black mb-2">
-            Ideal Unit Price
-          </label>
-          <input
-            type="text"
-            value={`${idealPrice.toFixed(0)}`}
-            disabled
-            className="w-full px-4 py-3 bg-white border-2 border-regal-black rounded text-regal-black text-lg font-bold cursor-not-allowed"
-          />
-        </div>
-      )}
+      {(() => {
+        const allSelected = categoryData.sub_categories.every(sc => !!dynamicCategoryFields[sc.sub_category]);
+        const hasQuantity = typeof quantity === 'number' && quantity > 0;
+        if (!allSelected) return null;
+        if (!hasQuantity) {
+          return <p className="text-xs text-regal-black mt-3">Enter quantity below to fill the fixed price into the Rate field.</p>;
+        }
+        if (idealPrice === null) {
+          return <p className="text-xs text-amber-700 font-medium mt-3">No fixed price set for this combination — enter the Rate manually.</p>;
+        }
+        return (
+          <p className="text-xs text-green-800 font-medium mt-3">
+            ✓ Price filled into Rate field below ({quantity >= BULK_MIN_QTY ? 'bulk rate, 5+ pcs' : '1 pc rate'})
+          </p>
+        );
+      })()}
     </div>
   );
 };
@@ -168,6 +209,7 @@ const CustomerInvoicePage: React.FC = () => {
   const [salesmans, setSalesmans] = useState<Salesman[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [unitPrice, setUnitPrice] = useState<number | ''>('');
+  const [priceWasAutoFilled, setPriceWasAutoFilled] = useState(false);
   const [quantity, setQuantity] = useState<number | ''>('');
   const [price, setPrice] = useState<number>(0);
   
@@ -246,8 +288,13 @@ const CustomerInvoicePage: React.FC = () => {
   // Example: { "Neck Style": "Round", "Sleeve": "Full" }
   const [dynamicCategoryFields, setDynamicCategoryFields] = useState<Record<string, string>>({});
 
-  // Ideal price state - shows when all category fields are selected
-  const [idealPrice, setIdealPrice] = useState<number | null>(null);
+  // Whenever the selected combination (or the quantity, which can flip the bulk
+  // tier) resolves to a fixed price, it's filled straight into the editable Rate
+  // field below — no separate read-only "ideal price" box. Staff can type over it.
+  const handleIdealPriceChange = (price: number) => {
+    setUnitPrice(price);
+    setPriceWasAutoFilled(true);
+  };
 
   // Fetch customers, salesmans and customer categories
   useEffect(() => {
@@ -633,6 +680,7 @@ const CustomerInvoicePage: React.FC = () => {
   const clearForm = () => {
     setSelectedCategory('');
     setUnitPrice('');
+    setPriceWasAutoFilled(false);
     setQuantity('');
     setPrice(0);
     // Clear images
@@ -948,7 +996,12 @@ const handleAddCustomer = async () => {
                   ) : customerCategories.length > 0 ? (
                     <select
                       value={selectedCategory}
-                      onChange={(e) => setSelectedCategory(e.target.value)}
+                      onChange={(e) => {
+                        setSelectedCategory(e.target.value);
+                        setDynamicCategoryFields({});
+                        setUnitPrice('');
+                        setPriceWasAutoFilled(false);
+                      }}
                       className="regal-input w-full"
                     >
                       <option value="" disabled>Select Category</option>
@@ -985,25 +1038,12 @@ const handleAddCustomer = async () => {
                     customerCategories={customerCategories}
                     dynamicCategoryFields={dynamicCategoryFields}
                     setDynamicCategoryFields={setDynamicCategoryFields}
-                    onIdealPriceChange={setIdealPrice}
+                    quantity={quantity}
+                    onIdealPriceChange={handleIdealPriceChange}
                   />
                 )}
 
-                {/* Rate (Unit Price) */}
-                <div>
-                  <label className="block text-sm font-medium mb-1">Rate (Unit Price)</label>
-                  <input
-                    type="number"
-                    value={unitPrice}
-                    onChange={(e) => setUnitPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="regal-input w-full"
-                    placeholder="Unit Price"
-                    min="0"
-                    step="1"
-                  />
-                </div>
-
-                {/* Quantity */}
+                {/* Quantity — comes before Rate: it decides which price tier (bulk 5+ vs single-piece) applies */}
                 <div>
                   <label className="block text-sm font-medium mb-1">Quantity</label>
                   <input
@@ -1036,6 +1076,24 @@ const handleAddCustomer = async () => {
                     placeholder="Quantity"
                     min="1"
                   />
+                  <p className="text-xs text-gray-500 mt-1">Enter quantity first — it decides whether the bulk (5+) or single-piece rate applies.</p>
+                </div>
+
+                {/* Rate (Unit Price) */}
+                <div>
+                  <label className="block text-sm font-medium mb-1">Rate (Unit Price)</label>
+                  <input
+                    type="number"
+                    value={unitPrice}
+                    onChange={(e) => { setUnitPrice(e.target.value === '' ? '' : Number(e.target.value)); setPriceWasAutoFilled(false); }}
+                    className="regal-input w-full"
+                    placeholder="Unit Price"
+                    min="0"
+                    step="1"
+                  />
+                  {priceWasAutoFilled && unitPrice !== '' && (
+                    <p className="text-xs font-normal text-green-700 mt-1">✓ filled from price list</p>
+                  )}
                 </div>
 
                 {/* Price (Total) */}

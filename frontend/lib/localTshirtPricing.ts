@@ -41,6 +41,14 @@ export const LOCAL_TSHIRT_MODIFIERS: Record<string, Record<string, { type: 'flat
     'Oversize': { type: 'flat', value: 300 },
     'Oversize+': { type: 'multiply', value: 2 },
   },
+  'Rib': {
+    'Yes': { type: 'flat', value: 70 },
+    'No': { type: 'flat', value: 0 },
+  },
+  'Zip': {
+    'Yes': { type: 'flat', value: 100 },
+    'No': { type: 'flat', value: 0 },
+  },
 };
 
 export const LOCAL_RUSH_PRICING = {

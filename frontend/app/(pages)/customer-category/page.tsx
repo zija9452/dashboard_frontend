@@ -10,6 +10,8 @@ import PageHeader from '@/components/ui/PageHeader';
 interface SubCategory {
   sub_category: string;
   options: string[];
+  is_modifier?: boolean;
+  is_optional?: boolean;
 }
 
 interface CustomerCategory {
@@ -43,7 +45,7 @@ const CustomerCategoryPage: React.FC = () => {
   // Form state
   const [mainCategoryName, setMainCategoryName] = useState('');
   const [subCategories, setSubCategories] = useState<SubCategory[]>([
-    { sub_category: '', options: [''] }
+    { sub_category: '', options: [''], is_modifier: false, is_optional: false }
   ]);
 
   // Fetch customer categories
@@ -89,14 +91,21 @@ const CustomerCategoryPage: React.FC = () => {
   // Reset form
   const resetForm = () => {
     setMainCategoryName('');
-    setSubCategories([{ sub_category: '', options: [''] }]);
+    setSubCategories([{ sub_category: '', options: [''], is_modifier: false, is_optional: false }]);
     setEditingCategory(null);
     setShowAddForm(false);
   };
 
   // Add new sub-category
   const handleAddSubCategory = () => {
-    setSubCategories([...subCategories, { sub_category: '', options: [''] }]);
+    setSubCategories([...subCategories, { sub_category: '', options: [''], is_modifier: false, is_optional: false }]);
+  };
+
+  // Toggle the Price Modifier / Optional checkboxes for a sub-category
+  const handleToggleSubCategoryFlag = (index: number, flag: 'is_modifier' | 'is_optional') => {
+    const updated = [...subCategories];
+    updated[index][flag] = !updated[index][flag];
+    setSubCategories(updated);
   };
 
   // Remove sub-category
@@ -239,7 +248,9 @@ const CustomerCategoryPage: React.FC = () => {
     // Convert API data to form structure
     setSubCategories(category.sub_categories.map(sc => ({
       sub_category: sc.sub_category,
-      options: sc.options.length > 0 ? sc.options : ['']
+      options: sc.options.length > 0 ? sc.options : [''],
+      is_modifier: sc.is_modifier || false,
+      is_optional: sc.is_optional || false
     })));
     setShowAddForm(true);
   };
@@ -419,6 +430,28 @@ const CustomerCategoryPage: React.FC = () => {
                           </svg>
                         </button>
                       )}
+                    </div>
+
+                    {/* Price Modifier / Optional flags */}
+                    <div className="flex items-center gap-4 mb-3 ml-1">
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!subCat.is_modifier}
+                          onChange={() => handleToggleSubCategoryFlag(subCatIndex, 'is_modifier')}
+                          className="rounded border-gray-300"
+                        />
+                        Price Modifier (adjusts price, e.g. Full Sleeve = +50 — not a separate priced combination)
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!subCat.is_optional}
+                          onChange={() => handleToggleSubCategoryFlag(subCatIndex, 'is_optional')}
+                          className="rounded border-gray-300"
+                        />
+                        Optional (hidden by default, shown via a "+" button)
+                      </label>
                     </div>
 
                     {/* Options */}

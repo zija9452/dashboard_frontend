@@ -31,6 +31,7 @@ interface SubCategoryOption {
   sub_category: string;
   options: string[];
   is_modifier?: boolean; // true = a price adjustment dimension (Sleeves, Size Type...), not part of the base combination
+  is_optional?: boolean; // true = hidden by default, shown via the "+" more-options toggle
 }
 
 interface ModifierValue {
@@ -72,6 +73,10 @@ const DynamicCategoryFields: React.FC<{
   quantity: number | '';
   onIdealPriceChange?: (price: number) => void;
 }> = ({ selectedCategory, customerCategories, dynamicCategoryFields, setDynamicCategoryFields, quantity, onIdealPriceChange }) => {
+  // Whether the optional fields (Rib, Zip...) are revealed — hidden by default,
+  // shown via the "+" button below the required fields.
+  const [showOptionalFields, setShowOptionalFields] = useState(false);
+
   // Find the selected category in the categories list
   const categoryData = customerCategories.find(cat => cat.main_category === selectedCategory);
 
@@ -95,8 +100,11 @@ const DynamicCategoryFields: React.FC<{
       return null;
     }
 
-    // Check if all sub-categories have been selected
-    const allSelected = categoryData.sub_categories.every(subCat => !!dynamicCategoryFields[subCat.sub_category]);
+    // Check if all required sub-categories have been selected — optional ones
+    // (hidden behind the "+" toggle, e.g. Rib, Zip) don't block the price.
+    const allSelected = categoryData.sub_categories
+      .filter(subCat => !subCat.is_optional)
+      .every(subCat => !!dynamicCategoryFields[subCat.sub_category]);
     if (!allSelected) {
       return null;
     }
@@ -155,7 +163,7 @@ const DynamicCategoryFields: React.FC<{
       </h3>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {categoryData.sub_categories.map((subCat, index) => (
+        {categoryData.sub_categories.filter(subCat => !subCat.is_optional).map((subCat, index) => (
           <div key={index} className="space-y-1">
             <label className="block text-sm font-medium text-regal-black">
               {subCat.sub_category}:
@@ -176,6 +184,52 @@ const DynamicCategoryFields: React.FC<{
           </div>
         ))}
       </div>
+
+      {/* Optional fields (Rib, Zip...) — hidden by default, revealed via "+" */}
+      {categoryData.sub_categories.some(subCat => subCat.is_optional) && (
+        <div className="pt-2 border-t border-regal-black/20">
+          {!showOptionalFields ? (
+            <button
+              type="button"
+              onClick={() => setShowOptionalFields(true)}
+              className="text-sm font-medium text-regal-black flex items-center gap-1 hover:underline"
+            >
+              <span className="text-lg leading-none">+</span> More options
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowOptionalFields(false)}
+                className="text-xs text-regal-black/70 hover:underline mb-2"
+              >
+                − Hide more options
+              </button>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {categoryData.sub_categories.filter(subCat => subCat.is_optional).map((subCat, index) => (
+                  <div key={index} className="space-y-1">
+                    <label className="block text-sm font-medium text-regal-black">
+                      {subCat.sub_category}: <span className="text-xs font-normal text-regal-black/60">(optional)</span>
+                    </label>
+                    <select
+                      value={dynamicCategoryFields[subCat.sub_category] || ''}
+                      onChange={(e) => handleSubCategoryChange(subCat.sub_category, e.target.value)}
+                      className="regal-input w-full"
+                    >
+                      <option value="">Select {subCat.sub_category}</option>
+                      {subCat.options.map((option, optIndex) => (
+                        <option key={optIndex} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* {(() => {
         const allSelected = categoryData.sub_categories.every(sc => !!dynamicCategoryFields[sc.sub_category]);
@@ -681,9 +735,10 @@ const CustomerInvoicePage: React.FC = () => {
         return;
       }
 
-      // Validate all sub-categories have selected options
+      // Validate all required sub-categories have selected options — optional
+      // ones (Rib, Zip...) are fine left blank.
       const missingFields = categoryData.sub_categories.filter(
-        sc => !dynamicCategoryFields[sc.sub_category] || !dynamicCategoryFields[sc.sub_category].trim()
+        sc => !sc.is_optional && (!dynamicCategoryFields[sc.sub_category] || !dynamicCategoryFields[sc.sub_category].trim())
       );
 
       if (missingFields.length > 0) {

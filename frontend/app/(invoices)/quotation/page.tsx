@@ -21,6 +21,7 @@ interface SubCategoryOption {
   sub_category: string;
   options: string[];
   is_modifier?: boolean; // true = a price adjustment dimension (Sleeves, Size Type...), not part of the base combination
+  is_optional?: boolean; // true = hidden by default, shown via the "+" more-options toggle
 }
 
 interface ModifierValue {
@@ -64,7 +65,11 @@ function lookupIdealPrice(
   // single-piece) applies, so no price should be suggested before it's known.
   if (quantity === '' || quantity <= 0) return null;
 
-  const allSelected = categoryData.sub_categories.every(sc => !!dynamicCategoryFields[sc.sub_category]);
+  // Optional sub-categories (Rib, Zip...) don't block the price - only required
+  // (non-optional) fields need to be selected.
+  const allSelected = categoryData.sub_categories
+    .filter(sc => !sc.is_optional)
+    .every(sc => !!dynamicCategoryFields[sc.sub_category]);
   if (!allSelected) return null;
 
   const baseSubCats = categoryData.sub_categories.filter(sc => !sc.is_modifier);
@@ -109,6 +114,9 @@ const QuotationPage: React.FC = () => {
 
   const [selectedCategory, setSelectedCategory] = useState('');
   const [dynamicCategoryFields, setDynamicCategoryFields] = useState<Record<string, string>>({});
+  // Whether the optional fields (Rib, Zip...) are revealed — hidden by default,
+  // shown via the "+" button below the required fields.
+  const [showOptionalFields, setShowOptionalFields] = useState(false);
   const [unitPrice, setUnitPrice] = useState<number | ''>('');
   const [priceWasAutoFilled, setPriceWasAutoFilled] = useState(false);
   const [quantity, setQuantity] = useState<number | ''>('');
@@ -133,7 +141,7 @@ const QuotationPage: React.FC = () => {
 
   const categoryData = customerCategories.find(cat => cat.main_category === selectedCategory);
   const allOptionsSelected = !!categoryData && categoryData.sub_categories.length > 0 &&
-    categoryData.sub_categories.every(sc => !!dynamicCategoryFields[sc.sub_category]);
+    categoryData.sub_categories.filter(sc => !sc.is_optional).every(sc => !!dynamicCategoryFields[sc.sub_category]);
   const matchedIdealPrice = lookupIdealPrice(categoryData, dynamicCategoryFields, quantity);
 
   // Whenever the selected combination (or the quantity, which can flip the bulk
@@ -220,6 +228,7 @@ const QuotationPage: React.FC = () => {
     setQuantity('');
     setPrice(0);
     setDynamicCategoryFields({});
+    setShowOptionalFields(false);
   };
 
   const addToCart = () => {
@@ -229,8 +238,9 @@ const QuotationPage: React.FC = () => {
     }
 
     if (categoryData && categoryData.sub_categories.length > 0) {
+      // Optional sub-categories (Rib, Zip...) are fine left blank.
       const missingFields = categoryData.sub_categories.filter(
-        sc => !dynamicCategoryFields[sc.sub_category] || !dynamicCategoryFields[sc.sub_category].trim()
+        sc => !sc.is_optional && (!dynamicCategoryFields[sc.sub_category] || !dynamicCategoryFields[sc.sub_category].trim())
       );
       if (missingFields.length > 0) {
         showToast(`Please select: ${missingFields.map(sc => sc.sub_category).join(', ')}`, 'error');
@@ -407,7 +417,7 @@ const QuotationPage: React.FC = () => {
                 ) : (
                   <select
                     value={selectedCategory}
-                    onChange={(e) => { setSelectedCategory(e.target.value); setDynamicCategoryFields({}); setUnitPrice(''); setPriceWasAutoFilled(false); }}
+                    onChange={(e) => { setSelectedCategory(e.target.value); setDynamicCategoryFields({}); setUnitPrice(''); setPriceWasAutoFilled(false); setShowOptionalFields(false); }}
                     className="regal-input w-full"
                   >
                     <option value="">-- Select Category --</option>
@@ -422,7 +432,7 @@ const QuotationPage: React.FC = () => {
                 <div className="p-4 bg-regal-yellow rounded">
                   <h3 className="text-sm font-semibold text-regal-black border-b-2 border-regal-black pb-2 mb-3">{selectedCategory}</h3>
                   <div className="grid grid-cols-2 gap-3">
-                  {categoryData.sub_categories.map((subCat, index) => (
+                  {categoryData.sub_categories.filter(subCat => !subCat.is_optional).map((subCat, index) => (
                     <div key={index}>
                       <label className="block text-sm font-medium text-regal-black mb-1">{subCat.sub_category}</label>
                       <select
@@ -438,6 +448,50 @@ const QuotationPage: React.FC = () => {
                     </div>
                   ))}
                   </div>
+
+                  {/* Optional fields (Rib, Zip...) — hidden by default, revealed via "+" */}
+                  {categoryData.sub_categories.some(subCat => subCat.is_optional) && (
+                    <div className="mt-3 pt-3 border-t border-regal-black/20">
+                      {!showOptionalFields ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowOptionalFields(true)}
+                          className="text-sm font-medium text-regal-black flex items-center gap-1 hover:underline"
+                        >
+                          <span className="text-lg leading-none">+</span> More options
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setShowOptionalFields(false)}
+                            className="text-xs text-regal-black/70 hover:underline mb-2"
+                          >
+                            − Hide more options
+                          </button>
+                          <div className="grid grid-cols-2 gap-3">
+                            {categoryData.sub_categories.filter(subCat => subCat.is_optional).map((subCat, index) => (
+                              <div key={index}>
+                                <label className="block text-sm font-medium text-regal-black mb-1">
+                                  {subCat.sub_category} <span className="text-xs font-normal text-regal-black/60">(optional)</span>
+                                </label>
+                                <select
+                                  value={dynamicCategoryFields[subCat.sub_category] || ''}
+                                  onChange={(e) => setDynamicCategoryFields(prev => ({ ...prev, [subCat.sub_category]: e.target.value }))}
+                                  className="regal-input w-full"
+                                >
+                                  <option value="">Select {subCat.sub_category}</option>
+                                  {subCat.options.map((option, optIndex) => (
+                                    <option key={optIndex} value={option}>{option}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

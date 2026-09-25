@@ -4,6 +4,12 @@ import React, { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
+import {
+  LOCAL_TSHIRT_CATEGORY_NAME,
+  LOCAL_TSHIRT_IDEAL_PRICES,
+  LOCAL_TSHIRT_MODIFIERS,
+  LOCAL_RUSH_PRICING,
+} from '@/lib/localTshirtPricing';
 
 interface Customer {
   cus_id: string;
@@ -110,6 +116,15 @@ const QuotationPage: React.FC = () => {
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [discount, setDiscount] = useState<number | ''>('');
+
+  // PDF modal — shown right after creating a quotation instead of redirecting away
+  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string>('');
+  const [pdfFilename, setPdfFilename] = useState<string>('');
+  // Blurred loading overlay while the PDF is being fetched — same pattern as
+  // customer-invoice/page.tsx's loadingReceipt.
+  const [loadingPdf, setLoadingPdf] = useState(false);
 
   // Fetched once so the rush charge can be previewed live in the UI, the same way
   // the backend will compute it on submit (deadline within threshold_days => rush).
@@ -167,7 +182,20 @@ const QuotationPage: React.FC = () => {
       const response = await fetch('/api/customer-category/grouped', { method: 'GET', credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
-        setCustomerCategories(data.data || []);
+        const categoriesData: CustomerCategoryGrouped[] = data.data || [];
+
+        // FOR TESTING ONLY - NOT FINAL: T-shirt pricing isn't in the DB yet (Ideal
+        // Prices table is empty), so it's overridden here with locally-given numbers
+        // instead of waiting on the DB. This must move to the DB later - once real
+        // prices are entered via /ideal-pricing, remove this override so T-shirt
+        // reads from the DB like every other category.
+        const withLocalOverride = categoriesData.map(cat =>
+          cat.main_category === LOCAL_TSHIRT_CATEGORY_NAME
+            ? { ...cat, ideal_prices: LOCAL_TSHIRT_IDEAL_PRICES, modifiers: LOCAL_TSHIRT_MODIFIERS }
+            : cat
+        );
+
+        setCustomerCategories(withLocalOverride);
       }
     } catch (error) {
       console.error('Error fetching customer categories:', error);
@@ -177,16 +205,12 @@ const QuotationPage: React.FC = () => {
   };
 
   const fetchRushSettings = async () => {
-    try {
-      const response = await fetch('/api/rush-pricing/', { method: 'GET', credentials: 'include' });
-      if (response.ok) {
-        const data = await response.json();
-        setRushRatePerPiece(typeof data.price_per_piece === 'number' ? data.price_per_piece : Number(data.price_per_piece));
-        setRushThresholdDays(typeof data.threshold_days === 'number' ? data.threshold_days : Number(data.threshold_days));
-      }
-    } catch (error) {
-      console.error('Error fetching rush settings:', error);
-    }
+    // FOR TESTING ONLY - NOT FINAL: using the locally-given rush rate instead of the
+    // DB-backed /api/rush-pricing/ endpoint. This must move to the DB later - once
+    // this rate is saved via the Ideal Pricing page's Rush Order Rule box, switch
+    // back to fetching from /api/rush-pricing/.
+    setRushRatePerPiece(LOCAL_RUSH_PRICING.price_per_piece);
+    setRushThresholdDays(LOCAL_RUSH_PRICING.threshold_days);
   };
 
   const clearItemForm = () => {
@@ -256,11 +280,19 @@ const QuotationPage: React.FC = () => {
     estimatedIsRush = daysUntil <= rushThresholdDays;
   }
   const estimatedRushCharge = estimatedIsRush && rushRatePerPiece !== null ? rushRatePerPiece * totalPieces : 0;
-  const estimatedTotal = cartSubtotal + estimatedRushCharge;
+  const estimatedTotal = cartSubtotal - (discount || 0) + estimatedRushCharge;
 
   const handleSubmit = async () => {
     if (cart.length === 0) {
       showToast('Please add at least one item', 'error');
+      return;
+    }
+    if (!selectedCustomer) {
+      showToast('Please select a customer', 'error');
+      return;
+    }
+    if (!teamName.trim()) {
+      showToast('Please enter team name', 'error');
       return;
     }
     if (!requiredByDate) {
@@ -287,6 +319,7 @@ const QuotationPage: React.FC = () => {
         team_name: teamName || null,
         items: JSON.stringify(items),
         required_by_date: requiredByDate,
+        discounts: discount || 0,
       };
 
       const response = await fetch('/api/quotation/', {
@@ -310,7 +343,29 @@ const QuotationPage: React.FC = () => {
         setSelectedCustomer('');
         setTeamName('');
         setRequiredByDate('');
-        router.push('/view-quotation');
+        setDiscount('');
+
+        // Same blob-building pattern as view-quotation/page.tsx's handleViewPdf —
+        // show the PDF right here instead of redirecting to /view-quotation.
+        setLoadingPdf(true);
+        try {
+          const pdfResponse = await fetch(`/api/quotation/${result.quotation_id}/pdf`, { method: 'GET', credentials: 'include' });
+          const pdfResult = await pdfResponse.json();
+          if (pdfResponse.ok && pdfResult.pdf_base64) {
+            const byteChars = atob(pdfResult.pdf_base64);
+            const byteNumbers = new Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+            const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            setPdfUrl(url);
+            setPdfFilename(pdfResult.filename || 'quotation.pdf');
+            setShowPdfModal(true);
+          }
+        } catch (pdfError) {
+          console.error('Error loading PDF:', pdfError);
+        } finally {
+          setLoadingPdf(false);
+        }
       } else {
         showToast(result.error || result.detail || 'Failed to create quotation', 'error');
       }
@@ -482,21 +537,17 @@ const QuotationPage: React.FC = () => {
             <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Customer <span className="text-gray-400 font-normal">(optional)</span>
-                  </label>
-                  <select value={selectedCustomer} onChange={(e) => setSelectedCustomer(e.target.value)} className="regal-input w-full">
-                    <option value="">Walk-in / prospect — not selected</option>
+                  <label className="block text-sm font-medium mb-1">Customer *</label>
+                  <select value={selectedCustomer} onChange={(e) => setSelectedCustomer(e.target.value)} className="regal-input w-full" required>
+                    <option value="">Select Customer</option>
                     {customers.map((c) => (
                       <option key={c.cus_id} value={c.cus_id}>{c.cus_name}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Team Name <span className="text-gray-400 font-normal">(optional)</span>
-                  </label>
-                  <input type="text" value={teamName} onChange={(e) => setTeamName(e.target.value)} className="regal-input w-full" placeholder="e.g. City Warriors FC" />
+                  <label className="block text-sm font-medium mb-1">Team Name *</label>
+                  <input type="text" value={teamName} onChange={(e) => setTeamName(e.target.value)} className="regal-input w-full" placeholder="e.g. City Warriors FC" required />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">
@@ -514,16 +565,35 @@ const QuotationPage: React.FC = () => {
               </p>
 
               <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 mb-4">
-                <div className="flex justify-between text-sm text-gray-600">
+                <div className="flex justify-between items-center text-sm text-gray-600 mb-2">
                   <span>Subtotal ({totalPieces} pcs)</span>
                   <span>Rs. {cartSubtotal}</span>
                 </div>
                 {estimatedIsRush && (
-                  <div className="flex justify-between text-sm text-red-700 font-medium">
+                  <div className="flex justify-between text-sm text-red-700 font-medium mb-2">
                     <span>Rush Charge (Rs. {rushRatePerPiece ?? 0} × {totalPieces} pcs)</span>
                     <span>+ Rs. {estimatedRushCharge}</span>
                   </div>
                 )}
+                {/* Discount UI hidden for now — state/calc/payload still wired, just not shown.
+                <div className="flex justify-between items-center text-sm mb-2">
+                  <label htmlFor="quotation-discount" className="text-gray-600">Discount</label>
+                  <div className="flex items-center rounded-lg overflow-hidden">
+                    <span className="px-2 py-1.5 text-green-700 font-semibold text-sm">− Rs.</span>
+                    <input
+                      id="quotation-discount"
+                      type="number"
+                      value={discount}
+                      onChange={(e) => setDiscount(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-20 px-2 py-1.5 text-sm text-right border-0 focus:ring-0 focus:outline-none"
+                      min="0"
+                      max={cartSubtotal || undefined}
+                      step="1"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+                */}
                 <div className="flex justify-between font-bold text-lg mt-2 pt-2 border-t border-gray-200">
                   <span>Estimated Total</span>
                   <span>Rs. {estimatedTotal}</span>
@@ -541,6 +611,49 @@ const QuotationPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {loadingPdf && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-[100]">
+          <div className="bg-white rounded-lg px-8 py-6 shadow-xl flex flex-col items-center gap-3">
+            <svg className="animate-spin h-8 w-8 text-regal-orange" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span className="text-regal-black font-medium">Loading quotation PDF...</span>
+          </div>
+        </div>
+      )}
+
+      {/* PDF Modal — same pattern as view-quotation/page.tsx and duplicate-bill/page.tsx */}
+      {showPdfModal && pdfUrl && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm"
+          onClick={() => setShowPdfModal(false)}
+        >
+          <div
+            className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[95vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Quotation PDF</h2>
+              <button
+                onClick={() => setShowPdfModal(false)}
+                className="text-gray-500 hover:text-gray-700 p-2"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <iframe
+              src={pdfUrl}
+              className="w-full h-[80vh] border-2 border-gray-300 rounded-lg"
+              title={pdfFilename}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

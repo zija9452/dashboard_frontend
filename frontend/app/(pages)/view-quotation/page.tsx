@@ -12,6 +12,7 @@ interface QuotationListItem {
   customer_name: string | null;
   team_name: string | null;
   total_amount: number;
+  discounts: number;
   is_rush: boolean;
   required_by_date: string | null;
   valid_until: string | null;
@@ -37,6 +38,11 @@ const ViewQuotationPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
   const [actioningId, setActioningId] = useState<string | null>(null);
+
+  // PDF modal
+  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string>('');
+  const [pdfFilename, setPdfFilename] = useState<string>('');
 
   const fetchQuotations = async () => {
     try {
@@ -158,7 +164,9 @@ const ViewQuotationPage: React.FC = () => {
         for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
         const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
+        setPdfUrl(url);
+        setPdfFilename(result.filename || 'quotation.pdf');
+        setShowPdfModal(true);
       } else {
         showToast(result.detail || result.error || 'Failed to load PDF', 'error');
       }
@@ -201,6 +209,7 @@ const ViewQuotationPage: React.FC = () => {
                 <th className="px-4 py-3">Customer</th>
                 <th className="px-4 py-3">Deadline</th>
                 <th className="px-4 py-3">Rush</th>
+                <th className="px-4 py-3">Discount</th>
                 <th className="px-4 py-3">Total</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Actions</th>
@@ -214,6 +223,9 @@ const ViewQuotationPage: React.FC = () => {
                   <td className="px-4 py-3">{q.required_by_date || '-'}</td>
                   <td className="px-4 py-3">
                     {q.is_rush ? <span className="inline-flex px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800">RUSH</span> : <span className="text-gray-400 text-xs">-</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    {q.discounts > 0 ? <span className="text-green-700">- Rs. {q.discounts}</span> : <span className="text-gray-400 text-xs">-</span>}
                   </td>
                   <td className="px-4 py-3">Rs. {q.total_amount}</td>
                   <td className="px-4 py-3">
@@ -291,6 +303,37 @@ const ViewQuotationPage: React.FC = () => {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* PDF Modal */}
+      {showPdfModal && pdfUrl && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm"
+          onClick={() => setShowPdfModal(false)}
+        >
+          <div
+            className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[95vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Quotation PDF</h2>
+              <button
+                onClick={() => setShowPdfModal(false)}
+                className="text-gray-500 hover:text-gray-700 p-2"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <iframe
+              src={pdfUrl}
+              className="w-full h-[80vh] border-2 border-gray-300 rounded-lg"
+              title={pdfFilename}
+            />
+          </div>
         </div>
       )}
     </div>

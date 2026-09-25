@@ -177,7 +177,7 @@ const DynamicCategoryFields: React.FC<{
         ))}
       </div>
 
-      {(() => {
+      {/* {(() => {
         const allSelected = categoryData.sub_categories.every(sc => !!dynamicCategoryFields[sc.sub_category]);
         const hasQuantity = typeof quantity === 'number' && quantity > 0;
         if (!allSelected) return null;
@@ -192,7 +192,7 @@ const DynamicCategoryFields: React.FC<{
             ✓ Price filled into Rate field below ({quantity >= BULK_MIN_QTY ? 'bulk rate, 5+ pcs' : '1 pc rate'})
           </p>
         );
-      })()}
+      })()} */}
     </div>
   );
 };
@@ -236,6 +236,11 @@ const CustomerInvoicePage: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [teamName, setTeamName] = useState('');
+  const [requiredByDate, setRequiredByDate] = useState('');
+  // Fetched once so the rush charge can be previewed live, the same way the
+  // backend computes it on submit (deadline within threshold_days => rush).
+  const [rushRatePerPiece, setRushRatePerPiece] = useState<number | null>(null);
+  const [rushThresholdDays, setRushThresholdDays] = useState<number | null>(null);
   const [totalAmount, setTotalAmount] = useState<number>(0);
   const [amountPaid, setAmountPaid] = useState<string>('');
   const [balance, setBalance] = useState<number>(0);
@@ -301,6 +306,7 @@ const CustomerInvoicePage: React.FC = () => {
     fetchCustomers();
     fetchSalesmans();
     fetchCustomerCategories();
+    fetchRushSettings();
   }, []);
 
   // Fetch a receipt PDF for an already-created invoice and show it. This is a plain
@@ -455,6 +461,19 @@ const CustomerInvoicePage: React.FC = () => {
     }
   };
 
+  const fetchRushSettings = async () => {
+    try {
+      const response = await fetch('/api/rush-pricing/', { method: 'GET', credentials: 'include' });
+      if (response.ok) {
+        const data = await response.json();
+        setRushRatePerPiece(Number(data.price_per_piece));
+        setRushThresholdDays(Number(data.threshold_days));
+      }
+    } catch (error) {
+      console.error('Error fetching rush settings:', error);
+    }
+  };
+
   const fetchSalesmans = async () => {
     try {
       const response = await fetch('/api/admin/getcustomervendorbybranch', {
@@ -480,13 +499,41 @@ const CustomerInvoicePage: React.FC = () => {
     }
   }, [unitPrice, quantity]);
 
-  // Calculate total and balance
+  // Calculate total and balance — rush charge (if the deadline falls within
+  // threshold_days of today) is added the same way quotation.py's _build_totals
+  // adds it; discount here stays purely informational (pre-existing behavior).
   useEffect(() => {
-    const total = cart.reduce((sum, item) => sum + item.totalPrice, 0);
+    const subtotal = cart.reduce((sum, item) => sum + item.totalPrice, 0);
+    const totalPieces = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+    let isRush = false;
+    if (requiredByDate && rushThresholdDays !== null) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const deadline = new Date(`${requiredByDate}T00:00:00`);
+      const daysUntil = Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      isRush = daysUntil <= rushThresholdDays;
+    }
+    const rushCharge = isRush && rushRatePerPiece !== null ? rushRatePerPiece * totalPieces : 0;
+
+    const total = subtotal + rushCharge;
     setTotalAmount(total);
     const paidAmount = amountPaid === '' ? 0 : Number(amountPaid);
     setBalance(total - paidAmount);
-  }, [cart, amountPaid]);
+  }, [cart, amountPaid, requiredByDate, rushThresholdDays, rushRatePerPiece]);
+
+  // Live preview for the RUSH badge/helper text next to the Deadline field —
+  // same day-math as the useEffect above, just recomputed for render.
+  const totalPieces = cart.reduce((sum, item) => sum + item.quantity, 0);
+  let estimatedIsRush = false;
+  if (requiredByDate && rushThresholdDays !== null) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const deadline = new Date(`${requiredByDate}T00:00:00`);
+    const daysUntil = Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    estimatedIsRush = daysUntil <= rushThresholdDays;
+  }
+  const estimatedRushCharge = estimatedIsRush && rushRatePerPiece !== null ? rushRatePerPiece * totalPieces : 0;
 
   // Convert file to base64 (keeping for backward compatibility if needed)
   const fileToBase64 = (file: File): Promise<string> => {
@@ -813,6 +860,10 @@ const handleAddCustomer = async () => {
       showToast('Please select a customer', 'error');
       return;
     }
+    if (!requiredByDate) {
+      showToast('Please enter the deadline', 'error');
+      return;
+    }
 
     if (submitting || checkingPendingInvoice) return;
     setSubmitting(true);
@@ -863,6 +914,7 @@ const handleAddCustomer = async () => {
         salesman_id: null,
         timezone: 'Asia/Karachi',
         date: new Date().toISOString().split('T')[0],
+        required_by_date: requiredByDate,
         idempotency_key: idempotencyKeyRef.current,
       };
 
@@ -886,6 +938,7 @@ const handleAddCustomer = async () => {
         setCart([]);
         setSelectedCustomer('');
         setTeamName('');
+        setRequiredByDate('');
         setAmountPaid('');
         setPaymentMethod('Cash');
 
@@ -1076,7 +1129,7 @@ const handleAddCustomer = async () => {
                     placeholder="Quantity"
                     min="1"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Enter quantity first — it decides whether the bulk (5+) or single-piece rate applies.</p>
+                  {/* <p className="text-xs text-gray-500 mt-1">Enter quantity first - it decides whether the bulk (5+) or single-piece rate applies.</p> */}
                 </div>
 
                 {/* Rate (Unit Price) */}
@@ -1382,7 +1435,7 @@ const handleAddCustomer = async () => {
               <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Customer Details</h2>
 
               <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-3 md:mb-4">
                   {/* Customer Name */}
                   <div>
                     <label className="block text-sm font-medium mb-1">Customer Name</label>
@@ -1422,6 +1475,30 @@ const handleAddCustomer = async () => {
                       placeholder="Team Name"
                       required
                     />
+                  </div>
+
+                  {/* Deadline — rush status/charge is decided automatically from this,
+                      the same way Quotation does it. No manual "Rush" toggle. */}
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Deadline *
+                      {estimatedIsRush && (
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800">RUSH</span>
+                      )}
+                    </label>
+                    <input
+                      type="date"
+                      value={requiredByDate}
+                      onChange={(e) => setRequiredByDate(e.target.value)}
+                      className="regal-input w-full"
+                      min={new Date().toISOString().split('T')[0]}
+                      required
+                    />
+                    {estimatedIsRush && (
+                      <p className="text-xs text-red-700 font-medium mt-1">
+                        + Rs. {estimatedRushCharge} rush charge ({rushRatePerPiece ?? 0} × {totalPieces} pcs)
+                      </p>
+                    )}
                   </div>
                 </div>
 

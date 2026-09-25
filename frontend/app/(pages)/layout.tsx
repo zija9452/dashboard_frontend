@@ -169,7 +169,7 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
                     </SidebarLink>
                   )}
                   {(userRole === 'admin' || userRole === 'cashier') && (
-                    <SidebarLink href="/view-quotation" className="text-base py-3 border-b border-gray-200" target="_blank" rel="noopener noreferrer">
+                    <SidebarLink href="/quotation" className="text-base py-3 border-b border-gray-200" target="_blank" rel="noopener noreferrer">
                       Quotation
                     </SidebarLink>
                   )}

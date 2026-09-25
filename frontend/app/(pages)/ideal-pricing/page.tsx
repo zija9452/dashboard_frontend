@@ -540,7 +540,7 @@ const IdealPricingPage: React.FC = () => {
               <thead className="bg-gray-100">
                 <tr className='text-black font-semibold text-xs uppercase'>
                   <th className="px-3 py-5 text-left w-12">#</th>
-                  {selectedCategory.sub_categories.map((subCat, index) => (
+                  {selectedCategory.sub_categories.filter(subCat => !subCat.is_modifier).map((subCat, index) => (
                     <th key={index} className="px-2 py-5 text-left whitespace-nowrap">
                       {subCat.sub_category}
                     </th>

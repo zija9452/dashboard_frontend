@@ -33,7 +33,7 @@ export const LOCAL_TSHIRT_MODIFIERS: Record<string, Record<string, { type: 'flat
     'Polyzone 130gsm': { type: 'flat', value: 0 },
     'Polyzone 160gsm': { type: 'flat', value: 100 },
     'Light Mesh': { type: 'flat', value: 100 },
-    'Dye Fabric': { type: 'flat', value: -300 },
+    'Dye Fabric': { type: 'flat', value: -350 },
   },
   'Size Type': {
     'Adult': { type: 'flat', value: 0 },
@@ -47,6 +47,10 @@ export const LOCAL_TSHIRT_MODIFIERS: Record<string, Record<string, { type: 'flat
   },
   'Zip': {
     'Yes': { type: 'flat', value: 100 },
+    'No': { type: 'flat', value: 0 },
+  },
+  'Collar and Tukdi (Indian Neck)': {
+    'Yes': { type: 'flat', value: 50 },
     'No': { type: 'flat', value: 0 },
   },
 };

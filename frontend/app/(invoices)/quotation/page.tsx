@@ -10,6 +10,31 @@ import {
   LOCAL_TSHIRT_MODIFIERS,
   LOCAL_RUSH_PRICING,
 } from '@/lib/localTshirtPricing';
+import {
+  LOCAL_SHORT_CATEGORY_NAME,
+  LOCAL_SHORT_IDEAL_PRICES,
+  LOCAL_SHORT_MODIFIERS,
+} from '@/lib/localShortPricing';
+import {
+  LOCAL_TROUSER_CATEGORY_NAME,
+  LOCAL_TROUSER_IDEAL_PRICES,
+  LOCAL_TROUSER_MODIFIERS,
+} from '@/lib/localTrouserPricing';
+import {
+  LOCAL_JACKET_CATEGORY_NAME,
+  LOCAL_JACKET_IDEAL_PRICES,
+  LOCAL_JACKET_MODIFIERS,
+} from '@/lib/localJacketPricing';
+import {
+  LOCAL_HOODIE_JACKET_CATEGORY_NAME,
+  LOCAL_HOODIE_JACKET_IDEAL_PRICES,
+  LOCAL_HOODIE_JACKET_MODIFIERS,
+} from '@/lib/localHoodieJacketPricing';
+import {
+  LOCAL_SANDO_CATEGORY_NAME,
+  LOCAL_SANDO_IDEAL_PRICES,
+  LOCAL_SANDO_MODIFIERS,
+} from '@/lib/localSandoPricing';
 
 interface Customer {
   cus_id: string;
@@ -151,6 +176,13 @@ const QuotationPage: React.FC = () => {
     if (matchedIdealPrice !== null) {
       setUnitPrice(matchedIdealPrice);
       setPriceWasAutoFilled(true);
+    } else if (priceWasAutoFilled) {
+      // The combination changed (e.g. a different Fabric option with no ideal price
+      // set yet) and no longer matches - clear the stale auto-filled value instead of
+      // carrying over the previous combination's price. A manually-typed price
+      // (priceWasAutoFilled false) is left alone.
+      setUnitPrice('');
+      setPriceWasAutoFilled(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchedIdealPrice]);
@@ -197,11 +229,27 @@ const QuotationPage: React.FC = () => {
         // instead of waiting on the DB. This must move to the DB later - once real
         // prices are entered via /ideal-pricing, remove this override so T-shirt
         // reads from the DB like every other category.
-        const withLocalOverride = categoriesData.map(cat =>
-          cat.main_category === LOCAL_TSHIRT_CATEGORY_NAME
-            ? { ...cat, ideal_prices: LOCAL_TSHIRT_IDEAL_PRICES, modifiers: LOCAL_TSHIRT_MODIFIERS }
-            : cat
-        );
+        const withLocalOverride = categoriesData.map(cat => {
+          if (cat.main_category === LOCAL_TSHIRT_CATEGORY_NAME) {
+            return { ...cat, ideal_prices: LOCAL_TSHIRT_IDEAL_PRICES, modifiers: LOCAL_TSHIRT_MODIFIERS };
+          }
+          if (cat.main_category === LOCAL_SHORT_CATEGORY_NAME) {
+            return { ...cat, ideal_prices: LOCAL_SHORT_IDEAL_PRICES, modifiers: LOCAL_SHORT_MODIFIERS };
+          }
+          if (cat.main_category === LOCAL_TROUSER_CATEGORY_NAME) {
+            return { ...cat, ideal_prices: LOCAL_TROUSER_IDEAL_PRICES, modifiers: LOCAL_TROUSER_MODIFIERS };
+          }
+          if (cat.main_category === LOCAL_JACKET_CATEGORY_NAME) {
+            return { ...cat, ideal_prices: LOCAL_JACKET_IDEAL_PRICES, modifiers: LOCAL_JACKET_MODIFIERS };
+          }
+          if (cat.main_category === LOCAL_HOODIE_JACKET_CATEGORY_NAME) {
+            return { ...cat, ideal_prices: LOCAL_HOODIE_JACKET_IDEAL_PRICES, modifiers: LOCAL_HOODIE_JACKET_MODIFIERS };
+          }
+          if (cat.main_category === LOCAL_SANDO_CATEGORY_NAME) {
+            return { ...cat, ideal_prices: LOCAL_SANDO_IDEAL_PRICES, modifiers: LOCAL_SANDO_MODIFIERS };
+          }
+          return cat;
+        });
 
         setCustomerCategories(withLocalOverride);
       }

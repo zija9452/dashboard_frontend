@@ -16,12 +16,13 @@
 
 export const LOCAL_SANDO_CATEGORY_NAME = 'Sando';
 
-// Base dimension is "Fabric" (matches the DB sub_category name for Sando). Bulk (5+)
-// rate is the same as the 1-piece rate - no bulk discount defined yet.
+// Base dimension is "Fabric" (matches the DB sub_category name for Sando).
 // Polyzone 160gsm and Dye Fabric are intentionally omitted - price not given yet.
+// Tier keys (min qty): '1' = 1-4 pcs, '5' = 5-15, '16' = 16-99, '100' = 100+.
+// Only '1' is set for now - '5', '16' and '100' are empty, so 5+ pcs gives no rate (Rate stays empty).
 export const LOCAL_SANDO_IDEAL_PRICES: Record<string, Record<string, number>> = {
-  'Polyzone 130gsm': { '1': 750, '5': 750 },
-  'Light Mesh': { '1': 800, '5': 800 },
+  'Polyzone 130gsm': { '1': 750 },
+  'Light Mesh': { '1': 800 },
 };
 
 // Rib 'Yes' and Size Type 'Youth' are intentionally omitted - adjustment not given yet.

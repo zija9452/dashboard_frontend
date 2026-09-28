@@ -28,8 +28,7 @@ interface CustomerCategoryGrouped {
 interface PriceCombination {
   id: string;
   combination: string;
-  price: string;      // 1-piece rate (min_qty = 1)
-  price5: string;      // bulk rate for 5+ pieces (min_qty = 5)
+  prices: Record<string, string>; // min_qty tier ('1', '5', '16', '100') -> rate as typed
 }
 
 interface ModifierRow {
@@ -40,7 +39,16 @@ interface ModifierRow {
   value: string;
 }
 
-const BULK_MIN_QTY = 5;
+// Quantity tiers, saved as min_qty: 1-4 pcs, 5-15, 16-99, 100+. A tier left empty
+// gives no rate on invoice/quotation for that quantity range (no fallback).
+const PRICE_TIERS = [
+  { key: '1', minQty: 1, header: 'One Piece (1-4)', summary: '1-4 pcs' },
+  { key: '5', minQty: 5, header: 'Qty Piece (5-15)', summary: '5-15 pcs' },
+  { key: '16', minQty: 16, header: 'Qty Piece (16-99)', summary: '16-99 pcs' },
+  { key: '100', minQty: 100, header: 'Qty Piece (100+)', summary: '100+ pcs' },
+];
+
+const hasAnyPrice = (c: PriceCombination) => PRICE_TIERS.some(t => (c.prices[t.key] ?? '').trim() !== '');
 
 const IdealPricingPage: React.FC = () => {
   const router = useRouter();
@@ -221,27 +229,34 @@ const IdealPricingPage: React.FC = () => {
     const priceCombinations: PriceCombination[] = allCombinations.map((comb, index) => {
       const combinationKey = comb.join('|');
       const tiers = category?.ideal_prices?.[combinationKey] || {};
-      const existingPrice = tiers['1'];
-      const existingBulkPrice = tiers[String(BULK_MIN_QTY)];
+      const prices: Record<string, string> = {};
+      PRICE_TIERS.forEach(t => {
+        prices[t.key] = tiers[t.key] !== undefined ? tiers[t.key].toString() : '';
+      });
 
       return {
         id: `comb-${index}`,
         combination: combinationKey,
-        price: existingPrice !== undefined ? existingPrice.toString() : '',
-        price5: existingBulkPrice !== undefined ? existingBulkPrice.toString() : '',
+        prices,
       };
     });
 
     setCombinations(priceCombinations);
   };
 
-  const handlePriceChange = (id: string, field: 'price' | 'price5', value: string) => {
+  const handlePriceChange = (id: string, tierKey: string, value: string) => {
     setCombinations(prev =>
       prev.map(comb =>
-        comb.id === id ? { ...comb, [field]: value } : comb
+        comb.id === id ? { ...comb, prices: { ...comb.prices, [tierKey]: value } } : comb
       )
     );
   };
+
+  // Filled-in tiers of one row, ready to POST as { min_qty, price }.
+  const filledTierEntries = (c: PriceCombination) =>
+    PRICE_TIERS
+      .filter(t => (c.prices[t.key] ?? '').trim() !== '')
+      .map(t => ({ min_qty: t.minQty, price: c.prices[t.key] }));
 
   const handleSavePrices = async () => {
     if (!selectedCategory || !selectedCategoryId) {
@@ -254,15 +269,10 @@ const IdealPricingPage: React.FC = () => {
       return;
     }
 
-    // Each combination can contribute up to two tier rows: 1-piece and 5+ bulk
+    // Each combination contributes one row per filled-in quantity tier
     const entriesToSave: { combination: string; min_qty: number; price: string }[] = [];
     combinations.forEach(c => {
-      if (c.price.trim() !== '') {
-        entriesToSave.push({ combination: c.combination, min_qty: 1, price: c.price });
-      }
-      if (c.price5.trim() !== '') {
-        entriesToSave.push({ combination: c.combination, min_qty: BULK_MIN_QTY, price: c.price5 });
-      }
+      filledTierEntries(c).forEach(e => entriesToSave.push({ combination: c.combination, ...e }));
     });
 
     if (entriesToSave.length === 0) {
@@ -325,14 +335,12 @@ const IdealPricingPage: React.FC = () => {
     }
   };
 
-  // Saves just one row (its 1-pc and/or 5+ price, whichever is filled) — lets staff
+  // Saves just one row (whichever quantity-tier prices are filled) — lets staff
   // confirm a single combination without waiting for/relying on the bulk "Save All".
   const saveOneCombination = async (combo: PriceCombination) => {
     if (!selectedCategoryId) return;
 
-    const entries: { min_qty: number; price: string }[] = [];
-    if (combo.price.trim() !== '') entries.push({ min_qty: 1, price: combo.price });
-    if (combo.price5.trim() !== '') entries.push({ min_qty: BULK_MIN_QTY, price: combo.price5 });
+    const entries = filledTierEntries(combo);
 
     if (entries.length === 0) {
       showToast('Enter at least one price for this row first', 'error');
@@ -523,12 +531,12 @@ const IdealPricingPage: React.FC = () => {
                 {selectedCategory.main_category} - Ideal Prices
               </h3>
               <p className="text-sm text-gray-600 mt-1">
-                {combinations.length} combinations • {combinations.filter(c => c.price).length} single-piece prices set • {combinations.filter(c => c.price5).length} bulk (5+) prices set
+                {combinations.length} combinations • {combinations.filter(hasAnyPrice).length} with at least one price set
               </p>
             </div>
             <button
               onClick={handleSavePrices}
-              disabled={submitting || (combinations.filter(c => c.price).length === 0 && combinations.filter(c => c.price5).length === 0)}
+              disabled={submitting || !combinations.some(hasAnyPrice)}
               className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
               {submitting ? 'Saving...' : 'Save All Prices'}
@@ -536,7 +544,7 @@ const IdealPricingPage: React.FC = () => {
           </div>
 
           <div className="overflow-x-auto -mx-4 px-4">
-            <table className="w-full min-w-[800px]">
+            <table className="w-full min-w-[1000px]">
               <thead className="bg-gray-100">
                 <tr className='text-black font-semibold text-xs uppercase'>
                   <th className="px-3 py-5 text-left w-12">#</th>
@@ -545,16 +553,17 @@ const IdealPricingPage: React.FC = () => {
                       {subCat.sub_category}
                     </th>
                   ))}
-                  <th className="px-2 py-5 text-left w-32 whitespace-nowrap">One Piece</th>
-                  <th className="px-2 py-5 text-left w-32 whitespace-nowrap">Qty Piece (5+)</th>
+                  {PRICE_TIERS.map(t => (
+                    <th key={t.key} className="px-2 py-5 text-left w-32 whitespace-nowrap">{t.header}</th>
+                  ))}
                   <th className="px-2 py-5 text-center w-36 whitespace-nowrap">Status / Save</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {combinations.map((comb, index) => {
                   const parts = comb.combination.split('|');
-                  const hasExistingPrice = comb.price !== '';
-                  const hasBulkPrice = comb.price5 !== '';
+                  const hasExistingPrice = (comb.prices['1'] ?? '') !== '';
+                  const filledCount = PRICE_TIERS.filter(t => (comb.prices[t.key] ?? '') !== '').length;
 
                   return (
                     <tr
@@ -571,37 +580,28 @@ const IdealPricingPage: React.FC = () => {
                           </span>
                         </td>
                       ))}
-                      <td className="px-2 py-4">
-                        <input
-                          type="number"
-                          value={comb.price}
-                          onChange={(e) => handlePriceChange(comb.id, 'price', e.target.value)}
-                          className="regal-input w-full min-w-[100px] text-right font-semibold"
-                          placeholder="0"
-                          step="1"
-                          min="0"
-                        />
-                      </td>
-                      <td className="px-2 py-4">
-                        <input
-                          type="number"
-                          value={comb.price5}
-                          onChange={(e) => handlePriceChange(comb.id, 'price5', e.target.value)}
-                          className="regal-input w-full min-w-[100px] text-right font-semibold"
-                          placeholder="0"
-                          step="1"
-                          min="0"
-                        />
-                      </td>
+                      {PRICE_TIERS.map(t => (
+                        <td key={t.key} className="px-2 py-4">
+                          <input
+                            type="number"
+                            value={comb.prices[t.key] ?? ''}
+                            onChange={(e) => handlePriceChange(comb.id, t.key, e.target.value)}
+                            className="regal-input w-full min-w-[100px] text-right font-semibold"
+                            placeholder="0"
+                            step="1"
+                            min="0"
+                          />
+                        </td>
+                      ))}
                       <td className="px-2 py-4 text-center whitespace-nowrap">
                         <div className="flex flex-col items-center gap-1.5">
-                          {hasExistingPrice && hasBulkPrice ? (
+                          {filledCount === PRICE_TIERS.length ? (
                             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                              ✓ Both Set
+                              ✓ All Set
                             </span>
-                          ) : hasExistingPrice || hasBulkPrice ? (
+                          ) : filledCount > 0 ? (
                             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                              ✓ Set
+                              ✓ {filledCount}/{PRICE_TIERS.length} Set
                             </span>
                           ) : (
                             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
@@ -610,7 +610,7 @@ const IdealPricingPage: React.FC = () => {
                           )}
                           <button
                             onClick={() => saveOneCombination(comb)}
-                            disabled={savingRowId === comb.id || (!hasExistingPrice && !hasBulkPrice)}
+                            disabled={savingRowId === comb.id || filledCount === 0}
                             className="regal-btn bg-regal-black text-white text-xs px-3 py-1 disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             {savingRowId === comb.id ? 'Saving...' : 'Save'}
@@ -632,18 +632,17 @@ const IdealPricingPage: React.FC = () => {
 
           {/* Summary */}
           <div className="mt-4 p-4 bg-gray-50 rounded border">
-            <div className="flex justify-between items-center text-sm">
+            <div className="flex flex-wrap justify-between items-center gap-2 text-sm">
               <span className="text-gray-600">
                 Total Combinations: <span className="font-semibold">{combinations.length}</span>
               </span>
-              <span className="text-green-700">
-                1-pc Prices Entered: <span className="font-semibold">{combinations.filter(c => c.price).length}</span>
-              </span>
-              <span className="text-blue-700">
-                5+ Bulk Prices Entered: <span className="font-semibold">{combinations.filter(c => c.price5).length}</span>
-              </span>
+              {PRICE_TIERS.map(t => (
+                <span key={t.key} className="text-blue-700">
+                  {t.summary} Prices Entered: <span className="font-semibold">{combinations.filter(c => (c.prices[t.key] ?? '') !== '').length}</span>
+                </span>
+              ))}
               <span className="text-orange-700">
-                Remaining (no price at all): <span className="font-semibold">{combinations.filter(c => !c.price && !c.price5).length}</span>
+                Remaining (no price at all): <span className="font-semibold">{combinations.filter(c => !hasAnyPrice(c)).length}</span>
               </span>
             </div>
           </div>

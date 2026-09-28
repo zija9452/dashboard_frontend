@@ -71,11 +71,25 @@ interface CartItem {
   category_fields?: Record<string, string>;
 }
 
-const BULK_MIN_QTY = 5;
+// Quantity tiers, keyed by min_qty in ideal_prices: 1-4 pcs, 5-15, 16-99, 100+.
+const PRICE_TIERS = [
+  { minQty: 1, label: 'Single piece rate (1-4 pcs)' },
+  { minQty: 5, label: 'Qty rate (5-15 pcs)' },
+  { minQty: 16, label: 'Qty rate (16-99 pcs)' },
+  { minQty: 100, label: 'Qty rate (100+ pcs)' },
+];
+
+const tierForQuantity = (quantity: number) =>
+  [...PRICE_TIERS].reverse().find(t => quantity >= t.minQty) ?? PRICE_TIERS[0];
+
+// Price for exactly the tier the quantity falls in. No fallback to another tier: if
+// that tier has no rate, the Rate stays empty and staff enter it manually.
+const pickTierPrice = (tiers: Record<string, number>, quantity: number): number | undefined =>
+  tiers[String(tierForQuantity(quantity).minQty)];
 
 // Looks up the price for the selected options + quantity tier. "Base" sub-categories
-// (not flagged is_modifier) form the priced combination (bulk 5+ rate once quantity
-// reaches it, else 1-piece); "modifier" sub-categories (Sleeves, Size Type...) are
+// (not flagged is_modifier) form the priced combination (rate picked by quantity
+// tier, see PRICE_TIERS); "modifier" sub-categories (Sleeves, Size Type...) are
 // adjustments applied on top: final = (base + sum of flat adjustments) × product of
 // multiply adjustments. Returns null until quantity + every option is selected, or
 // when nothing is fixed for that exact base combination yet.
@@ -86,8 +100,8 @@ function lookupIdealPrice(
 ): number | null {
   if (!categoryData?.ideal_prices) return null;
 
-  // Quantity must be entered first — it's what decides which tier (bulk vs
-  // single-piece) applies, so no price should be suggested before it's known.
+  // Quantity must be entered first — it's what decides which tier (1-4, 5-15,
+  // 16-99, 100+) applies, so no price should be suggested before it's known.
   if (quantity === '' || quantity <= 0) return null;
 
   // Optional sub-categories (Rib, Zip...) don't block the price - only required
@@ -104,9 +118,7 @@ function lookupIdealPrice(
   const tiers = categoryData.ideal_prices[combinationKey];
   if (!tiers) return null;
 
-  const basePrice = (quantity >= BULK_MIN_QTY && tiers[String(BULK_MIN_QTY)] !== undefined)
-    ? tiers[String(BULK_MIN_QTY)]
-    : tiers['1'];
+  const basePrice = pickTierPrice(tiers, quantity);
   if (basePrice === undefined) return null;
 
   let flatSum = 0;
@@ -163,13 +175,16 @@ const QuotationPage: React.FC = () => {
   // the backend will compute it on submit (deadline within threshold_days => rush).
   const [rushRatePerPiece, setRushRatePerPiece] = useState<number | null>(null);
   const [rushThresholdDays, setRushThresholdDays] = useState<number | null>(null);
+  // Per-piece rush rate actually charged - pre-filled with the default above, but
+  // editable by the cashier (like the item Rate field). Sent to the backend on save.
+  const [rushRate, setRushRate] = useState<number | ''>('');
 
   const categoryData = customerCategories.find(cat => cat.main_category === selectedCategory);
   const allOptionsSelected = !!categoryData && categoryData.sub_categories.length > 0 &&
     categoryData.sub_categories.filter(sc => !sc.is_optional).every(sc => !!dynamicCategoryFields[sc.sub_category]);
   const matchedIdealPrice = lookupIdealPrice(categoryData, dynamicCategoryFields, quantity);
 
-  // Whenever the selected combination (or the quantity, which can flip the bulk
+  // Whenever the selected combination (or the quantity, which can flip the rate
   // tier) resolves to a fixed price, fill it straight into the editable Rate field
   // — no separate read-only "ideal price" box. Staff can still type over it.
   useEffect(() => {
@@ -267,6 +282,7 @@ const QuotationPage: React.FC = () => {
     // back to fetching from /api/rush-pricing/.
     setRushRatePerPiece(LOCAL_RUSH_PRICING.price_per_piece);
     setRushThresholdDays(LOCAL_RUSH_PRICING.threshold_days);
+    setRushRate(LOCAL_RUSH_PRICING.price_per_piece);
   };
 
   const clearItemForm = () => {
@@ -330,14 +346,21 @@ const QuotationPage: React.FC = () => {
   // deadline falls within threshold_days of today (inclusive), charged per piece
   // across the whole cart.
   let estimatedIsRush = false;
-  if (requiredByDate && rushThresholdDays !== null) {
+  let deadlineDaysLeft: number | null = null;
+  if (requiredByDate) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const deadline = new Date(`${requiredByDate}T00:00:00`);
-    const daysUntil = Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    estimatedIsRush = daysUntil <= rushThresholdDays;
+    deadlineDaysLeft = Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    if (rushThresholdDays !== null) estimatedIsRush = deadlineDaysLeft <= rushThresholdDays;
   }
-  const estimatedRushCharge = estimatedIsRush && rushRatePerPiece !== null ? rushRatePerPiece * totalPieces : 0;
+  const deadlineLabel = deadlineDaysLeft === null ? ''
+    : deadlineDaysLeft <= 0 ? 'today'
+    : deadlineDaysLeft === 1 ? 'tomorrow'
+    : `in ${deadlineDaysLeft} days`;
+  // An emptied rush rate box counts as 0 (no rush charge), both here and on save.
+  const rushRateValue = rushRate === '' ? 0 : rushRate;
+  const estimatedRushCharge = estimatedIsRush ? rushRateValue * totalPieces : 0;
   const estimatedTotal = cartSubtotal - (discount || 0) + estimatedRushCharge;
 
   const handleSubmit = async () => {
@@ -378,6 +401,8 @@ const QuotationPage: React.FC = () => {
         items: JSON.stringify(items),
         required_by_date: requiredByDate,
         discounts: discount || 0,
+        rush_rate_per_piece: rushRateValue,
+        rush_threshold_days: rushThresholdDays,
       };
 
       const response = await fetch('/api/quotation/', {
@@ -393,7 +418,7 @@ const QuotationPage: React.FC = () => {
         await Swal.fire({
           title: 'Quotation Created!',
           html: `<p><strong>${result.quotation_no}</strong></p>` +
-                (result.is_rush ? `<p style="color:#B91C1C;font-weight:bold;">RUSH ORDER — Rs. ${result.rush_charge} rush charge applied</p>` : '<p>Normal order (not rush)</p>') +
+                (result.is_rush ? `<p style="color:#EA580C;font-weight:bold;">RUSH ORDER — Rs. ${result.rush_charge} rush charge (Rs. ${result.rush_rate_per_piece ?? 0} per piece × ${result.total_pieces ?? totalPieces} pcs)</p>` : '<p>Normal order (not rush)</p>') +
                 `<p>Total: Rs. ${result.total_amount}</p>`,
           icon: 'success',
         });
@@ -402,6 +427,7 @@ const QuotationPage: React.FC = () => {
         setTeamName('');
         setRequiredByDate('');
         setDiscount('');
+        setRushRate(rushRatePerPiece ?? '');
 
         // Same blob-building pattern as view-quotation/page.tsx's handleViewPdf —
         // show the PDF right here instead of redirecting to /view-quotation.
@@ -546,7 +572,7 @@ const QuotationPage: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium mb-1">Quantity</label>
                 <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value === '' ? '' : Number(e.target.value))} className="regal-input w-full" min="1" step="1" placeholder="0" />
-                <p className="text-xs text-gray-500 mt-1">Enter quantity first — it decides whether the bulk (5+) or single-piece rate applies.</p>
+                <p className="text-xs text-gray-500 mt-1">Enter quantity first — it decides the rate tier (1-4, 5-15, 16-99 or 100+ pcs).</p>
               </div>
 
               <div>
@@ -570,10 +596,8 @@ const QuotationPage: React.FC = () => {
                   <p className="text-xs text-amber-600 mt-1">No fixed price set for this combination — enter manually.</p>
                 )}
                 {quantity !== '' && quantity > 0 && (
-                  <p className={`text-xs mt-1 font-medium ${quantity >= BULK_MIN_QTY ? 'text-purple-700' : 'text-gray-500'}`}>
-                    {quantity >= BULK_MIN_QTY
-                      ? `Bulk rate — charged as ${BULK_MIN_QTY}+ pieces`
-                      : 'Single piece rate — normal charge'}
+                  <p className={`text-xs mt-1 font-medium ${quantity >= PRICE_TIERS[1].minQty ? 'text-purple-700' : 'text-gray-500'}`}>
+                    {tierForQuantity(quantity).label}
                   </p>
                 )}
               </div>
@@ -655,10 +679,15 @@ const QuotationPage: React.FC = () => {
                   <label className="block text-sm font-medium mb-1">
                     Deadline (Required By) *
                     {estimatedIsRush && (
-                      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800">RUSH</span>
+                      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-orange-50 text-orange-700 border border-orange-200">RUSH</span>
                     )}
                   </label>
                   <input type="date" value={requiredByDate} onChange={(e) => setRequiredByDate(e.target.value)} className="regal-input w-full" min={new Date().toISOString().split('T')[0]} />
+                  {requiredByDate && !estimatedIsRush && (
+                    <p className="text-xs text-green-700 font-medium mt-1">
+                      ✓ Normal order — due {deadlineLabel}, no rush charge
+                    </p>
+                  )}
                 </div>
               </div>
               <p className="text-xs text-gray-500 mb-4">
@@ -666,15 +695,61 @@ const QuotationPage: React.FC = () => {
                 {rushThresholdDays !== null && ` A deadline within ${rushThresholdDays} day(s) of today makes it a rush order.`}
               </p>
 
+              {/* Rush panel — same as Customer Invoice. Shown only when the deadline makes
+                  it a rush order; the per-piece rate is pre-filled with the default and editable. */}
+              {estimatedIsRush && (
+                <div className="mb-4 rounded-lg border border-orange-200 bg-orange-50/50 overflow-hidden">
+                  <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-orange-50 border-b border-orange-100">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-orange-500 text-white tracking-wide">RUSH ORDER</span>
+                      <span className="text-sm text-gray-800 font-medium">
+                        Deadline is {deadlineLabel}
+                        {rushThresholdDays !== null && ` (rush applies within ${rushThresholdDays} day${rushThresholdDays === 1 ? '' : 's'})`}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 px-4 py-3 items-start">
+                    <div>
+                      <label htmlFor="quotation-rush-rate" className="block text-xs font-semibold text-gray-800 mb-1">Rush rate per piece</label>
+                      <div className="flex items-center rounded-lg border border-orange-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-orange-300">
+                        <span className="px-3 py-2 text-sm font-semibold text-orange-700 bg-orange-50/50 border-r border-orange-100">Rs.</span>
+                        <input
+                          id="quotation-rush-rate"
+                          type="number"
+                          value={rushRate}
+                          onChange={(e) => setRushRate(e.target.value === '' ? '' : Number(e.target.value))}
+                          className="w-full px-3 py-2 text-right font-semibold border-0 focus:outline-none focus:ring-0"
+                          min="0"
+                          step="1"
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-800">
+                      <div className="text-xs font-semibold mb-1">Calculation</div>
+                      <div className="px-3 py-2 rounded-lg bg-white border border-orange-100">
+                        Rs. {rushRateValue.toLocaleString()} × {totalPieces} pcs
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-800">
+                      <div className="text-xs font-semibold mb-1">Rush charge (added to total)</div>
+                      <div className="px-3 py-2 rounded-lg bg-orange-50 border border-orange-200 text-orange-800 font-bold text-right">
+                        + Rs. {estimatedRushCharge.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 mb-4">
                 <div className="flex justify-between items-center text-sm text-gray-600 mb-2">
                   <span>Subtotal ({totalPieces} pcs)</span>
                   <span>Rs. {cartSubtotal}</span>
                 </div>
                 {estimatedIsRush && (
-                  <div className="flex justify-between text-sm text-red-700 font-medium mb-2">
-                    <span>Rush Charge (Rs. {rushRatePerPiece ?? 0} × {totalPieces} pcs)</span>
-                    <span>+ Rs. {estimatedRushCharge}</span>
+                  <div className="flex justify-between items-center gap-2 text-sm text-orange-700 font-medium mb-2">
+                    <span>Rush Charge (Rs. {rushRateValue.toLocaleString()} × {totalPieces} pcs)</span>
+                    <span className="whitespace-nowrap">+ Rs. {estimatedRushCharge.toLocaleString()}</span>
                   </div>
                 )}
                 {/* Discount UI hidden for now — state/calc/payload still wired, just not shown.

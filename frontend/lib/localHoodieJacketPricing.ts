@@ -12,11 +12,12 @@
 export const LOCAL_HOODIE_JACKET_CATEGORY_NAME = 'Hoodie Jacket';
 
 // Base dimension is "Fabric" (matches the DB sub_category name/options for Hoodie Jacket).
-// Bulk (5+) rate is the same as the 1-piece rate - no bulk discount defined yet.
+// Tier keys (min qty): '1' = 1-4 pcs, '5' = 5-15, '16' = 16-99, '100' = 100+.
+// Only '1' is set for now - '5', '16' and '100' are empty, so 5+ pcs gives no rate (Rate stays empty).
 export const LOCAL_HOODIE_JACKET_IDEAL_PRICES: Record<string, Record<string, number>> = {
-  'Dye Light Speedo': { '1': 1610, '5': 1610 },
-  'Light Speedo': { '1': 2800, '5': 2800 },
-  'Speedo 280gsm': { '1': 3200, '5': 3200 },
+  'Dye Light Speedo': { '1': 1610 },
+  'Light Speedo': { '1': 2800 },
+  'Speedo 280gsm': { '1': 3200 },
 };
 
 export const LOCAL_HOODIE_JACKET_MODIFIERS: Record<string, Record<string, { type: 'flat' | 'multiply'; value: number }>> = {

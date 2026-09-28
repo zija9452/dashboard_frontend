@@ -13,10 +13,11 @@
 export const LOCAL_TROUSER_CATEGORY_NAME = 'Trouser';
 
 // Base dimension is "Pocket with zip" (matches the DB sub_category name for Trouser).
-// Bulk (5+) rate is the same as the 1-piece rate - no bulk discount defined yet.
+// Tier keys (min qty): '1' = 1-4 pcs, '5' = 5-15, '16' = 16-99, '100' = 100+.
+// Only '1' is set for now - '5', '16' and '100' are empty, so 5+ pcs gives no rate (Rate stays empty).
 export const LOCAL_TROUSER_IDEAL_PRICES: Record<string, Record<string, number>> = {
-  'Yes': { '1': 850, '5': 850 },
-  'No': { '1': 850, '5': 850 },
+  'Yes': { '1': 850 },
+  'No': { '1': 850 },
 };
 
 export const LOCAL_TROUSER_MODIFIERS: Record<string, Record<string, { type: 'flat' | 'multiply'; value: number }>> = {

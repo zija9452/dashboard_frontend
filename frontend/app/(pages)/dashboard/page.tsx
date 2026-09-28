@@ -44,11 +44,24 @@ const sportMeta: Record<string, { icon: string; label: string; hint: string; bad
   TENNIS: { icon: '🎾', label: 'Tennis', hint: 'Tennis Accessories', badge: 'bg-purple-100 text-purple-800' },
 };
 
+// Parse "YYYY-MM-DD" as a local calendar date. new Date("YYYY-MM-DD") parses as UTC midnight,
+// which shows the previous day in timezones behind UTC.
+const parseLocalDate = (value: string) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
+};
+
+// Today's date as "YYYY-MM-DD" in local time (toISOString() gives the UTC date).
+const localTodayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 const formatShortDate = (value: string) =>
-  new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  parseLocalDate(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
 const daysUntilLabel = (dateStr: string) => {
-  const start = new Date(dateStr);
+  const start = parseLocalDate(dateStr);
   const today = new Date();
   start.setHours(0, 0, 0, 0);
   today.setHours(0, 0, 0, 0);
@@ -96,7 +109,7 @@ const DashboardPage: React.FC = () => {
   const [demandStatsLoading, setDemandStatsLoading] = useState(false);
 
   // Single Date Range for both KPI cards and Chart - defaults to TODAY (daily view)
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = localTodayStr();
   const [fromDate, setFromDate] = useState<string>(todayStr);
   const [toDate, setToDate] = useState<string>(todayStr);
 
@@ -115,8 +128,8 @@ const DashboardPage: React.FC = () => {
       expenses: [],
     },
     dateRange: {
-      from: new Date().toISOString().split('T')[0],
-      to: new Date().toISOString().split('T')[0],
+      from: localTodayStr(),
+      to: localTodayStr(),
     },
   });
 
@@ -154,7 +167,7 @@ const DashboardPage: React.FC = () => {
             const capitalizedRole = roleDisplayMap[role] || (role.charAt(0).toUpperCase() + role.slice(1));
             setUserRole(capitalizedRole);
 
-            const todayStr = new Date().toISOString().split('T')[0];
+            const todayStr = localTodayStr();
             setFromDate(todayStr);
             setToDate(todayStr);
 
@@ -248,10 +261,10 @@ const DashboardPage: React.FC = () => {
   };
 
   const isSameMonth = fromDate && toDate &&
-    new Date(fromDate).getMonth() === new Date(toDate).getMonth() &&
-    new Date(fromDate).getFullYear() === new Date(toDate).getFullYear();
+    parseLocalDate(fromDate).getMonth() === parseLocalDate(toDate).getMonth() &&
+    parseLocalDate(fromDate).getFullYear() === parseLocalDate(toDate).getFullYear();
   const isSameYear = fromDate && toDate &&
-    new Date(fromDate).getFullYear() === new Date(toDate).getFullYear();
+    parseLocalDate(fromDate).getFullYear() === parseLocalDate(toDate).getFullYear();
   const monthAbbrs = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   // Check if chart data exists (for Admin/Employee only)
@@ -268,7 +281,7 @@ const DashboardPage: React.FC = () => {
     if (isSameMonth) {
       return {
         labels: dashboardData.chartData!.dates.map(dateStr => {
-          const date = new Date(dateStr);
+          const date = parseLocalDate(dateStr);
           return `${date.getDate()}-${monthAbbrs[date.getMonth()]}`;
         }),
         datasets: [
@@ -301,7 +314,7 @@ const DashboardPage: React.FC = () => {
       const monthWeekRanges: { [key: string]: [number, number][] } = {};
 
       dashboardData.chartData!.dates.forEach((dateStr) => {
-        const date = new Date(dateStr);
+        const date = parseLocalDate(dateStr);
         const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
         const monthLastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 
@@ -317,7 +330,7 @@ const DashboardPage: React.FC = () => {
       });
 
       dashboardData.chartData!.dates.forEach((dateStr, index) => {
-        const date = new Date(dateStr);
+        const date = parseLocalDate(dateStr);
         const monthAbbr = monthAbbrs[date.getMonth()];
         const dayOfMonth = date.getDate();
         const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
@@ -375,7 +388,7 @@ const DashboardPage: React.FC = () => {
     const labels: string[] = [];
     
     dashboardData.chartData!.dates.forEach((dateStr, index) => {
-      const date = new Date(dateStr);
+      const date = parseLocalDate(dateStr);
       const monthKey = monthAbbrs[date.getMonth()];
       
       if (!months[monthKey]) {

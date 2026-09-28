@@ -13,15 +13,17 @@
 
 export const LOCAL_TSHIRT_CATEGORY_NAME = 'T-shirt';
 
+// Tier keys (min qty): '1' = 1-4 pcs, '5' = 5-15, '16' = 16-99, '100' = 100+.
+// Only '1' is set for now - '5', '16' and '100' are empty, so 5+ pcs gives no rate (Rate stays empty).
 export const LOCAL_TSHIRT_IDEAL_PRICES: Record<string, Record<string, number>> = {
-  'Round Neck': { '1': 950, '5': 950 },
-  'V-Neck': { '1': 950, '5': 950 },
-  'Polo': { '1': 1000, '5': 1000 },
-  'V-Neck Polo': { '1': 1000, '5': 1000 },
-  'Sherwani Collar': { '1': 1000, '5': 1000 },
-  'V-Neck Sherwani Collar': { '1': 1000, '5': 1000 },
-  'Bent Neck': { '1': 1000, '5': 1000 },
-  'Indian Neck': { '1': 1100, '5': 1100 },
+  'Round Neck': { '1': 950 },
+  'V-Neck': { '1': 950 },
+  'Polo': { '1': 1000 },
+  'V-Neck Polo': { '1': 1000 },
+  'Sherwani Collar': { '1': 1000 },
+  'V-Neck Sherwani Collar': { '1': 1000 },
+  'Bent Neck': { '1': 1000 },
+  'Indian Neck': { '1': 1100 },
 };
 
 export const LOCAL_TSHIRT_MODIFIERS: Record<string, Record<string, { type: 'flat' | 'multiply'; value: number }>> = {

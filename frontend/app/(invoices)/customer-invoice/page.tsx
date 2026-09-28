@@ -47,7 +47,21 @@ interface CustomerCategoryGrouped {
   modifiers?: Record<string, Record<string, ModifierValue>>;
 }
 
-const BULK_MIN_QTY = 5;
+// Quantity tiers, keyed by min_qty in ideal_prices: 1-4 pcs, 5-15, 16-99, 100+.
+const PRICE_TIERS = [
+  { minQty: 1, label: '1 pc rate, 1-4 pcs' },
+  { minQty: 5, label: 'qty rate, 5-15 pcs' },
+  { minQty: 16, label: 'qty rate, 16-99 pcs' },
+  { minQty: 100, label: 'qty rate, 100+ pcs' },
+];
+
+const tierForQuantity = (quantity: number) =>
+  [...PRICE_TIERS].reverse().find(t => quantity >= t.minQty) ?? PRICE_TIERS[0];
+
+// Price for exactly the tier the quantity falls in. No fallback to another tier: if
+// that tier has no rate, the Rate stays empty and staff enter it manually.
+const pickTierPrice = (tiers: Record<string, number>, quantity: number): number | undefined =>
+  tiers[String(tierForQuantity(quantity).minQty)];
 
 interface CartItem {
   id: string;
@@ -91,8 +105,8 @@ const DynamicCategoryFields: React.FC<{
   };
 
   // Calculate price based on selected options. "Base" sub-categories (not flagged
-  // is_modifier) form the priced combination (bulk 5+ rate once quantity reaches it,
-  // else 1-piece); "modifier" sub-categories (Sleeves, Size Type...) are adjustments
+  // is_modifier) form the priced combination (rate picked by quantity tier, see
+  // PRICE_TIERS); "modifier" sub-categories (Sleeves, Size Type...) are adjustments
   // applied on top: final = (base + sum of flat adjustments) × product of multiply
   // adjustments.
   const calculateIdealPrice = (): number | null => {
@@ -120,15 +134,11 @@ const DynamicCategoryFields: React.FC<{
 
     const combinationKey = baseSubCats.map(sc => dynamicCategoryFields[sc.sub_category]).join('|');
 
-    // Lookup tiered prices for this exact base combination: { "1": price, "5": bulkPrice }
+    // Lookup tiered prices for this exact base combination: { "1": ..., "5": ..., "16": ..., "100": ... }
     const tiers = categoryData.ideal_prices[combinationKey];
     if (!tiers) return null;
 
-    // Use the bulk (5+) rate once quantity reaches the bulk tier, falling back to the
-    // 1-piece rate if no bulk rate has been set for this combination yet.
-    const basePrice = (quantity >= BULK_MIN_QTY && tiers[String(BULK_MIN_QTY)] !== undefined)
-      ? tiers[String(BULK_MIN_QTY)]
-      : tiers['1'];
+    const basePrice = pickTierPrice(tiers, quantity);
     if (basePrice === undefined) return null;
 
     let flatSum = 0;
@@ -243,7 +253,7 @@ const DynamicCategoryFields: React.FC<{
         }
         return (
           <p className="text-xs text-green-800 font-medium mt-3">
-            ✓ Price filled into Rate field below ({quantity >= BULK_MIN_QTY ? 'bulk rate, 5+ pcs' : '1 pc rate'})
+            ✓ Price filled into Rate field below ({tierForQuantity(quantity).label})
           </p>
         );
       })()} */}
@@ -295,6 +305,11 @@ const CustomerInvoicePage: React.FC = () => {
   // backend computes it on submit (deadline within threshold_days => rush).
   const [rushRatePerPiece, setRushRatePerPiece] = useState<number | null>(null);
   const [rushThresholdDays, setRushThresholdDays] = useState<number | null>(null);
+  // Per-piece rush rate actually charged - pre-filled with the default above, but
+  // editable by the cashier (like the item Rate field). Sent to the backend on save.
+  const [rushRate, setRushRate] = useState<number | ''>('');
+  // An emptied rush rate box counts as 0 (no rush charge), both here and on save.
+  const rushRateValue = rushRate === '' ? 0 : rushRate;
   const [totalAmount, setTotalAmount] = useState<number>(0);
   const [amountPaid, setAmountPaid] = useState<string>('');
   const [balance, setBalance] = useState<number>(0);
@@ -522,6 +537,7 @@ const CustomerInvoicePage: React.FC = () => {
         const data = await response.json();
         setRushRatePerPiece(Number(data.price_per_piece));
         setRushThresholdDays(Number(data.threshold_days));
+        setRushRate(Number(data.price_per_piece));
       }
     } catch (error) {
       console.error('Error fetching rush settings:', error);
@@ -568,26 +584,31 @@ const CustomerInvoicePage: React.FC = () => {
       const daysUntil = Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
       isRush = daysUntil <= rushThresholdDays;
     }
-    const rushCharge = isRush && rushRatePerPiece !== null ? rushRatePerPiece * totalPieces : 0;
+    const rushCharge = isRush ? rushRateValue * totalPieces : 0;
 
     const total = subtotal + rushCharge;
     setTotalAmount(total);
     const paidAmount = amountPaid === '' ? 0 : Number(amountPaid);
     setBalance(total - paidAmount);
-  }, [cart, amountPaid, requiredByDate, rushThresholdDays, rushRatePerPiece]);
+  }, [cart, amountPaid, requiredByDate, rushThresholdDays, rushRateValue]);
 
   // Live preview for the RUSH badge/helper text next to the Deadline field —
   // same day-math as the useEffect above, just recomputed for render.
   const totalPieces = cart.reduce((sum, item) => sum + item.quantity, 0);
   let estimatedIsRush = false;
-  if (requiredByDate && rushThresholdDays !== null) {
+  let deadlineDaysLeft: number | null = null;
+  if (requiredByDate) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const deadline = new Date(`${requiredByDate}T00:00:00`);
-    const daysUntil = Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    estimatedIsRush = daysUntil <= rushThresholdDays;
+    deadlineDaysLeft = Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    if (rushThresholdDays !== null) estimatedIsRush = deadlineDaysLeft <= rushThresholdDays;
   }
-  const estimatedRushCharge = estimatedIsRush && rushRatePerPiece !== null ? rushRatePerPiece * totalPieces : 0;
+  const estimatedRushCharge = estimatedIsRush ? rushRateValue * totalPieces : 0;
+  const deadlineLabel = deadlineDaysLeft === null ? ''
+    : deadlineDaysLeft <= 0 ? 'today'
+    : deadlineDaysLeft === 1 ? 'tomorrow'
+    : `in ${deadlineDaysLeft} days`;
 
   // Convert file to base64 (keeping for backward compatibility if needed)
   const fileToBase64 = (file: File): Promise<string> => {
@@ -970,6 +991,8 @@ const handleAddCustomer = async () => {
         timezone: 'Asia/Karachi',
         date: new Date().toISOString().split('T')[0],
         required_by_date: requiredByDate,
+        rush_rate_per_piece: rushRateValue,
+        rush_threshold_days: rushThresholdDays,
         idempotency_key: idempotencyKeyRef.current,
       };
 
@@ -994,6 +1017,7 @@ const handleAddCustomer = async () => {
         setSelectedCustomer('');
         setTeamName('');
         setRequiredByDate('');
+        setRushRate(rushRatePerPiece ?? '');
         setAmountPaid('');
         setPaymentMethod('Cash');
 
@@ -1538,7 +1562,7 @@ const handleAddCustomer = async () => {
                     <label className="block text-sm font-medium mb-1">
                       Deadline *
                       {estimatedIsRush && (
-                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800">RUSH</span>
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-orange-50 text-orange-700 border border-orange-200">RUSH</span>
                       )}
                     </label>
                     <input
@@ -1549,13 +1573,59 @@ const handleAddCustomer = async () => {
                       min={new Date().toISOString().split('T')[0]}
                       required
                     />
-                    {estimatedIsRush && (
-                      <p className="text-xs text-red-700 font-medium mt-1">
-                        + Rs. {estimatedRushCharge} rush charge ({rushRatePerPiece ?? 0} × {totalPieces} pcs)
+                    {requiredByDate && !estimatedIsRush && (
+                      <p className="text-xs text-green-700 font-medium mt-1">
+                        ✓ Normal order — due {deadlineLabel}, no rush charge
                       </p>
                     )}
                   </div>
                 </div>
+
+                {/* Rush panel — shown only when the deadline makes it a rush order.
+                    The per-piece rate is pre-filled with the default and editable. */}
+                {estimatedIsRush && (
+                  <div className="mb-3 md:mb-4 rounded-lg border border-orange-200 bg-orange-50/50 overflow-hidden">
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-orange-50 border-b border-orange-100">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-orange-500 text-white tracking-wide">RUSH ORDER</span>
+                        <span className="text-sm text-gray-800 font-medium">
+                          Deadline is {deadlineLabel}
+                          {rushThresholdDays !== null && ` (rush applies within ${rushThresholdDays} day${rushThresholdDays === 1 ? '' : 's'})`}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 px-4 py-3 items-start">
+                      <div>
+                        <label htmlFor="rush-rate" className="block text-xs font-semibold text-gray-800 mb-1">Rush rate per piece</label>
+                        <div className="flex items-center rounded-lg border border-orange-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-orange-300">
+                          <span className="px-3 py-2 text-sm font-semibold text-orange-700 bg-orange-50/50 border-r border-orange-100">Rs.</span>
+                          <input
+                            id="rush-rate"
+                            type="number"
+                            value={rushRate}
+                            onChange={(e) => setRushRate(e.target.value === '' ? '' : Number(e.target.value))}
+                            className="w-full px-3 py-2 text-right font-semibold border-0 focus:outline-none focus:ring-0"
+                            min="0"
+                            step="1"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-800">
+                        <div className="text-xs font-semibold mb-1">Calculation</div>
+                        <div className="px-3 py-2 rounded-lg bg-white border border-orange-100">
+                          Rs. {rushRateValue.toLocaleString()} × {totalPieces} pcs
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-800">
+                        <div className="text-xs font-semibold mb-1">Rush charge (added to total)</div>
+                        <div className="px-3 py-2 rounded-lg bg-orange-50 border border-orange-200 text-orange-800 font-bold text-right">
+                          + Rs. {estimatedRushCharge.toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Amount Fields - 4 in one row */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-3 md:mb-4">
@@ -1568,6 +1638,9 @@ const handleAddCustomer = async () => {
                       className="regal-input w-full bg-gray-100 font-semibold"
                       readOnly
                     />
+                    {estimatedIsRush && estimatedRushCharge > 0 && (
+                      <p className="text-xs text-orange-700 mt-1">Includes Rs. {estimatedRushCharge.toLocaleString()} rush charge</p>
+                    )}
                   </div>
 
                   {/* Amount Paid */}

@@ -11,12 +11,12 @@
  */
 
 export const LOCAL_SHORT_CATEGORY_NAME = 'Short';
-
-// Base dimension is Pocket (No = without pocket, Yes = with pocket). Bulk (5+) rate
-// is the same as the 1-piece rate - no bulk discount defined yet.
+// Base dimension is Pocket (No = without pocket, Yes = with pocket).
+// Tier keys (min qty): '1' = 1-4 pcs, '5' = 5-15, '16' = 16-99, '100' = 100+.
+// Only '1' is set for now - '5', '16' and '100' are empty, so 5+ pcs gives no rate (Rate stays empty).
 export const LOCAL_SHORT_IDEAL_PRICES: Record<string, Record<string, number>> = {
-  'No': { '1': 550, '5': 550 },
-  'Yes': { '1': 600, '5': 600 },
+  'No': { '1': 550 },
+  'Yes': { '1': 600 },
 };
 
 export const LOCAL_SHORT_MODIFIERS: Record<string, Record<string, { type: 'flat' | 'multiply'; value: number }>> = {

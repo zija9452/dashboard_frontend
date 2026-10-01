@@ -5,36 +5,18 @@ import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import {
-  LOCAL_TSHIRT_CATEGORY_NAME,
-  LOCAL_TSHIRT_IDEAL_PRICES,
-  LOCAL_TSHIRT_MODIFIERS,
-  LOCAL_RUSH_PRICING,
-} from '@/lib/localTshirtPricing';
-import {
-  LOCAL_SHORT_CATEGORY_NAME,
-  LOCAL_SHORT_IDEAL_PRICES,
-  LOCAL_SHORT_MODIFIERS,
-} from '@/lib/localShortPricing';
-import {
-  LOCAL_TROUSER_CATEGORY_NAME,
-  LOCAL_TROUSER_IDEAL_PRICES,
-  LOCAL_TROUSER_MODIFIERS,
-} from '@/lib/localTrouserPricing';
-import {
-  LOCAL_JACKET_CATEGORY_NAME,
-  LOCAL_JACKET_IDEAL_PRICES,
-  LOCAL_JACKET_MODIFIERS,
-} from '@/lib/localJacketPricing';
-import {
-  LOCAL_HOODIE_JACKET_CATEGORY_NAME,
-  LOCAL_HOODIE_JACKET_IDEAL_PRICES,
-  LOCAL_HOODIE_JACKET_MODIFIERS,
-} from '@/lib/localHoodieJacketPricing';
-import {
-  LOCAL_SANDO_CATEGORY_NAME,
-  LOCAL_SANDO_IDEAL_PRICES,
-  LOCAL_SANDO_MODIFIERS,
-} from '@/lib/localSandoPricing';
+  CustomerCategoryGrouped,
+  PricedLine,
+  tierForQuantity,
+  isQtyTier,
+  lookupIdealPrice,
+  piecesOfCategory,
+  repriceCart,
+  mockupLines,
+  categoryTierSummaries,
+  categoryMockupDefault,
+} from '@/lib/quantityPricing';
+import { QuantityTierCards, MockupChargeRows, MockupLinePreview } from '@/components/QuantityTierCards';
 
 interface Customer {
   cus_id: string;
@@ -42,100 +24,7 @@ interface Customer {
   cus_phone: string;
 }
 
-interface SubCategoryOption {
-  sub_category: string;
-  options: string[];
-  is_modifier?: boolean; // true = a price adjustment dimension (Sleeves, Size Type...), not part of the base combination
-  is_optional?: boolean; // true = hidden by default, shown via the "+" more-options toggle
-}
-
-interface ModifierValue {
-  type: 'flat' | 'multiply';
-  value: number;
-}
-
-interface CustomerCategoryGrouped {
-  id: string;
-  main_category: string;
-  sub_categories: SubCategoryOption[];
-  ideal_prices?: Record<string, Record<string, number>>;
-  modifiers?: Record<string, Record<string, ModifierValue>>;
-}
-
-interface CartItem {
-  id: string;
-  category: string;
-  unitPrice: number;
-  quantity: number;
-  totalPrice: number;
-  category_fields?: Record<string, string>;
-}
-
-// Quantity tiers, keyed by min_qty in ideal_prices: 1-4 pcs, 5-15, 16-99, 100+.
-const PRICE_TIERS = [
-  { minQty: 1, label: 'Single piece rate (1-4 pcs)' },
-  { minQty: 5, label: 'Qty rate (5-15 pcs)' },
-  { minQty: 16, label: 'Qty rate (16-99 pcs)' },
-  { minQty: 100, label: 'Qty rate (100+ pcs)' },
-];
-
-const tierForQuantity = (quantity: number) =>
-  [...PRICE_TIERS].reverse().find(t => quantity >= t.minQty) ?? PRICE_TIERS[0];
-
-// Price for exactly the tier the quantity falls in. No fallback to another tier: if
-// that tier has no rate, the Rate stays empty and staff enter it manually.
-const pickTierPrice = (tiers: Record<string, number>, quantity: number): number | undefined =>
-  tiers[String(tierForQuantity(quantity).minQty)];
-
-// Looks up the price for the selected options + quantity tier. "Base" sub-categories
-// (not flagged is_modifier) form the priced combination (rate picked by quantity
-// tier, see PRICE_TIERS); "modifier" sub-categories (Sleeves, Size Type...) are
-// adjustments applied on top: final = (base + sum of flat adjustments) × product of
-// multiply adjustments. Returns null until quantity + every option is selected, or
-// when nothing is fixed for that exact base combination yet.
-function lookupIdealPrice(
-  categoryData: CustomerCategoryGrouped | undefined,
-  dynamicCategoryFields: Record<string, string>,
-  quantity: number | ''
-): number | null {
-  if (!categoryData?.ideal_prices) return null;
-
-  // Quantity must be entered first — it's what decides which tier (1-4, 5-15,
-  // 16-99, 100+) applies, so no price should be suggested before it's known.
-  if (quantity === '' || quantity <= 0) return null;
-
-  // Optional sub-categories (Rib, Zip...) don't block the price - only required
-  // (non-optional) fields need to be selected.
-  const allSelected = categoryData.sub_categories
-    .filter(sc => !sc.is_optional)
-    .every(sc => !!dynamicCategoryFields[sc.sub_category]);
-  if (!allSelected) return null;
-
-  const baseSubCats = categoryData.sub_categories.filter(sc => !sc.is_modifier);
-  const modifierSubCats = categoryData.sub_categories.filter(sc => sc.is_modifier);
-
-  const combinationKey = baseSubCats.map(sc => dynamicCategoryFields[sc.sub_category]).join('|');
-  const tiers = categoryData.ideal_prices[combinationKey];
-  if (!tiers) return null;
-
-  const basePrice = pickTierPrice(tiers, quantity);
-  if (basePrice === undefined) return null;
-
-  let flatSum = 0;
-  let multiplyProduct = 1;
-  for (const sc of modifierSubCats) {
-    const selectedOption = dynamicCategoryFields[sc.sub_category];
-    const modifier = categoryData.modifiers?.[sc.sub_category]?.[selectedOption];
-    if (!modifier) continue;
-    if (modifier.type === 'multiply') {
-      multiplyProduct *= modifier.value;
-    } else {
-      flatSum += modifier.value;
-    }
-  }
-
-  return (basePrice + flatSum) * multiplyProduct;
-}
+type CartItem = PricedLine;
 
 const QuotationPage: React.FC = () => {
   const router = useRouter();
@@ -151,7 +40,7 @@ const QuotationPage: React.FC = () => {
 
   const [selectedCategory, setSelectedCategory] = useState('');
   const [dynamicCategoryFields, setDynamicCategoryFields] = useState<Record<string, string>>({});
-  // Whether the optional fields (Rib, Zip...) are revealed — hidden by default,
+  // Whether the optional fields (Rib, Zip...) are revealed - hidden by default,
   // shown via the "+" button below the required fields.
   const [showOptionalFields, setShowOptionalFields] = useState(false);
   const [unitPrice, setUnitPrice] = useState<number | ''>('');
@@ -163,11 +52,11 @@ const QuotationPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [discount, setDiscount] = useState<number | ''>('');
 
-  // PDF modal — shown right after creating a quotation instead of redirecting away
+  // PDF modal - shown right after creating a quotation instead of redirecting away
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string>('');
   const [pdfFilename, setPdfFilename] = useState<string>('');
-  // Blurred loading overlay while the PDF is being fetched — same pattern as
+  // Blurred loading overlay while the PDF is being fetched - same pattern as
   // customer-invoice/page.tsx's loadingReceipt.
   const [loadingPdf, setLoadingPdf] = useState(false);
 
@@ -178,15 +67,26 @@ const QuotationPage: React.FC = () => {
   // Per-piece rush rate actually charged - pre-filled with the default above, but
   // editable by the cashier (like the item Rate field). Sent to the backend on save.
   const [rushRate, setRushRate] = useState<number | ''>('');
+  // Designing / mockup charge per category with 1-4 pcs - each category's own amount
+  // (customer_categories.mockup_charge), editable per order in the totals box.
+  const [mockupAmounts, setMockupAmounts] = useState<Record<string, number>>({});
+  // Category's own charge (e.g. Jacket 1000); not set or 0 = no mockup for it.
+  const mockupDefaultFor = (category: string) => categoryMockupDefault(customerCategories, category);
+  const hasMockupCharge = (category: string) => mockupDefaultFor(category) > 0;
+  const mockupAmountFor = (category: string) => mockupAmounts[category] ?? mockupDefaultFor(category);
 
   const categoryData = customerCategories.find(cat => cat.main_category === selectedCategory);
   const allOptionsSelected = !!categoryData && categoryData.sub_categories.length > 0 &&
     categoryData.sub_categories.filter(sc => !sc.is_optional).every(sc => !!dynamicCategoryFields[sc.sub_category]);
-  const matchedIdealPrice = lookupIdealPrice(categoryData, dynamicCategoryFields, quantity);
+  // The tier comes from every piece of this category in the quotation: what's already
+  // in the cart + the quantity being entered.
+  const piecesAlreadyInCart = selectedCategory ? piecesOfCategory(cart, selectedCategory) : 0;
+  const tierPieces: number | '' = quantity === '' ? '' : quantity + piecesAlreadyInCart;
+  const matchedIdealPrice = lookupIdealPrice(categoryData, dynamicCategoryFields, tierPieces);
 
   // Whenever the selected combination (or the quantity, which can flip the rate
   // tier) resolves to a fixed price, fill it straight into the editable Rate field
-  // — no separate read-only "ideal price" box. Staff can still type over it.
+  // - no separate read-only "ideal price" box. Staff can still type over it.
   useEffect(() => {
     if (matchedIdealPrice !== null) {
       setUnitPrice(matchedIdealPrice);
@@ -237,36 +137,9 @@ const QuotationPage: React.FC = () => {
       const response = await fetch('/api/customer-category/grouped', { method: 'GET', credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
-        const categoriesData: CustomerCategoryGrouped[] = data.data || [];
-
-        // FOR TESTING ONLY - NOT FINAL: T-shirt pricing isn't in the DB yet (Ideal
-        // Prices table is empty), so it's overridden here with locally-given numbers
-        // instead of waiting on the DB. This must move to the DB later - once real
-        // prices are entered via /ideal-pricing, remove this override so T-shirt
-        // reads from the DB like every other category.
-        const withLocalOverride = categoriesData.map(cat => {
-          if (cat.main_category === LOCAL_TSHIRT_CATEGORY_NAME) {
-            return { ...cat, ideal_prices: LOCAL_TSHIRT_IDEAL_PRICES, modifiers: LOCAL_TSHIRT_MODIFIERS };
-          }
-          if (cat.main_category === LOCAL_SHORT_CATEGORY_NAME) {
-            return { ...cat, ideal_prices: LOCAL_SHORT_IDEAL_PRICES, modifiers: LOCAL_SHORT_MODIFIERS };
-          }
-          if (cat.main_category === LOCAL_TROUSER_CATEGORY_NAME) {
-            return { ...cat, ideal_prices: LOCAL_TROUSER_IDEAL_PRICES, modifiers: LOCAL_TROUSER_MODIFIERS };
-          }
-          if (cat.main_category === LOCAL_JACKET_CATEGORY_NAME) {
-            return { ...cat, ideal_prices: LOCAL_JACKET_IDEAL_PRICES, modifiers: LOCAL_JACKET_MODIFIERS };
-          }
-          if (cat.main_category === LOCAL_HOODIE_JACKET_CATEGORY_NAME) {
-            return { ...cat, ideal_prices: LOCAL_HOODIE_JACKET_IDEAL_PRICES, modifiers: LOCAL_HOODIE_JACKET_MODIFIERS };
-          }
-          if (cat.main_category === LOCAL_SANDO_CATEGORY_NAME) {
-            return { ...cat, ideal_prices: LOCAL_SANDO_IDEAL_PRICES, modifiers: LOCAL_SANDO_MODIFIERS };
-          }
-          return cat;
-        });
-
-        setCustomerCategories(withLocalOverride);
+        // Prices (ideal_prices, per quantity tier) and modifiers come from the DB,
+        // entered via the /ideal-pricing page.
+        setCustomerCategories(data.data || []);
       }
     } catch (error) {
       console.error('Error fetching customer categories:', error);
@@ -275,14 +148,19 @@ const QuotationPage: React.FC = () => {
     }
   };
 
+  // Rush rule, saved on the Ideal Pricing page.
   const fetchRushSettings = async () => {
-    // FOR TESTING ONLY - NOT FINAL: using the locally-given rush rate instead of the
-    // DB-backed /api/rush-pricing/ endpoint. This must move to the DB later - once
-    // this rate is saved via the Ideal Pricing page's Rush Order Rule box, switch
-    // back to fetching from /api/rush-pricing/.
-    setRushRatePerPiece(LOCAL_RUSH_PRICING.price_per_piece);
-    setRushThresholdDays(LOCAL_RUSH_PRICING.threshold_days);
-    setRushRate(LOCAL_RUSH_PRICING.price_per_piece);
+    try {
+      const response = await fetch('/api/rush-pricing/', { method: 'GET', credentials: 'include' });
+      if (response.ok) {
+        const data = await response.json();
+        setRushRatePerPiece(Number(data.price_per_piece));
+        setRushThresholdDays(Number(data.threshold_days));
+        setRushRate(Number(data.price_per_piece));
+      }
+    } catch (error) {
+      console.error('Error fetching rush settings:', error);
+    }
   };
 
   const clearItemForm = () => {
@@ -328,19 +206,42 @@ const QuotationPage: React.FC = () => {
       quantity,
       totalPrice: price,
       category_fields: { ...dynamicCategoryFields },
+      // Only a rate still equal to the price-list rate is re-priced later; a rate the
+      // staff typed stays as typed.
+      autoPriced: priceWasAutoFilled && matchedIdealPrice !== null && unitPrice === matchedIdealPrice,
     };
 
-    setCart([...cart, newItem]);
+    updateCart([...cart, newItem]);
     clearItemForm();
-    showToast('Item added', 'success');
+  };
+
+  // Every add/remove re-prices the auto-priced lines from their category's new total.
+  // No toast - the change shows in the cart itself (tier cards, rate tags, mockup rows).
+  const updateCart = (next: CartItem[]) => {
+    const { items } = repriceCart(next, customerCategories);
+    // A category that left the cart forgets its edited mockup amount.
+    setMockupAmounts(prev => Object.fromEntries(Object.entries(prev).filter(([c]) => items.some(i => i.category === c))));
+    setCart(items);
   };
 
   const removeFromCart = (id: string) => {
-    setCart(cart.filter(item => item.id !== id));
+    updateCart(cart.filter(item => item.id !== id));
+  };
+
+  // For a line whose tier has no price in the list: the rate typed here makes it a
+  // manual line (never re-priced) and clears the warning.
+  const setLineRate = (id: string, rate: number) => {
+    setCart(cart.map(item => item.id === id
+      ? { ...item, unitPrice: rate, totalPrice: rate * item.quantity, autoPriced: false, missingTierPrice: false, previousUnitPrice: null, rateChange: null }
+      : item));
   };
 
   const cartSubtotal = cart.reduce((sum, item) => sum + item.totalPrice, 0);
   const totalPieces = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const mockups = mockupLines(cart, mockupAmounts, mockupDefaultFor);
+  const mockupTotal = mockups.reduce((sum, m) => sum + m.amount, 0);
+  const tierSummaries = categoryTierSummaries(cart, customerCategories, mockupAmountFor, hasMockupCharge);
+  const linesMissingPrice = cart.filter(item => item.missingTierPrice);
 
   // Live preview of what the backend will compute on submit: rush applies when the
   // deadline falls within threshold_days of today (inclusive), charged per piece
@@ -361,7 +262,7 @@ const QuotationPage: React.FC = () => {
   // An emptied rush rate box counts as 0 (no rush charge), both here and on save.
   const rushRateValue = rushRate === '' ? 0 : rushRate;
   const estimatedRushCharge = estimatedIsRush ? rushRateValue * totalPieces : 0;
-  const estimatedTotal = cartSubtotal - (discount || 0) + estimatedRushCharge;
+  const estimatedTotal = cartSubtotal - (discount || 0) + estimatedRushCharge + mockupTotal;
 
   const handleSubmit = async () => {
     if (cart.length === 0) {
@@ -378,6 +279,10 @@ const QuotationPage: React.FC = () => {
     }
     if (!requiredByDate) {
       showToast('Please enter the deadline (Required By date)', 'error');
+      return;
+    }
+    if (linesMissingPrice.length > 0) {
+      showToast(`Enter the rate for ${linesMissingPrice.length} item(s) marked "no price for this tier"`, 'error');
       return;
     }
 
@@ -403,6 +308,7 @@ const QuotationPage: React.FC = () => {
         discounts: discount || 0,
         rush_rate_per_piece: rushRateValue,
         rush_threshold_days: rushThresholdDays,
+        mockup_charges: mockups.map(m => ({ category: m.category, amount: m.amount })),
       };
 
       const response = await fetch('/api/quotation/', {
@@ -418,7 +324,8 @@ const QuotationPage: React.FC = () => {
         await Swal.fire({
           title: 'Quotation Created!',
           html: `<p><strong>${result.quotation_no}</strong></p>` +
-                (result.is_rush ? `<p style="color:#EA580C;font-weight:bold;">RUSH ORDER — Rs. ${result.rush_charge} rush charge (Rs. ${result.rush_rate_per_piece ?? 0} per piece × ${result.total_pieces ?? totalPieces} pcs)</p>` : '<p>Normal order (not rush)</p>') +
+                (result.is_rush ? `<p style="color:#EA580C;font-weight:bold;">RUSH ORDER - Rs. ${result.rush_charge} rush charge (Rs. ${result.rush_rate_per_piece ?? 0} per piece × ${result.total_pieces ?? totalPieces} pcs)</p>` : '<p>Normal order (not rush)</p>') +
+                (result.mockup_charge > 0 ? `<p style="color:#7E22CE;">Designing / mockup - Rs. ${result.mockup_charge}</p>` : '') +
                 `<p>Total: Rs. ${result.total_amount}</p>`,
           icon: 'success',
         });
@@ -428,8 +335,9 @@ const QuotationPage: React.FC = () => {
         setRequiredByDate('');
         setDiscount('');
         setRushRate(rushRatePerPiece ?? '');
+        setMockupAmounts({});
 
-        // Same blob-building pattern as view-quotation/page.tsx's handleViewPdf —
+        // Same blob-building pattern as view-quotation/page.tsx's handleViewPdf -
         // show the PDF right here instead of redirecting to /view-quotation.
         setLoadingPdf(true);
         try {
@@ -466,7 +374,7 @@ const QuotationPage: React.FC = () => {
       <div className="flex items-center justify-between mb-4 md:mb-6">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-regal-black">New Quotation</h1>
-          <p className="text-sm text-gray-500 mt-0.5">A price offer for the customer — converts into a real order once approved.</p>
+          <p className="text-sm text-gray-500 mt-0.5">A price offer for the customer - converts into a real order once approved.</p>
         </div>
         <button onClick={() => router.push('/view-quotation')} className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap">
           View Quotations
@@ -474,7 +382,7 @@ const QuotationPage: React.FC = () => {
       </div>
 
       {/* Left: build what's being ordered (category, options, price, quantity) first.
-          Right: cart on top, customer/deadline + submit at the bottom — same split as
+          Right: cart on top, customer/deadline + submit at the bottom - same split as
           the Customer Invoice builder, so item entry always comes before customer info. */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
 
@@ -523,7 +431,7 @@ const QuotationPage: React.FC = () => {
                   ))}
                   </div>
 
-                  {/* Optional fields (Rib, Zip...) — hidden by default, revealed via "+" */}
+                  {/* Optional fields (Rib, Zip...) - hidden by default, revealed via "+" */}
                   {categoryData.sub_categories.some(subCat => subCat.is_optional) && (
                     <div className="mt-3 pt-3 border-t border-regal-black/20">
                       {!showOptionalFields ? (
@@ -572,7 +480,7 @@ const QuotationPage: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium mb-1">Quantity</label>
                 <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value === '' ? '' : Number(e.target.value))} className="regal-input w-full" min="1" step="1" placeholder="0" />
-                <p className="text-xs text-gray-500 mt-1">Enter quantity first — it decides the rate tier (1-4, 5-15, 16-99 or 100+ pcs).</p>
+                <p className="text-xs text-gray-500 mt-1">Enter quantity - pieces of this category already in the cart are counted too for the rate tier (1-4, 5-15, 16-99 or 100+ pcs).</p>
               </div>
 
               <div>
@@ -593,11 +501,12 @@ const QuotationPage: React.FC = () => {
                   <p className="text-xs text-gray-500 mt-1">Enter quantity above to see the fixed price for this combination.</p>
                 )}
                 {allOptionsSelected && matchedIdealPrice === null && quantity !== '' && quantity > 0 && (
-                  <p className="text-xs text-amber-600 mt-1">No fixed price set for this combination — enter manually.</p>
+                  <p className="text-xs text-amber-600 mt-1">No fixed price set for this combination - enter manually.</p>
                 )}
-                {quantity !== '' && quantity > 0 && (
-                  <p className={`text-xs mt-1 font-medium ${quantity >= PRICE_TIERS[1].minQty ? 'text-purple-700' : 'text-gray-500'}`}>
-                    {tierForQuantity(quantity).label}
+                {tierPieces !== '' && tierPieces > 0 && (
+                  <p className={`text-xs mt-1 font-medium ${isQtyTier(tierPieces) ? 'text-purple-700' : 'text-gray-500'}`}>
+                    {tierForQuantity(tierPieces).label}
+                    {piecesAlreadyInCart > 0 && ` - ${tierPieces} ${selectedCategory} pcs in this quotation (${piecesAlreadyInCart} already added + ${quantity})`}
                   </p>
                 )}
               </div>
@@ -605,6 +514,15 @@ const QuotationPage: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium mb-1">Line Total</label>
                 <input type="text" value={price} disabled className="regal-input w-full bg-gray-100 font-semibold" />
+                {tierPieces !== '' && hasMockupCharge(selectedCategory) && (
+                  <MockupLinePreview
+                    category={selectedCategory}
+                    tierPieces={tierPieces}
+                    alreadyInCart={piecesAlreadyInCart}
+                    lineTotal={price}
+                    amount={mockupAmountFor(selectedCategory)}
+                  />
+                )}
               </div>
 
               <button onClick={addToCart} className="regal-btn bg-regal-yellow text-regal-black w-full">
@@ -619,8 +537,9 @@ const QuotationPage: React.FC = () => {
 
           <div className="regal-card p-3 md:p-6" style={{ minHeight: '220px' }}>
             <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Items ({cart.length})</h2>
+            <QuantityTierCards summaries={tierSummaries} />
             {cart.length === 0 ? (
-              <div className="text-center py-10 text-gray-400 text-sm">No items added yet — build the order on the left.</div>
+              <div className="text-center py-10 text-gray-400 text-sm">No items added yet - build the order on the left.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -644,7 +563,37 @@ const QuotationPage: React.FC = () => {
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right">{item.unitPrice}</td>
+                        <td className="px-4 py-3 text-right">
+                          {item.previousUnitPrice != null && (
+                            <span className="block text-xs text-gray-400 line-through">{item.previousUnitPrice}</span>
+                          )}
+                          {item.missingTierPrice ? (
+                            <input
+                              type="number"
+                              defaultValue={item.unitPrice}
+                              min="1"
+                              step="1"
+                              aria-label={`Rate for ${item.category}`}
+                              onBlur={(e) => { const v = Number(e.target.value); if (v > 0) setLineRate(item.id, v); }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                              className="w-24 px-2 py-1 text-right border border-amber-400 rounded-md"
+                            />
+                          ) : (
+                            <span className={item.rateChange === 'down' ? 'text-green-700 font-medium' : ''}>{item.unitPrice}</span>
+                          )}
+                          {item.rateChange === 'down' && (
+                            <span className="block text-[10px] text-green-700">qty rate · {piecesOfCategory(cart, item.category)} pcs</span>
+                          )}
+                          {item.rateChange === 'up' && (
+                            <span className="block text-[10px] text-amber-600">
+                              {isQtyTier(piecesOfCategory(cart, item.category)) ? 'qty' : 'single'} rate · {piecesOfCategory(cart, item.category)} pcs
+                            </span>
+                          )}
+                          {!item.autoPriced && <span className="block text-[10px] text-gray-400">manual</span>}
+                          {item.missingTierPrice && (
+                            <span className="block text-[10px] text-amber-600">no price for this tier - enter rate</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-right">{item.quantity}</td>
                         <td className="px-4 py-3 text-right font-medium">{item.totalPrice}</td>
                         <td className="px-4 py-3 text-right">
@@ -685,17 +634,17 @@ const QuotationPage: React.FC = () => {
                   <input type="date" value={requiredByDate} onChange={(e) => setRequiredByDate(e.target.value)} className="regal-input w-full" min={new Date().toISOString().split('T')[0]} />
                   {requiredByDate && !estimatedIsRush && (
                     <p className="text-xs text-green-700 font-medium mt-1">
-                      ✓ Normal order — due {deadlineLabel}, no rush charge
+                      ✓ Normal order - due {deadlineLabel}, no rush charge
                     </p>
                   )}
                 </div>
               </div>
               <p className="text-xs text-gray-500 mb-4">
-                Rush status and rush charge are decided automatically from the deadline above — there is no manual "Rush" toggle.
+                Rush status and rush charge are decided automatically from the deadline above - there is no manual "Rush" toggle.
                 {rushThresholdDays !== null && ` A deadline within ${rushThresholdDays} day(s) of today makes it a rush order.`}
               </p>
 
-              {/* Rush panel — same as Customer Invoice. Shown only when the deadline makes
+              {/* Rush panel - same as Customer Invoice. Shown only when the deadline makes
                   it a rush order; the per-piece rate is pre-filled with the default and editable. */}
               {estimatedIsRush && (
                 <div className="mb-4 rounded-lg border border-orange-200 bg-orange-50/50 overflow-hidden">
@@ -752,7 +701,11 @@ const QuotationPage: React.FC = () => {
                     <span className="whitespace-nowrap">+ Rs. {estimatedRushCharge.toLocaleString()}</span>
                   </div>
                 )}
-                {/* Discount UI hidden for now — state/calc/payload still wired, just not shown.
+                <MockupChargeRows
+                  lines={mockups}
+                  onAmountChange={(category, amount) => setMockupAmounts(prev => ({ ...prev, [category]: amount }))}
+                />
+                {/* Discount UI hidden for now - state/calc/payload still wired, just not shown.
                 <div className="flex justify-between items-center text-sm mb-2">
                   <label htmlFor="quotation-discount" className="text-gray-600">Discount</label>
                   <div className="flex items-center rounded-lg overflow-hidden">
@@ -801,7 +754,7 @@ const QuotationPage: React.FC = () => {
         </div>
       )}
 
-      {/* PDF Modal — same pattern as view-quotation/page.tsx and duplicate-bill/page.tsx */}
+      {/* PDF Modal - same pattern as view-quotation/page.tsx and duplicate-bill/page.tsx */}
       {showPdfModal && pdfUrl && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm"

@@ -25,6 +25,9 @@ interface Invoice {
   invoice_no: string;
   customer_name: string;
   team_name?: string;
+  subtotal: number;
+  rush_charge: number;
+  mockup_charges: { category: string; pieces: number; amount: number }[];
   total_amount: number;
   amount_paid: number;
   balance_due: number;
@@ -299,6 +302,40 @@ const ViewCustomerInvoicePage: React.FC = () => {
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Totals - items subtotal + rush + mockup add up to the order total */}
+        <div className="flex justify-end mt-6">
+          <div className="w-full sm:w-96 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm">
+            <div className="flex justify-between text-gray-600 mb-2">
+              <span>Subtotal ({invoice.items.reduce((sum, item) => sum + item.quantity, 0)} pcs)</span>
+              <span>Rs. {(invoice.subtotal || invoice.items.reduce((sum, item) => sum + item.total_price, 0)).toFixed(2)}</span>
+            </div>
+            {invoice.rush_charge > 0 && (
+              <div className="flex justify-between text-orange-700 font-medium mb-2">
+                <span>Rush Charge</span>
+                <span>+ Rs. {invoice.rush_charge.toFixed(2)}</span>
+              </div>
+            )}
+            {invoice.mockup_charges.map(mc => (
+              <div key={mc.category} className="flex justify-between text-purple-700 font-medium mb-2">
+                <span>Mockup ({mc.category})</span>
+                <span>+ Rs. {Number(mc.amount).toFixed(2)}</span>
+              </div>
+            ))}
+            <div className="flex justify-between font-bold text-gray-900 text-base pt-2 mt-2 border-t border-gray-200">
+              <span>Total</span>
+              <span>Rs. {invoice.total_amount.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-gray-600 mt-2">
+              <span>Paid</span>
+              <span>Rs. {invoice.amount_paid.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-gray-900 font-semibold mt-1">
+              <span>Balance</span>
+              <span>Rs. {invoice.balance_due.toFixed(2)}</span>
+            </div>
+          </div>
         </div>
       </div>
 

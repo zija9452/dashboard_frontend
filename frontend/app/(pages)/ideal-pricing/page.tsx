@@ -23,6 +23,7 @@ interface CustomerCategoryGrouped {
   sub_categories: SubCategoryOption[];
   ideal_prices: Record<string, Record<string, number>>;
   modifiers?: Record<string, Record<string, ModifierValue>>; // sub_category -> option -> { type, value }
+  mockup_charge?: number | null; // this category's designing / mockup charge; null = none
 }
 
 interface PriceCombination {
@@ -166,10 +167,46 @@ const IdealPricingPage: React.FC = () => {
     fetchCategories();
   }, []);
 
+  // Selected category's designing / mockup charge, as typed ('' = no mockup charge).
+  const [categoryMockupInput, setCategoryMockupInput] = useState<string>('');
+  const [savingCategoryMockup, setSavingCategoryMockup] = useState(false);
+  const savedCategoryMockup = selectedCategory?.mockup_charge != null ? String(selectedCategory.mockup_charge) : '';
+
+  const handleSaveCategoryMockup = async () => {
+    if (!selectedCategory) return;
+    const value = categoryMockupInput.trim();
+    if (value !== '' && (isNaN(Number(value)) || Number(value) < 0)) {
+      showToast('Please enter a valid mockup charge, or leave it empty for no mockup charge', 'error');
+      return;
+    }
+    setSavingCategoryMockup(true);
+    try {
+      const response = await fetch(`/api/customer-category/${selectedCategory.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ mockup_charge: value === '' ? null : Number(value) }),
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const saved = value === '' ? null : Number(value);
+      const updated = { ...selectedCategory, mockup_charge: saved };
+      setSelectedCategory(updated);
+      setCategories(prev => prev.map(c => c.id === updated.id ? updated : c));
+      setCategoryMockupInput(saved === null ? '' : String(saved));
+      showToast(`${selectedCategory.main_category} mockup charge updated`, 'success');
+    } catch (error) {
+      console.error('Error saving category mockup charge:', error);
+      showToast('Failed to update mockup charge', 'error');
+    } finally {
+      setSavingCategoryMockup(false);
+    }
+  };
+
   const handleCategorySelect = (categoryId: string) => {
     setSelectedCategoryId(categoryId);
     const category = categories.find(cat => cat.id === categoryId);
     setSelectedCategory(category || null);
+    setCategoryMockupInput(category?.mockup_charge != null ? String(category.mockup_charge) : '');
 
     if (category) {
       generateCombinationsForCategory(category);
@@ -252,11 +289,65 @@ const IdealPricingPage: React.FC = () => {
     );
   };
 
-  // Filled-in tiers of one row, ready to POST as { min_qty, price }.
-  const filledTierEntries = (c: PriceCombination) =>
+  // A typed value differs from the saved one ('950' and '950.0' are the same). An emptied
+  // field is not a change - saving never deletes a saved price/modifier.
+  const isChangedValue = (typed: string | undefined, saved: number | undefined) => {
+    const t = (typed ?? '').trim();
+    if (t === '') return false;
+    return saved === undefined || Number(t) !== Number(saved);
+  };
+
+  // Tiers of one row that were typed and differ from the saved price, ready to POST.
+  const changedTierEntries = (c: PriceCombination) =>
     PRICE_TIERS
-      .filter(t => (c.prices[t.key] ?? '').trim() !== '')
+      .filter(t => isChangedValue(c.prices[t.key], selectedCategory?.ideal_prices?.[c.combination]?.[t.key]))
       .map(t => ({ min_qty: t.minQty, price: c.prices[t.key] }));
+
+  const isModifierChanged = (row: ModifierRow) => {
+    const saved = selectedCategory?.modifiers?.[row.sub_category]?.[row.option];
+    if (row.value.trim() === '') return false;
+    return !saved || saved.type !== row.type || Number(row.value) !== Number(saved.value);
+  };
+
+  // One request for any number of prices (and modifiers) of the selected category - the
+  // backend saves them in one transaction (all or none), instead of one request each.
+  const savePricesBulk = async (
+    entries: { combination: string; min_qty: number; price: string }[],
+    modifiers: ModifierRow[] = []
+  ): Promise<{ ok: true; saved: number; modifiersSaved: number } | { ok: false; error: string }> => {
+    try {
+      const response = await fetch('/api/ideal-pricing/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          category_id: selectedCategoryId,
+          branch: 'European Sports Light House',
+          entries: entries.map(e => ({
+            options_combination: e.combination,
+            min_qty: e.min_qty,
+            price: parseFloat(e.price),
+          })),
+          modifiers: modifiers.map(m => ({
+            sub_category: m.sub_category,
+            option_value: m.option,
+            adjustment_type: m.type,
+            value: Number(m.value),
+          })),
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        // detail is a string for our own errors, a list for request-validation errors
+        const message = typeof data.detail === 'string' ? data.detail : typeof data.error === 'string' ? data.error : '';
+        return { ok: false, error: `${message || 'Failed to save prices'} — nothing was saved` };
+      }
+      return { ok: true, saved: Number(data.saved) || 0, modifiersSaved: Number(data.modifiers_saved) || 0 };
+    } catch (error) {
+      console.error('Error saving prices:', error);
+      return { ok: false, error: 'Failed to save prices — check your connection' };
+    }
+  };
 
   const handleSavePrices = async () => {
     if (!selectedCategory || !selectedCategoryId) {
@@ -264,54 +355,44 @@ const IdealPricingPage: React.FC = () => {
       return;
     }
 
-    if (combinations.length === 0) {
+    if (combinations.length === 0 && modifierRows.length === 0) {
       showToast('No combinations to save', 'error');
       return;
     }
 
-    // Each combination contributes one row per filled-in quantity tier
+    // Only what changed: each combination's changed tiers...
     const entriesToSave: { combination: string; min_qty: number; price: string }[] = [];
     combinations.forEach(c => {
-      filledTierEntries(c).forEach(e => entriesToSave.push({ combination: c.combination, ...e }));
+      changedTierEntries(c).forEach(e => entriesToSave.push({ combination: c.combination, ...e }));
     });
 
-    if (entriesToSave.length === 0) {
-      showToast('Please enter at least one price', 'error');
+    // ...and changed price modifiers (Sleeves, Size Type...), in the same request.
+    const modifiersToSave = modifierRows.filter(isModifierChanged);
+    const invalidModifier = modifiersToSave.find(r => isNaN(Number(r.value)));
+    if (invalidModifier) {
+      showToast(`Enter a valid number for ${invalidModifier.sub_category}: ${invalidModifier.option}`, 'error');
+      return;
+    }
+
+    if (entriesToSave.length === 0 && modifiersToSave.length === 0) {
+      showToast('Nothing changed to save', 'error');
       return;
     }
 
     setSubmitting(true);
 
     try {
-      let successCount = 0;
-
-      for (const entry of entriesToSave) {
-        try {
-          const response = await fetch('/api/ideal-pricing/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              category_id: selectedCategoryId,
-              options_combination: entry.combination,
-              min_qty: entry.min_qty,
-              price: parseFloat(entry.price),
-              branch: 'European Sports Light House'
-            }),
-          });
-
-          if (response.ok) {
-            successCount++;
-          }
-        } catch (error) {
-          console.error('Error saving price:', error);
-        }
+      const result = await savePricesBulk(entriesToSave, modifiersToSave);
+      if (!result.ok) {
+        showToast(result.error, 'error');
+        setSubmitting(false);
+        return;
       }
 
-      if (successCount > 0) {
+      if (result.saved > 0 || result.modifiersSaved > 0) {
         Swal.fire({
           title: 'Saved!',
-          text: `${successCount} prices saved successfully.`,
+          text: `${result.saved} prices and ${result.modifiersSaved} modifiers saved successfully.`,
           icon: 'success',
           timer: 2000,
           timerProgressBar: true,
@@ -324,6 +405,7 @@ const IdealPricingPage: React.FC = () => {
         if (updatedCategory) {
           setSelectedCategory(updatedCategory);
           generateCombinationsForCategory(updatedCategory);
+          generateModifierRowsForCategory(updatedCategory);
         }
       }
 
@@ -340,37 +422,18 @@ const IdealPricingPage: React.FC = () => {
   const saveOneCombination = async (combo: PriceCombination) => {
     if (!selectedCategoryId) return;
 
-    const entries = filledTierEntries(combo);
+    const entries = changedTierEntries(combo);
 
     if (entries.length === 0) {
-      showToast('Enter at least one price for this row first', 'error');
+      showToast('Nothing changed in this row', 'error');
       return;
     }
 
     setSavingRowId(combo.id);
     try {
-      let successCount = 0;
-      for (const entry of entries) {
-        try {
-          const response = await fetch('/api/ideal-pricing/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              category_id: selectedCategoryId,
-              options_combination: combo.combination,
-              min_qty: entry.min_qty,
-              price: parseFloat(entry.price),
-              branch: 'European Sports Light House'
-            }),
-          });
-          if (response.ok) successCount++;
-        } catch (error) {
-          console.error('Error saving row:', error);
-        }
-      }
+      const result = await savePricesBulk(entries.map(e => ({ combination: combo.combination, ...e })));
 
-      if (successCount > 0) {
+      if (result.ok && result.saved > 0) {
         showToast('Row saved', 'success');
         const freshCategories = await fetchCategories();
         const updatedCategory = freshCategories.find(cat => cat.id === selectedCategoryId);
@@ -379,7 +442,7 @@ const IdealPricingPage: React.FC = () => {
           generateCombinationsForCategory(updatedCategory);
         }
       } else {
-        showToast('Failed to save row', 'error');
+        showToast(result.ok ? 'Failed to save row' : result.error, 'error');
       }
     } catch (error) {
       console.error('Error saving row:', error);
@@ -397,6 +460,10 @@ const IdealPricingPage: React.FC = () => {
     if (!selectedCategoryId) return;
     if (row.value.trim() === '' || isNaN(Number(row.value))) {
       showToast('Enter a valid number first', 'error');
+      return;
+    }
+    if (!isModifierChanged(row)) {
+      showToast('Nothing changed in this row', 'error');
       return;
     }
 
@@ -520,6 +587,40 @@ const IdealPricingPage: React.FC = () => {
             </select>
           </div>
         )}
+
+        {/* This category's designing / mockup charge (e.g. T-shirt 500, Jacket 1000) — empty = none */}
+        {selectedCategory && (
+          <div className="flex flex-wrap items-end gap-3 p-4 bg-gray-50 rounded border">
+            <div>
+              <label htmlFor="category-mockup" className="block text-sm font-medium mb-1">
+                {selectedCategory.main_category} — designing / mockup charge (Rs.)
+              </label>
+              <input
+                id="category-mockup"
+                type="number"
+                value={categoryMockupInput}
+                onChange={(e) => setCategoryMockupInput(e.target.value)}
+                className="regal-input w-40"
+                placeholder="No mockup"
+                min="0"
+                step="1"
+              />
+            </div>
+            <button
+              onClick={handleSaveCategoryMockup}
+              disabled={savingCategoryMockup || categoryMockupInput.trim() === savedCategoryMockup}
+              className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            >
+              {savingCategoryMockup ? 'Saving...' : 'Save'}
+            </button>
+            <p className="text-xs text-gray-500 w-full">
+              {selectedCategory.mockup_charge == null || Number(selectedCategory.mockup_charge) === 0
+                ? `No mockup charge for ${selectedCategory.main_category}.`
+                : `Rs. ${Number(selectedCategory.mockup_charge).toLocaleString()} once when ${selectedCategory.main_category} has 1-4 pcs in a Quotation or Customer Invoice — not per piece, and none at 5+ pcs.`}
+              {' '}Leave empty for no mockup charge. Staff can change or waive it on each order.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Combinations Table */}
@@ -536,10 +637,11 @@ const IdealPricingPage: React.FC = () => {
             </div>
             <button
               onClick={handleSavePrices}
-              disabled={submitting || !combinations.some(hasAnyPrice)}
+              disabled={submitting || (!combinations.some(c => changedTierEntries(c).length > 0) && !modifierRows.some(isModifierChanged))}
               className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              title="Saves all prices and price modifiers of this category in one go"
             >
-              {submitting ? 'Saving...' : 'Save All Prices'}
+              {submitting ? 'Saving...' : 'Save All (Prices + Modifiers)'}
             </button>
           </div>
 
@@ -556,14 +658,14 @@ const IdealPricingPage: React.FC = () => {
                   {PRICE_TIERS.map(t => (
                     <th key={t.key} className="px-2 py-5 text-left w-32 whitespace-nowrap">{t.header}</th>
                   ))}
-                  <th className="px-2 py-5 text-center w-36 whitespace-nowrap">Status / Save</th>
+                  <th className="px-2 py-5 text-center w-28 whitespace-nowrap"></th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {combinations.map((comb, index) => {
                   const parts = comb.combination.split('|');
                   const hasExistingPrice = (comb.prices['1'] ?? '') !== '';
-                  const filledCount = PRICE_TIERS.filter(t => (comb.prices[t.key] ?? '') !== '').length;
+                  const rowChanged = changedTierEntries(comb).length > 0;
 
                   return (
                     <tr
@@ -594,28 +696,13 @@ const IdealPricingPage: React.FC = () => {
                         </td>
                       ))}
                       <td className="px-2 py-4 text-center whitespace-nowrap">
-                        <div className="flex flex-col items-center gap-1.5">
-                          {filledCount === PRICE_TIERS.length ? (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                              ✓ All Set
-                            </span>
-                          ) : filledCount > 0 ? (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                              ✓ {filledCount}/{PRICE_TIERS.length} Set
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                              ○ Empty
-                            </span>
-                          )}
-                          <button
-                            onClick={() => saveOneCombination(comb)}
-                            disabled={savingRowId === comb.id || filledCount === 0}
-                            className="regal-btn bg-regal-black text-white text-xs px-3 py-1 disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            {savingRowId === comb.id ? 'Saving...' : 'Save'}
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => saveOneCombination(comb)}
+                          disabled={savingRowId === comb.id || !rowChanged}
+                          className="regal-btn bg-regal-black text-white text-xs px-3 py-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {savingRowId === comb.id ? 'Saving...' : 'Save'}
+                        </button>
                       </td>
                     </tr>
                   );
@@ -708,7 +795,7 @@ const IdealPricingPage: React.FC = () => {
                         <td className="px-3 py-3 text-center">
                           <button
                             onClick={() => saveModifier(row)}
-                            disabled={savingModifierId === row.id}
+                            disabled={savingModifierId === row.id || !isModifierChanged(row)}
                             className="regal-btn bg-regal-black text-white text-xs px-3 py-1 disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             {savingModifierId === row.id ? 'Saving...' : 'Save'}

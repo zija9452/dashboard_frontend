@@ -6,6 +6,19 @@ import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import ReportModal from '@/components/ui/ReportModal';
 import { ProductsApi } from '@/lib/api/products';
+import {
+  CustomerCategoryGrouped,
+  PricedLine,
+  tierForQuantity,
+  isQtyTier,
+  lookupIdealPrice,
+  piecesOfCategory,
+  repriceCart,
+  mockupLines,
+  categoryTierSummaries,
+  categoryMockupDefault,
+} from '@/lib/quantityPricing';
+import { QuantityTierCards, MockupChargeRows, MockupLinePreview } from '@/components/QuantityTierCards';
 
 interface Customer {
   cus_id: string;
@@ -27,55 +40,13 @@ interface Salesman {
   sal_name: string;
 }
 
-interface SubCategoryOption {
-  sub_category: string;
-  options: string[];
-  is_modifier?: boolean; // true = a price adjustment dimension (Sleeves, Size Type...), not part of the base combination
-  is_optional?: boolean; // true = hidden by default, shown via the "+" more-options toggle
-}
-
-interface ModifierValue {
-  type: 'flat' | 'multiply';
-  value: number;
-}
-
-interface CustomerCategoryGrouped {
-  id: string;
-  main_category: string;
-  sub_categories: SubCategoryOption[];
-  ideal_prices?: Record<string, Record<string, number>>;
-  modifiers?: Record<string, Record<string, ModifierValue>>;
-}
-
-// Quantity tiers, keyed by min_qty in ideal_prices: 1-4 pcs, 5-15, 16-99, 100+.
-const PRICE_TIERS = [
-  { minQty: 1, label: '1 pc rate, 1-4 pcs' },
-  { minQty: 5, label: 'qty rate, 5-15 pcs' },
-  { minQty: 16, label: 'qty rate, 16-99 pcs' },
-  { minQty: 100, label: 'qty rate, 100+ pcs' },
-];
-
-const tierForQuantity = (quantity: number) =>
-  [...PRICE_TIERS].reverse().find(t => quantity >= t.minQty) ?? PRICE_TIERS[0];
-
-// Price for exactly the tier the quantity falls in. No fallback to another tier: if
-// that tier has no rate, the Rate stays empty and staff enter it manually.
-const pickTierPrice = (tiers: Record<string, number>, quantity: number): number | undefined =>
-  tiers[String(tierForQuantity(quantity).minQty)];
-
-interface CartItem {
-  id: string;
-  category: string;
-  unitPrice: number;
-  quantity: number;
-  totalPrice: number;
+// Pricing (tiers from all pieces of a category, re-pricing, mockup) is shared with
+// the Quotation page - see lib/quantityPricing.ts.
+interface CartItem extends PricedLine {
   // Cloudinary image URLs
   image1: string | null;
   image2: string | null;
   image3: string | null;
-  // Dynamic category fields - stores selected options for each sub-category
-  // Example: { "Neck": "Round", "Fabric": "Polyzone" }
-  category_fields?: Record<string, string>;
 }
 
 // Dynamic Category Fields Component - Shows ideal price when all options selected
@@ -84,10 +55,10 @@ const DynamicCategoryFields: React.FC<{
   customerCategories: CustomerCategoryGrouped[];
   dynamicCategoryFields: Record<string, string>;
   setDynamicCategoryFields: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  quantity: number | '';
+  tierPieces: number | ''; // this item's quantity + pieces of this category already in the cart
   onIdealPriceChange?: (price: number) => void;
-}> = ({ selectedCategory, customerCategories, dynamicCategoryFields, setDynamicCategoryFields, quantity, onIdealPriceChange }) => {
-  // Whether the optional fields (Rib, Zip...) are revealed — hidden by default,
+}> = ({ selectedCategory, customerCategories, dynamicCategoryFields, setDynamicCategoryFields, tierPieces, onIdealPriceChange }) => {
+  // Whether the optional fields (Rib, Zip...) are revealed - hidden by default,
   // shown via the "+" button below the required fields.
   const [showOptionalFields, setShowOptionalFields] = useState(false);
 
@@ -104,60 +75,9 @@ const DynamicCategoryFields: React.FC<{
     }));
   };
 
-  // Calculate price based on selected options. "Base" sub-categories (not flagged
-  // is_modifier) form the priced combination (rate picked by quantity tier, see
-  // PRICE_TIERS); "modifier" sub-categories (Sleeves, Size Type...) are adjustments
-  // applied on top: final = (base + sum of flat adjustments) × product of multiply
-  // adjustments.
-  const calculateIdealPrice = (): number | null => {
-    if (!categoryData.ideal_prices || Object.keys(categoryData.ideal_prices).length === 0) {
-      return null;
-    }
-
-    // Check if all required sub-categories have been selected — optional ones
-    // (hidden behind the "+" toggle, e.g. Rib, Zip) don't block the price.
-    const allSelected = categoryData.sub_categories
-      .filter(subCat => !subCat.is_optional)
-      .every(subCat => !!dynamicCategoryFields[subCat.sub_category]);
-    if (!allSelected) {
-      return null;
-    }
-
-    // Quantity must be entered first — it's what decides which tier (bulk vs
-    // single-piece) applies, so no price should be suggested before it's known.
-    if (quantity === '' || quantity <= 0) {
-      return null;
-    }
-
-    const baseSubCats = categoryData.sub_categories.filter(sc => !sc.is_modifier);
-    const modifierSubCats = categoryData.sub_categories.filter(sc => sc.is_modifier);
-
-    const combinationKey = baseSubCats.map(sc => dynamicCategoryFields[sc.sub_category]).join('|');
-
-    // Lookup tiered prices for this exact base combination: { "1": ..., "5": ..., "16": ..., "100": ... }
-    const tiers = categoryData.ideal_prices[combinationKey];
-    if (!tiers) return null;
-
-    const basePrice = pickTierPrice(tiers, quantity);
-    if (basePrice === undefined) return null;
-
-    let flatSum = 0;
-    let multiplyProduct = 1;
-    for (const sc of modifierSubCats) {
-      const selectedOption = dynamicCategoryFields[sc.sub_category];
-      const modifier = categoryData.modifiers?.[sc.sub_category]?.[selectedOption];
-      if (!modifier) continue;
-      if (modifier.type === 'multiply') {
-        multiplyProduct *= modifier.value;
-      } else {
-        flatSum += modifier.value;
-      }
-    }
-
-    return (basePrice + flatSum) * multiplyProduct;
-  };
-
-  const idealPrice = calculateIdealPrice();
+  // Price for the selected options at the tier of all this category's pieces (see
+  // lookupIdealPrice in lib/quantityPricing.ts).
+  const idealPrice = lookupIdealPrice(categoryData, dynamicCategoryFields, tierPieces);
 
   // Notify parent of ideal price change (re-evaluates whenever quantity crosses the bulk tier)
   useEffect(() => {
@@ -195,7 +115,7 @@ const DynamicCategoryFields: React.FC<{
         ))}
       </div>
 
-      {/* Optional fields (Rib, Zip...) — hidden by default, revealed via "+" */}
+      {/* Optional fields (Rib, Zip...) - hidden by default, revealed via "+" */}
       {categoryData.sub_categories.some(subCat => subCat.is_optional) && (
         <div className="pt-2 border-t border-regal-black/20">
           {!showOptionalFields ? (
@@ -249,7 +169,7 @@ const DynamicCategoryFields: React.FC<{
           return <p className="text-xs text-regal-black mt-3">Enter quantity below to fill the fixed price into the Rate field.</p>;
         }
         if (idealPrice === null) {
-          return <p className="text-xs text-amber-700 font-medium mt-3">No fixed price set for this combination — enter the Rate manually.</p>;
+          return <p className="text-xs text-amber-700 font-medium mt-3">No fixed price set for this combination - enter the Rate manually.</p>;
         }
         return (
           <p className="text-xs text-green-800 font-medium mt-3">
@@ -310,6 +230,13 @@ const CustomerInvoicePage: React.FC = () => {
   const [rushRate, setRushRate] = useState<number | ''>('');
   // An emptied rush rate box counts as 0 (no rush charge), both here and on save.
   const rushRateValue = rushRate === '' ? 0 : rushRate;
+  // Designing / mockup charge per category with 1-4 pcs - each category's own amount
+  // (customer_categories.mockup_charge), editable per order in the totals area.
+  const [mockupAmounts, setMockupAmounts] = useState<Record<string, number>>({});
+  // Category's own charge (e.g. Jacket 1000); not set or 0 = no mockup for it.
+  const mockupDefaultFor = (category: string) => categoryMockupDefault(customerCategories, category);
+  const hasMockupCharge = (category: string) => mockupDefaultFor(category) > 0;
+  const mockupAmountFor = (category: string) => mockupAmounts[category] ?? mockupDefaultFor(category);
   const [totalAmount, setTotalAmount] = useState<number>(0);
   const [amountPaid, setAmountPaid] = useState<string>('');
   const [balance, setBalance] = useState<number>(0);
@@ -318,14 +245,14 @@ const CustomerInvoicePage: React.FC = () => {
   // Idempotency: identifies one checkout attempt so a lost-response retry (or a
   // resubmit after a page refresh) is recognized by the backend instead of creating
   // a duplicate invoice. Cleared as soon as create() confirms success (returns an
-  // invoice_id) — after that point there's no more duplicate-creation risk.
+  // invoice_id) - after that point there's no more duplicate-creation risk.
   const idempotencyKeyRef = useRef<string | null>(null);
   const CUSTOMER_PENDING_KEY_STORAGE = 'customer-invoice-pending-key';
   // True while resolving a leftover pending key from localStorage on page load. Submit
   // stays disabled until this resolves, otherwise a fresh submit could race the check.
   const [checkingPendingInvoice, setCheckingPendingInvoice] = useState(false);
   const [pendingCheckError, setPendingCheckError] = useState(false);
-  // True while fetchAndShowCustomerReceipt() is in flight — shows a full-screen
+  // True while fetchAndShowCustomerReceipt() is in flight - shows a full-screen
   // blurred loading overlay so the cashier isn't left staring at a blank screen
   // while the PDF (a separate, sometimes-slow call) is generated and fetched.
   const [loadingReceipt, setLoadingReceipt] = useState(false);
@@ -333,7 +260,7 @@ const CustomerInvoicePage: React.FC = () => {
   // Separate from the idempotency key above: once create() succeeds there's no more
   // duplicate risk, but the receipt (PDF) step is a second, independent call that can
   // still fail or be interrupted by a refresh. This remembers "invoice X exists but its
-  // receipt hasn't been shown yet" so a refresh can quietly recover it — unlike the
+  // receipt hasn't been shown yet" so a refresh can quietly recover it - unlike the
   // idempotency key, this never blocks Submit, since there's nothing ambiguous to guard.
   const CUSTOMER_LAST_CREATED_STORAGE = 'customer-invoice-last-created';
 
@@ -364,11 +291,23 @@ const CustomerInvoicePage: React.FC = () => {
 
   // Whenever the selected combination (or the quantity, which can flip the bulk
   // tier) resolves to a fixed price, it's filled straight into the editable Rate
-  // field below — no separate read-only "ideal price" box. Staff can type over it.
+  // field below - no separate read-only "ideal price" box. Staff can type over it.
   const handleIdealPriceChange = (price: number) => {
     setUnitPrice(price);
     setPriceWasAutoFilled(true);
   };
+
+  // The tier comes from every piece of this category in the invoice: what's already in
+  // the cart + the quantity being entered.
+  const piecesAlreadyInCart = selectedCategory ? piecesOfCategory(cart, selectedCategory) : 0;
+  const tierPieces: number | '' = quantity === '' ? '' : quantity + piecesAlreadyInCart;
+  const selectedCategoryData = customerCategories.find(cat => cat.main_category === selectedCategory);
+  const matchedIdealPrice = lookupIdealPrice(selectedCategoryData, dynamicCategoryFields, tierPieces);
+
+  const mockups = mockupLines(cart, mockupAmounts, mockupDefaultFor);
+  const mockupTotal = mockups.reduce((sum, m) => sum + m.amount, 0);
+  const tierSummaries = categoryTierSummaries(cart, customerCategories, mockupAmountFor, hasMockupCharge);
+  const linesMissingPrice = cart.filter(item => item.missingTierPrice);
 
   // Fetch customers, salesmans and customer categories
   useEffect(() => {
@@ -390,7 +329,7 @@ const CustomerInvoicePage: React.FC = () => {
         method: 'POST',
         credentials: 'include',
         // A stalled connection (e.g. internet drops mid-request) can otherwise hang
-        // indefinitely — fetch() doesn't fail on its own until the request settles,
+        // indefinitely - fetch() doesn't fail on its own until the request settles,
         // so without this the loading overlay could get stuck forever.
         signal: AbortSignal.timeout(20000),
       });
@@ -410,8 +349,8 @@ const CustomerInvoicePage: React.FC = () => {
   };
 
   // On load, resolve any "pending" checkout attempt left over from a previous visit
-  // (its response never arrived — e.g. lost connection or the page was refreshed
-  // mid-submit). We never guess from cart content — we ask the backend for the
+  // (its response never arrived - e.g. lost connection or the page was refreshed
+  // mid-submit). We never guess from cart content - we ask the backend for the
   // authoritative outcome, then clear the pending key either way. Submit stays
   // disabled until this resolves so a fresh submit can't race it.
   const resolvePendingInvoice = async () => {
@@ -432,7 +371,7 @@ const CustomerInvoicePage: React.FC = () => {
       });
 
       if (res.status === 404) {
-        // That attempt never actually reached the database — safe to discard.
+        // That attempt never actually reached the database - safe to discard.
         idempotencyKeyRef.current = null;
         try { localStorage.removeItem(CUSTOMER_PENDING_KEY_STORAGE); } catch { /* ignore */ }
         setCheckingPendingInvoice(false);
@@ -440,7 +379,7 @@ const CustomerInvoicePage: React.FC = () => {
       }
 
       if (!res.ok) {
-        // Ambiguous (server error) — don't guess, let the user retry the check.
+        // Ambiguous (server error) - don't guess, let the user retry the check.
         setPendingCheckError(true);
         setCheckingPendingInvoice(false);
         return;
@@ -454,7 +393,7 @@ const CustomerInvoicePage: React.FC = () => {
       await fetchAndShowCustomerReceipt(data.invoice_id);
       setCheckingPendingInvoice(false);
     } catch {
-      // Network still down — don't guess, keep the key and let the user retry.
+      // Network still down - don't guess, keep the key and let the user retry.
       setPendingCheckError(true);
       setCheckingPendingInvoice(false);
     }
@@ -465,9 +404,9 @@ const CustomerInvoicePage: React.FC = () => {
   }, []);
 
   // Separately, recover a receipt that never got shown (invoice creation itself
-  // already succeeded — this is a plain re-fetch, so it never blocks Submit).
+  // already succeeded - this is a plain re-fetch, so it never blocks Submit).
   // Called on mount, and again whenever the browser regains connectivity (see the
-  // 'online' listener below) — so recovery doesn't require a manual refresh.
+  // 'online' listener below) - so recovery doesn't require a manual refresh.
   const recoverLastCreatedReceipt = async () => {
     let stored: { invoiceId: string; invoiceNo: string } | null = null;
     try {
@@ -482,14 +421,14 @@ const CustomerInvoicePage: React.FC = () => {
       try { localStorage.removeItem(CUSTOMER_LAST_CREATED_STORAGE); } catch { /* ignore */ }
       showToast(`Recovered receipt for invoice ${stored.invoiceNo}`, 'success');
     }
-    // If it still fails (e.g. net is still down), leave it — the 'online' event,
+    // If it still fails (e.g. net is still down), leave it - the 'online' event,
     // next mount, or Duplicate Bill, can recover it. We don't retry-loop or block.
   };
 
   useEffect(() => {
     recoverLastCreatedReceipt();
 
-    // The browser fires this the moment connectivity is restored — retry right
+    // The browser fires this the moment connectivity is restored - retry right
     // then instead of making the cashier remember to refresh the page.
     window.addEventListener('online', recoverLastCreatedReceipt);
     return () => window.removeEventListener('online', recoverLastCreatedReceipt);
@@ -569,7 +508,7 @@ const CustomerInvoicePage: React.FC = () => {
     }
   }, [unitPrice, quantity]);
 
-  // Calculate total and balance — rush charge (if the deadline falls within
+  // Calculate total and balance - rush charge (if the deadline falls within
   // threshold_days of today) is added the same way quotation.py's _build_totals
   // adds it; discount here stays purely informational (pre-existing behavior).
   useEffect(() => {
@@ -586,13 +525,13 @@ const CustomerInvoicePage: React.FC = () => {
     }
     const rushCharge = isRush ? rushRateValue * totalPieces : 0;
 
-    const total = subtotal + rushCharge;
+    const total = subtotal + rushCharge + mockupTotal;
     setTotalAmount(total);
     const paidAmount = amountPaid === '' ? 0 : Number(amountPaid);
     setBalance(total - paidAmount);
-  }, [cart, amountPaid, requiredByDate, rushThresholdDays, rushRateValue]);
+  }, [cart, amountPaid, requiredByDate, rushThresholdDays, rushRateValue, mockupTotal]);
 
-  // Live preview for the RUSH badge/helper text next to the Deadline field —
+  // Live preview for the RUSH badge/helper text next to the Deadline field -
   // same day-math as the useEffect above, just recomputed for render.
   const totalPieces = cart.reduce((sum, item) => sum + item.quantity, 0);
   let estimatedIsRush = false;
@@ -756,7 +695,7 @@ const CustomerInvoicePage: React.FC = () => {
         return;
       }
 
-      // Validate all required sub-categories have selected options — optional
+      // Validate all required sub-categories have selected options - optional
       // ones (Rib, Zip...) are fine left blank.
       const missingFields = categoryData.sub_categories.filter(
         sc => !sc.is_optional && (!dynamicCategoryFields[sc.sub_category] || !dynamicCategoryFields[sc.sub_category].trim())
@@ -791,12 +730,32 @@ const CustomerInvoicePage: React.FC = () => {
       image3: image3Url,
       // Dynamic category fields - stores selected options for each sub-category
       category_fields: { ...dynamicCategoryFields },
+      // Only a rate still equal to the price-list rate is re-priced later; a rate the
+      // staff typed stays as typed.
+      autoPriced: priceWasAutoFilled && matchedIdealPrice !== null && unitPrice === matchedIdealPrice,
     };
 
-    setCart([...cart, newItem]);
+    updateCart([...cart, newItem]);
 
     // Clear form
     clearForm();
+  };
+
+  // Every add/remove re-prices the auto-priced lines from their category's new total.
+  // No toast - the change shows in the cart itself (tier cards, rate tags, mockup rows).
+  const updateCart = (next: CartItem[]) => {
+    const { items } = repriceCart(next, customerCategories);
+    // A category that left the cart forgets its edited mockup amount.
+    setMockupAmounts(prev => Object.fromEntries(Object.entries(prev).filter(([c]) => items.some(i => i.category === c))));
+    setCart(items);
+  };
+
+  // For a line whose tier has no price in the list: the rate typed here makes it a
+  // manual line (never re-priced) and clears the warning.
+  const setLineRate = (id: string, rate: number) => {
+    setCart(cart.map(item => item.id === id
+      ? { ...item, unitPrice: rate, totalPrice: rate * item.quantity, autoPriced: false, missingTierPrice: false, previousUnitPrice: null, rateChange: null }
+      : item));
   };
 
   // Clear form
@@ -816,9 +775,6 @@ const CustomerInvoicePage: React.FC = () => {
     setImage3Key(prev => prev + 1);
     // Clear dynamic category fields
     setDynamicCategoryFields({});
-
-    // Show success message
-    showToast('Item added to cart', 'success');
   };
 
   // Reset new customer form
@@ -835,7 +791,7 @@ const CustomerInvoicePage: React.FC = () => {
 
   // Remove item from cart
   const removeFromCart = (id: string) => {
-    setCart(cart.filter(item => item.id !== id));
+    updateCart(cart.filter(item => item.id !== id));
   };
 
  const validateCustomerForm = (customer: NewCustomerType) => {
@@ -940,11 +896,15 @@ const handleAddCustomer = async () => {
       showToast('Please enter the deadline', 'error');
       return;
     }
+    if (linesMissingPrice.length > 0) {
+      showToast(`Enter the rate for ${linesMissingPrice.length} item(s) marked "no price for this tier"`, 'error');
+      return;
+    }
 
     if (submitting || checkingPendingInvoice) return;
     setSubmitting(true);
 
-    // A fresh key per attempt — never inferred from cart content. Persisted in
+    // A fresh key per attempt - never inferred from cart content. Persisted in
     // localStorage (not just memory) so a page refresh mid-request can still be
     // resolved by resolvePendingInvoice() on next load instead of retrying blind.
     if (!idempotencyKeyRef.current) {
@@ -952,7 +912,7 @@ const handleAddCustomer = async () => {
       try {
         localStorage.setItem(CUSTOMER_PENDING_KEY_STORAGE, idempotencyKeyRef.current);
       } catch {
-        // localStorage unavailable (e.g. private mode) — in-memory retry still works this session
+        // localStorage unavailable (e.g. private mode) - in-memory retry still works this session
       }
     }
 
@@ -993,6 +953,7 @@ const handleAddCustomer = async () => {
         required_by_date: requiredByDate,
         rush_rate_per_piece: rushRateValue,
         rush_threshold_days: rushThresholdDays,
+        mockup_charges: mockups.map(m => ({ category: m.category, amount: m.amount })),
         idempotency_key: idempotencyKeyRef.current,
       };
 
@@ -1008,7 +969,7 @@ const handleAddCustomer = async () => {
       if (response.ok) {
         const result = await response.json();
 
-        // Invoice is confirmed created — the duplicate-creation risk is over.
+        // Invoice is confirmed created - the duplicate-creation risk is over.
         idempotencyKeyRef.current = null;
         try { localStorage.removeItem(CUSTOMER_PENDING_KEY_STORAGE); } catch { /* ignore */ }
 
@@ -1018,13 +979,14 @@ const handleAddCustomer = async () => {
         setTeamName('');
         setRequiredByDate('');
         setRushRate(rushRatePerPiece ?? '');
+        setMockupAmounts({});
         setAmountPaid('');
         setPaymentMethod('Cash');
 
         // Show receipt modal using report URL (consistent with customer details)
         if (result.invoice_id) {
           // Immediate confirmation that the sale itself is safe, shown before we even
-          // attempt to fetch the printable receipt — so a slow/failed receipt fetch
+          // attempt to fetch the printable receipt - so a slow/failed receipt fetch
           // never leaves the cashier wondering whether the sale went through.
           Swal.fire({
             title: 'Invoice Created!',
@@ -1034,7 +996,7 @@ const handleAddCustomer = async () => {
             showConfirmButton: false
           });
 
-          // Remember this invoice separately until its receipt is actually shown — if
+          // Remember this invoice separately until its receipt is actually shown - if
           // the fetch below fails or a refresh interrupts it, the mount-time recovery
           // effect can find it and quietly re-fetch, without needing to guard against
           // duplicate creation (the invoice already, unambiguously, exists).
@@ -1170,12 +1132,12 @@ const handleAddCustomer = async () => {
                     customerCategories={customerCategories}
                     dynamicCategoryFields={dynamicCategoryFields}
                     setDynamicCategoryFields={setDynamicCategoryFields}
-                    quantity={quantity}
+                    tierPieces={tierPieces}
                     onIdealPriceChange={handleIdealPriceChange}
                   />
                 )}
 
-                {/* Quantity — comes before Rate: it decides which price tier (bulk 5+ vs single-piece) applies */}
+                {/* Quantity - comes before Rate: it decides which price tier (bulk 5+ vs single-piece) applies */}
                 <div>
                   <label className="block text-sm font-medium mb-1">Quantity</label>
                   <input
@@ -1209,6 +1171,12 @@ const handleAddCustomer = async () => {
                     min="1"
                   />
                   {/* <p className="text-xs text-gray-500 mt-1">Enter quantity first - it decides whether the bulk (5+) or single-piece rate applies.</p> */}
+                  {tierPieces !== '' && tierPieces > 0 && selectedCategory && (
+                    <p className={`text-xs mt-1 font-medium ${isQtyTier(tierPieces) ? 'text-purple-700' : 'text-gray-500'}`}>
+                      {tierForQuantity(tierPieces).label}
+                      {piecesAlreadyInCart > 0 && ` - ${tierPieces} ${selectedCategory} pcs in this invoice (${piecesAlreadyInCart} already added + ${quantity})`}
+                    </p>
+                  )}
                 </div>
 
                 {/* Rate (Unit Price) */}
@@ -1238,6 +1206,15 @@ const handleAddCustomer = async () => {
                     readOnly
                     placeholder="Price"
                   />
+                  {tierPieces !== '' && hasMockupCharge(selectedCategory) && (
+                    <MockupLinePreview
+                      category={selectedCategory}
+                      tierPieces={tierPieces}
+                      alreadyInCart={piecesAlreadyInCart}
+                      lineTotal={price}
+                      amount={mockupAmountFor(selectedCategory)}
+                    />
+                  )}
                 </div>
 
                 {/* Image Uploads with Cloudinary */}
@@ -1433,6 +1410,7 @@ const handleAddCustomer = async () => {
             {/* Items Table (Right Top) */}
             <div className="regal-card p-3 md:p-6" style={{ minHeight: '320px' }}>
               <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Items ({cart.length})</h2>
+              <QuantityTierCards summaries={tierSummaries} />
               <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '280px' }}>
                 <table className="w-full min-w-[600px]">
                   <thead className="bg-gray-100 sticky top-0 z-10">
@@ -1465,7 +1443,37 @@ const handleAddCustomer = async () => {
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-4 text-sm text-gray-900">{item.unitPrice.toFixed(2)}</td>
+                        <td className="px-4 py-4 text-sm text-gray-900">
+                          {item.previousUnitPrice != null && (
+                            <span className="block text-xs text-gray-400 line-through">{item.previousUnitPrice.toFixed(2)}</span>
+                          )}
+                          {item.missingTierPrice ? (
+                            <input
+                              type="number"
+                              defaultValue={item.unitPrice}
+                              min="1"
+                              step="1"
+                              aria-label={`Rate for ${item.category}`}
+                              onBlur={(e) => { const v = Number(e.target.value); if (v > 0) setLineRate(item.id, v); }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
+                              className="w-24 px-2 py-1 border border-amber-400 rounded-md"
+                            />
+                          ) : (
+                            <span className={item.rateChange === 'down' ? 'text-green-700 font-medium' : ''}>{item.unitPrice.toFixed(2)}</span>
+                          )}
+                          {item.rateChange === 'down' && (
+                            <span className="block text-[10px] text-green-700">qty rate · {piecesOfCategory(cart, item.category)} pcs</span>
+                          )}
+                          {item.rateChange === 'up' && (
+                            <span className="block text-[10px] text-amber-600">
+                              {isQtyTier(piecesOfCategory(cart, item.category)) ? 'qty' : 'single'} rate · {piecesOfCategory(cart, item.category)} pcs
+                            </span>
+                          )}
+                          {!item.autoPriced && <span className="block text-[10px] text-gray-400">manual</span>}
+                          {item.missingTierPrice && (
+                            <span className="block text-[10px] text-amber-600">no price for this tier - enter rate</span>
+                          )}
+                        </td>
                         <td className="px-4 py-4 text-sm text-gray-900">{item.quantity}</td>
                         <td className="px-4 py-4 text-sm font-semibold text-gray-900">{item.totalPrice.toFixed(2)}</td>
                         <td className="px-4 py-4 text-sm">
@@ -1556,7 +1564,7 @@ const handleAddCustomer = async () => {
                     />
                   </div>
 
-                  {/* Deadline — rush status/charge is decided automatically from this,
+                  {/* Deadline - rush status/charge is decided automatically from this,
                       the same way Quotation does it. No manual "Rush" toggle. */}
                   <div>
                     <label className="block text-sm font-medium mb-1">
@@ -1575,13 +1583,13 @@ const handleAddCustomer = async () => {
                     />
                     {requiredByDate && !estimatedIsRush && (
                       <p className="text-xs text-green-700 font-medium mt-1">
-                        ✓ Normal order — due {deadlineLabel}, no rush charge
+                        ✓ Normal order - due {deadlineLabel}, no rush charge
                       </p>
                     )}
                   </div>
                 </div>
 
-                {/* Rush panel — shown only when the deadline makes it a rush order.
+                {/* Rush panel - shown only when the deadline makes it a rush order.
                     The per-piece rate is pre-filled with the default and editable. */}
                 {estimatedIsRush && (
                   <div className="mb-3 md:mb-4 rounded-lg border border-orange-200 bg-orange-50/50 overflow-hidden">
@@ -1627,6 +1635,12 @@ const handleAddCustomer = async () => {
                   </div>
                 )}
 
+                {/* Designing / mockup charge - one row per category with 1-4 pcs */}
+                <MockupChargeRows
+                  lines={mockups}
+                  onAmountChange={(category, amount) => setMockupAmounts(prev => ({ ...prev, [category]: amount }))}
+                />
+
                 {/* Amount Fields - 4 in one row */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-3 md:mb-4">
                   {/* Total Amount */}
@@ -1640,6 +1654,9 @@ const handleAddCustomer = async () => {
                     />
                     {estimatedIsRush && estimatedRushCharge > 0 && (
                       <p className="text-xs text-orange-700 mt-1">Includes Rs. {estimatedRushCharge.toLocaleString()} rush charge</p>
+                    )}
+                    {mockupTotal > 0 && (
+                      <p className="text-xs text-purple-700 mt-1">Includes Rs. {mockupTotal.toLocaleString()} mockup charge</p>
                     )}
                   </div>
 

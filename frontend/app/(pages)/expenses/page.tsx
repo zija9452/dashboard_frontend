@@ -515,7 +515,7 @@ const ExpensesPage: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">{expense.amount}</td>
                     <td className="px-6 py-4 text-sm text-gray-500">
-                      {new Date(expense.expense_date).toLocaleDateString()}
+                      {new Date(expense.expense_date).toLocaleDateString('en-GB')}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">{expense.branch}</td>
                     <td className="px-6 py-4 text-sm">

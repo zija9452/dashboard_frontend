@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
@@ -19,6 +19,8 @@ import {
   categoryMockupDefault,
 } from '@/lib/quantityPricing';
 import { QuantityTierCards, MockupChargeRows, MockupLinePreview } from '@/components/QuantityTierCards';
+import { DtfSettings, DtfLogo, DtfResult, computeDtf, dtfLogosLabel, dtfTotalOf, metersLabel } from '@/lib/dtfLayout';
+import { DtfLogoBox, DtfChargeRows } from '@/components/DtfLogos';
 import { useBranch } from '@/lib/branch';
 
 interface Customer {
@@ -58,7 +60,12 @@ const DynamicCategoryFields: React.FC<{
   setDynamicCategoryFields: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   tierPieces: number | ''; // this item's quantity + pieces of this category already in the cart
   onIdealPriceChange?: (price: number) => void;
-}> = ({ selectedCategory, customerCategories, dynamicCategoryFields, setDynamicCategoryFields, tierPieces, onIdealPriceChange }) => {
+  // DTF logos box (categories with dtf_enabled) - state lives in the page so Add to Invoice can use it
+  dtfLogos: DtfLogo[];
+  onDtfLogosChange: (logos: DtfLogo[]) => void;
+  dtfResult: DtfResult;
+  quantity: number | '';
+}> = ({ selectedCategory, customerCategories, dynamicCategoryFields, setDynamicCategoryFields, tierPieces, onIdealPriceChange, dtfLogos, onDtfLogosChange, dtfResult, quantity }) => {
   // Whether the optional fields (Rib, Zip...) are revealed - hidden by default,
   // shown via the "+" button below the required fields.
   const [showOptionalFields, setShowOptionalFields] = useState(false);
@@ -116,8 +123,8 @@ const DynamicCategoryFields: React.FC<{
         ))}
       </div>
 
-      {/* Optional fields (Rib, Zip...) - hidden by default, revealed via "+" */}
-      {categoryData.sub_categories.some(subCat => subCat.is_optional) && (
+      {/* Optional fields (Rib, Zip...) and DTF logos - hidden by default, revealed via "+" */}
+      {(categoryData.sub_categories.some(subCat => subCat.is_optional) || categoryData.dtf_enabled) && (
         <div className="pt-2 border-t border-regal-black/20">
           {!showOptionalFields ? (
             <button
@@ -125,7 +132,7 @@ const DynamicCategoryFields: React.FC<{
               onClick={() => setShowOptionalFields(true)}
               className="text-sm font-medium text-regal-black flex items-center gap-1 hover:underline"
             >
-              <span className="text-lg leading-none">+</span> More options
+              <span className="text-lg leading-none">+</span> More options{categoryData.dtf_enabled && ' (DTF logos)'}
             </button>
           ) : (
             <>
@@ -136,6 +143,7 @@ const DynamicCategoryFields: React.FC<{
               >
                 − Hide more options
               </button>
+              {categoryData.sub_categories.some(subCat => subCat.is_optional) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {categoryData.sub_categories.filter(subCat => subCat.is_optional).map((subCat, index) => (
                   <div key={index} className="space-y-1">
@@ -157,6 +165,16 @@ const DynamicCategoryFields: React.FC<{
                   </div>
                 ))}
               </div>
+              )}
+              {categoryData.dtf_enabled && (
+                <DtfLogoBox
+                  category={selectedCategory}
+                  logos={dtfLogos}
+                  onChange={onDtfLogosChange}
+                  result={dtfResult}
+                  quantity={quantity}
+                />
+              )}
             </>
           )}
         </div>
@@ -291,6 +309,10 @@ const CustomerInvoicePage: React.FC = () => {
   // Example: { "Neck Style": "Round", "Sleeve": "Full" }
   const [dynamicCategoryFields, setDynamicCategoryFields] = useState<Record<string, string>>({});
 
+  // DTF logos (width x height on one piece) for a category with dtf_enabled - see lib/dtfLayout.ts.
+  const [dtfLogos, setDtfLogos] = useState<DtfLogo[]>([]);
+  const [dtfSettings, setDtfSettings] = useState<DtfSettings | null>(null);
+
   // Whenever the selected combination (or the quantity, which can flip the bulk
   // tier) resolves to a fixed price, it's filled straight into the editable Rate
   // field below - no separate read-only "ideal price" box. Staff can type over it.
@@ -305,6 +327,12 @@ const CustomerInvoicePage: React.FC = () => {
   const tierPieces: number | '' = quantity === '' ? '' : quantity + piecesAlreadyInCart;
   const selectedCategoryData = customerCategories.find(cat => cat.main_category === selectedCategory);
   const matchedIdealPrice = lookupIdealPrice(selectedCategoryData, dynamicCategoryFields, tierPieces);
+  // Roll layout + charge for the logos being entered, re-worked on every keystroke.
+  const dtfResult = useMemo(
+    () => (selectedCategoryData?.dtf_enabled ? computeDtf(dtfLogos, quantity, dtfSettings) : computeDtf([], '', null)),
+    [selectedCategoryData?.dtf_enabled, dtfLogos, quantity, dtfSettings]
+  );
+  const dtfTotal = dtfTotalOf(cart);
 
   const mockups = mockupLines(cart, mockupAmounts, mockupDefaultFor);
   const mockupTotal = mockups.reduce((sum, m) => sum + m.amount, 0);
@@ -317,6 +345,7 @@ const CustomerInvoicePage: React.FC = () => {
     fetchSalesmans();
     fetchCustomerCategories();
     fetchRushSettings();
+    fetchDtfSettings();
   }, []);
 
   // Fetch a receipt PDF for an already-created invoice and show it. This is a plain
@@ -485,6 +514,23 @@ const CustomerInvoicePage: React.FC = () => {
     }
   };
 
+  // DTF rule (Rs per 0.5 m, roll width, gap), saved on the Ideal Pricing page.
+  const fetchDtfSettings = async () => {
+    try {
+      const response = await fetch('/api/dtf-pricing/', { method: 'GET', credentials: 'include' });
+      if (response.ok) {
+        const data = await response.json();
+        setDtfSettings({
+          price_per_half_meter: Number(data.price_per_half_meter),
+          roll_width_in: Number(data.roll_width_in),
+          gap_in: Number(data.gap_in),
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching DTF settings:', error);
+    }
+  };
+
   const fetchSalesmans = async () => {
     try {
       const response = await fetch('/api/admin/getcustomervendorbybranch', {
@@ -527,11 +573,11 @@ const CustomerInvoicePage: React.FC = () => {
     }
     const rushCharge = isRush ? rushRateValue * totalPieces : 0;
 
-    const total = subtotal + rushCharge + mockupTotal;
+    const total = subtotal + rushCharge + mockupTotal + dtfTotal;
     setTotalAmount(total);
     const paidAmount = amountPaid === '' ? 0 : Number(amountPaid);
     setBalance(total - paidAmount);
-  }, [cart, amountPaid, requiredByDate, rushThresholdDays, rushRateValue, mockupTotal]);
+  }, [cart, amountPaid, requiredByDate, rushThresholdDays, rushRateValue, mockupTotal, dtfTotal]);
 
   // Live preview for the RUSH badge/helper text next to the Deadline field -
   // same day-math as the useEffect above, just recomputed for render.
@@ -719,6 +765,10 @@ const CustomerInvoicePage: React.FC = () => {
       showToast('Please enter a valid quantity', 'error');
       return;
     }
+    if (dtfResult.status === 'error') {
+      showToast(`DTF: ${dtfResult.message}`, 'error');
+      return;
+    }
 
     const newItem: CartItem = {
       id: Date.now().toString(),
@@ -735,6 +785,7 @@ const CustomerInvoicePage: React.FC = () => {
       // Only a rate still equal to the price-list rate is re-priced later; a rate the
       // staff typed stays as typed.
       autoPriced: priceWasAutoFilled && matchedIdealPrice !== null && unitPrice === matchedIdealPrice,
+      dtf: dtfResult.status === 'ok' ? dtfResult.block : null,
     };
 
     updateCart([...cart, newItem]);
@@ -760,6 +811,11 @@ const CustomerInvoicePage: React.FC = () => {
       : item));
   };
 
+  // DTF amount of one line, edited in the totals area (like the mockup amount).
+  const setDtfAmount = (id: string, amount: number) => {
+    setCart(cart.map(item => (item.id === id && item.dtf ? { ...item, dtf: { ...item.dtf, amount } } : item)));
+  };
+
   // Clear form
   const clearForm = () => {
     setSelectedCategory('');
@@ -777,6 +833,7 @@ const CustomerInvoicePage: React.FC = () => {
     setImage3Key(prev => prev + 1);
     // Clear dynamic category fields
     setDynamicCategoryFields({});
+    setDtfLogos([]);
   };
 
   // Reset new customer form
@@ -935,6 +992,8 @@ const handleAddCustomer = async () => {
           imgfile3: item.image3 || '',
           // Dynamic category fields (sub-categories and options) as JSON string
           category_fields: JSON.stringify(item.category_fields || {}),
+          // DTF logos + saved roll layout (checked by the backend, shown to the designer)
+          ...(item.dtf ? { dtf: item.dtf } : {}),
         };
       });
 
@@ -1097,6 +1156,7 @@ const handleAddCustomer = async () => {
                         setDynamicCategoryFields({});
                         setUnitPrice('');
                         setPriceWasAutoFilled(false);
+                        setDtfLogos([]);
                       }}
                       className="regal-input w-full"
                     >
@@ -1136,6 +1196,10 @@ const handleAddCustomer = async () => {
                     setDynamicCategoryFields={setDynamicCategoryFields}
                     tierPieces={tierPieces}
                     onIdealPriceChange={handleIdealPriceChange}
+                    dtfLogos={dtfLogos}
+                    onDtfLogosChange={setDtfLogos}
+                    dtfResult={dtfResult}
+                    quantity={quantity}
                   />
                 )}
 
@@ -1216,6 +1280,12 @@ const handleAddCustomer = async () => {
                       lineTotal={price}
                       amount={mockupAmountFor(selectedCategory)}
                     />
+                  )}
+                  {dtfResult.status === 'ok' && (
+                    <p className="text-xs mt-1.5 px-2 py-1.5 rounded-md bg-teal-50 text-teal-700">
+                      + DTF: {metersLabel(dtfResult.block.half_meters)} roll = <b className="text-gray-900">Rs. {dtfResult.block.charge.toLocaleString()}</b> →{' '}
+                      <b className="text-gray-900">Rs. {(price + dtfResult.block.charge).toLocaleString()}</b> for this {selectedCategory} with DTF. Added to the total, editable there.
+                    </p>
                   )}
                 </div>
 
@@ -1444,6 +1514,11 @@ const handleAddCustomer = async () => {
                               ))}
                             </div>
                           )}
+                          {item.dtf && (
+                            <div className="text-xs text-teal-700 mt-1">
+                              <span className="font-medium">DTF:</span> {dtfLogosLabel(item.dtf)} · {metersLabel(item.dtf.half_meters)} roll · Rs. {item.dtf.amount.toLocaleString()} (in total)
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-4 text-sm text-gray-900">
                           {item.previousUnitPrice != null && (
@@ -1643,6 +1718,9 @@ const handleAddCustomer = async () => {
                   onAmountChange={(category, amount) => setMockupAmounts(prev => ({ ...prev, [category]: amount }))}
                 />
 
+                {/* DTF printing - one row per Hoodie / Jacket line with logos */}
+                <DtfChargeRows lines={cart} onAmountChange={setDtfAmount} />
+
                 {/* Amount Fields - 4 in one row */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-3 md:mb-4">
                   {/* Total Amount */}
@@ -1659,6 +1737,9 @@ const handleAddCustomer = async () => {
                     )}
                     {mockupTotal > 0 && (
                       <p className="text-xs text-purple-700 mt-1">Includes Rs. {mockupTotal.toLocaleString()} mockup charge</p>
+                    )}
+                    {dtfTotal > 0 && (
+                      <p className="text-xs text-teal-700 mt-1">Includes Rs. {dtfTotal.toLocaleString()} DTF printing</p>
                     )}
                   </div>
 

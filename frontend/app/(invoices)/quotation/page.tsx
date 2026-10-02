@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
@@ -17,6 +17,8 @@ import {
   categoryMockupDefault,
 } from '@/lib/quantityPricing';
 import { QuantityTierCards, MockupChargeRows, MockupLinePreview } from '@/components/QuantityTierCards';
+import { DtfSettings, DtfLogo, computeDtf, dtfLogosLabel, dtfTotalOf, metersLabel } from '@/lib/dtfLayout';
+import { DtfLogoBox, DtfChargeRows } from '@/components/DtfLogos';
 
 interface Customer {
   cus_id: string;
@@ -43,6 +45,9 @@ const QuotationPage: React.FC = () => {
   // Whether the optional fields (Rib, Zip...) are revealed - hidden by default,
   // shown via the "+" button below the required fields.
   const [showOptionalFields, setShowOptionalFields] = useState(false);
+  // DTF logos (width x height on one piece) for a category with dtf_enabled - see lib/dtfLayout.ts.
+  const [dtfLogos, setDtfLogos] = useState<DtfLogo[]>([]);
+  const [dtfSettings, setDtfSettings] = useState<DtfSettings | null>(null);
   const [unitPrice, setUnitPrice] = useState<number | ''>('');
   const [priceWasAutoFilled, setPriceWasAutoFilled] = useState(false);
   const [quantity, setQuantity] = useState<number | ''>('');
@@ -83,6 +88,11 @@ const QuotationPage: React.FC = () => {
   const piecesAlreadyInCart = selectedCategory ? piecesOfCategory(cart, selectedCategory) : 0;
   const tierPieces: number | '' = quantity === '' ? '' : quantity + piecesAlreadyInCart;
   const matchedIdealPrice = lookupIdealPrice(categoryData, dynamicCategoryFields, tierPieces);
+  // Roll layout + charge for the logos being entered, re-worked on every keystroke.
+  const dtfResult = useMemo(
+    () => (categoryData?.dtf_enabled ? computeDtf(dtfLogos, quantity, dtfSettings) : computeDtf([], '', null)),
+    [categoryData?.dtf_enabled, dtfLogos, quantity, dtfSettings]
+  );
 
   // Whenever the selected combination (or the quantity, which can flip the rate
   // tier) resolves to a fixed price, fill it straight into the editable Rate field
@@ -106,6 +116,7 @@ const QuotationPage: React.FC = () => {
     fetchCustomers();
     fetchCustomerCategories();
     fetchRushSettings();
+    fetchDtfSettings();
   }, []);
 
   useEffect(() => {
@@ -163,6 +174,23 @@ const QuotationPage: React.FC = () => {
     }
   };
 
+  // DTF rule (Rs per 0.5 m, roll width, gap), saved on the Ideal Pricing page.
+  const fetchDtfSettings = async () => {
+    try {
+      const response = await fetch('/api/dtf-pricing/', { method: 'GET', credentials: 'include' });
+      if (response.ok) {
+        const data = await response.json();
+        setDtfSettings({
+          price_per_half_meter: Number(data.price_per_half_meter),
+          roll_width_in: Number(data.roll_width_in),
+          gap_in: Number(data.gap_in),
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching DTF settings:', error);
+    }
+  };
+
   const clearItemForm = () => {
     setSelectedCategory('');
     setUnitPrice('');
@@ -171,6 +199,7 @@ const QuotationPage: React.FC = () => {
     setPrice(0);
     setDynamicCategoryFields({});
     setShowOptionalFields(false);
+    setDtfLogos([]);
   };
 
   const addToCart = () => {
@@ -198,6 +227,10 @@ const QuotationPage: React.FC = () => {
       showToast('Please enter a valid quantity', 'error');
       return;
     }
+    if (dtfResult.status === 'error') {
+      showToast(`DTF: ${dtfResult.message}`, 'error');
+      return;
+    }
 
     const newItem: CartItem = {
       id: Date.now().toString(),
@@ -209,6 +242,7 @@ const QuotationPage: React.FC = () => {
       // Only a rate still equal to the price-list rate is re-priced later; a rate the
       // staff typed stays as typed.
       autoPriced: priceWasAutoFilled && matchedIdealPrice !== null && unitPrice === matchedIdealPrice,
+      dtf: dtfResult.status === 'ok' ? dtfResult.block : null,
     };
 
     updateCart([...cart, newItem]);
@@ -236,7 +270,13 @@ const QuotationPage: React.FC = () => {
       : item));
   };
 
+  // DTF amount of one line, edited in the totals box (like the mockup amount).
+  const setDtfAmount = (id: string, amount: number) => {
+    setCart(cart.map(item => (item.id === id && item.dtf ? { ...item, dtf: { ...item.dtf, amount } } : item)));
+  };
+
   const cartSubtotal = cart.reduce((sum, item) => sum + item.totalPrice, 0);
+  const dtfTotal = dtfTotalOf(cart);
   const totalPieces = cart.reduce((sum, item) => sum + item.quantity, 0);
   const mockups = mockupLines(cart, mockupAmounts, mockupDefaultFor);
   const mockupTotal = mockups.reduce((sum, m) => sum + m.amount, 0);
@@ -262,7 +302,7 @@ const QuotationPage: React.FC = () => {
   // An emptied rush rate box counts as 0 (no rush charge), both here and on save.
   const rushRateValue = rushRate === '' ? 0 : rushRate;
   const estimatedRushCharge = estimatedIsRush ? rushRateValue * totalPieces : 0;
-  const estimatedTotal = cartSubtotal - (discount || 0) + estimatedRushCharge + mockupTotal;
+  const estimatedTotal = cartSubtotal - (discount || 0) + estimatedRushCharge + mockupTotal + dtfTotal;
 
   const handleSubmit = async () => {
     if (cart.length === 0) {
@@ -297,6 +337,7 @@ const QuotationPage: React.FC = () => {
         pro_quantity: item.quantity,
         total_price: item.totalPrice,
         category_fields: JSON.stringify(item.category_fields || {}),
+        ...(item.dtf ? { dtf: item.dtf } : {}),
       }));
 
       const payload = {
@@ -326,6 +367,7 @@ const QuotationPage: React.FC = () => {
           html: `<p><strong>${result.quotation_no}</strong></p>` +
                 (result.is_rush ? `<p style="color:#EA580C;font-weight:bold;">RUSH ORDER - Rs. ${result.rush_charge} rush charge (Rs. ${result.rush_rate_per_piece ?? 0} per piece × ${result.total_pieces ?? totalPieces} pcs)</p>` : '<p>Normal order (not rush)</p>') +
                 (result.mockup_charge > 0 ? `<p style="color:#7E22CE;">Designing / mockup - Rs. ${result.mockup_charge}</p>` : '') +
+                (result.dtf_charge > 0 ? `<p style="color:#0F766E;">DTF printing - Rs. ${result.dtf_charge}</p>` : '') +
                 `<p>Total: Rs. ${result.total_amount}</p>`,
           icon: 'success',
         });
@@ -399,7 +441,7 @@ const QuotationPage: React.FC = () => {
                 ) : (
                   <select
                     value={selectedCategory}
-                    onChange={(e) => { setSelectedCategory(e.target.value); setDynamicCategoryFields({}); setUnitPrice(''); setPriceWasAutoFilled(false); setShowOptionalFields(false); }}
+                    onChange={(e) => { setSelectedCategory(e.target.value); setDynamicCategoryFields({}); setUnitPrice(''); setPriceWasAutoFilled(false); setShowOptionalFields(false); setDtfLogos([]); }}
                     className="regal-input w-full"
                   >
                     <option value="">-- Select Category --</option>
@@ -431,8 +473,8 @@ const QuotationPage: React.FC = () => {
                   ))}
                   </div>
 
-                  {/* Optional fields (Rib, Zip...) - hidden by default, revealed via "+" */}
-                  {categoryData.sub_categories.some(subCat => subCat.is_optional) && (
+                  {/* Optional fields (Rib, Zip...) and DTF logos - hidden by default, revealed via "+" */}
+                  {(categoryData.sub_categories.some(subCat => subCat.is_optional) || categoryData.dtf_enabled) && (
                     <div className="mt-3 pt-3 border-t border-regal-black/20">
                       {!showOptionalFields ? (
                         <button
@@ -440,7 +482,7 @@ const QuotationPage: React.FC = () => {
                           onClick={() => setShowOptionalFields(true)}
                           className="text-sm font-medium text-regal-black flex items-center gap-1 hover:underline"
                         >
-                          <span className="text-lg leading-none">+</span> More options
+                          <span className="text-lg leading-none">+</span> More options{categoryData.dtf_enabled && ' (DTF logos)'}
                         </button>
                       ) : (
                         <>
@@ -451,6 +493,7 @@ const QuotationPage: React.FC = () => {
                           >
                             − Hide more options
                           </button>
+                          {categoryData.sub_categories.some(subCat => subCat.is_optional) && (
                           <div className="grid grid-cols-2 gap-3">
                             {categoryData.sub_categories.filter(subCat => subCat.is_optional).map((subCat, index) => (
                               <div key={index}>
@@ -470,6 +513,16 @@ const QuotationPage: React.FC = () => {
                               </div>
                             ))}
                           </div>
+                          )}
+                          {categoryData.dtf_enabled && (
+                            <DtfLogoBox
+                              category={selectedCategory}
+                              logos={dtfLogos}
+                              onChange={setDtfLogos}
+                              result={dtfResult}
+                              quantity={quantity}
+                            />
+                          )}
                         </>
                       )}
                     </div>
@@ -523,6 +576,12 @@ const QuotationPage: React.FC = () => {
                     amount={mockupAmountFor(selectedCategory)}
                   />
                 )}
+                {dtfResult.status === 'ok' && (
+                  <p className="text-xs mt-1.5 px-2 py-1.5 rounded-md bg-teal-50 text-teal-700">
+                    + DTF: {metersLabel(dtfResult.block.half_meters)} roll = <b className="text-gray-900">Rs. {dtfResult.block.charge.toLocaleString()}</b> →{' '}
+                    <b className="text-gray-900">Rs. {(price + dtfResult.block.charge).toLocaleString()}</b> for this {selectedCategory} with DTF. Added to the total, editable there.
+                  </p>
+                )}
               </div>
 
               <button onClick={addToCart} className="regal-btn bg-regal-yellow text-regal-black w-full">
@@ -560,6 +619,11 @@ const QuotationPage: React.FC = () => {
                           {item.category_fields && Object.keys(item.category_fields).length > 0 && (
                             <div className="text-xs text-gray-500 mt-0.5">
                               {Object.entries(item.category_fields).map(([k, v]) => `${k}: ${v}`).join(' · ')}
+                            </div>
+                          )}
+                          {item.dtf && (
+                            <div className="text-xs text-teal-700 mt-0.5">
+                              DTF: {dtfLogosLabel(item.dtf)} · {metersLabel(item.dtf.half_meters)} roll · Rs. {item.dtf.amount.toLocaleString()} (in total)
                             </div>
                           )}
                         </td>
@@ -705,6 +769,7 @@ const QuotationPage: React.FC = () => {
                   lines={mockups}
                   onAmountChange={(category, amount) => setMockupAmounts(prev => ({ ...prev, [category]: amount }))}
                 />
+                <DtfChargeRows lines={cart} onAmountChange={setDtfAmount} />
                 {/* Discount UI hidden for now - state/calc/payload still wired, just not shown.
                 <div className="flex justify-between items-center text-sm mb-2">
                   <label htmlFor="quotation-discount" className="text-gray-600">Discount</label>

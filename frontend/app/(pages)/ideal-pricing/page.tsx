@@ -136,8 +136,73 @@ const IdealPricingPage: React.FC = () => {
     }
   };
 
+  // DTF logo printing rule (Hoodie / Jacket lines): roll length used is charged per
+  // 0.5 m, logos laid out on a roll this wide with this gap between them.
+  const [dtfSaved, setDtfSaved] = useState({ rate: '', width: '', gap: '' });
+  const [dtfInput, setDtfInput] = useState({ rate: '', width: '', gap: '' });
+  const [loadingDtf, setLoadingDtf] = useState(false);
+  const [savingDtf, setSavingDtf] = useState(false);
+
+  const applyDtfSetting = (data: { price_per_half_meter?: number | string; roll_width_in?: number | string; gap_in?: number | string }) => {
+    const values = {
+      rate: data.price_per_half_meter != null ? String(Number(data.price_per_half_meter)) : '',
+      width: data.roll_width_in != null ? String(Number(data.roll_width_in)) : '',
+      gap: data.gap_in != null ? String(Number(data.gap_in)) : '',
+    };
+    setDtfSaved(values);
+    setDtfInput(values);
+  };
+
+  const fetchDtfSetting = async () => {
+    try {
+      setLoadingDtf(true);
+      const response = await fetch('/api/dtf-pricing/', { method: 'GET', credentials: 'include' });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      applyDtfSetting(await response.json());
+    } catch (error) {
+      console.error('Error fetching DTF rule:', error);
+      showToast('Failed to fetch DTF rule', 'error');
+    } finally {
+      setLoadingDtf(false);
+    }
+  };
+
+  const handleSaveDtf = async () => {
+    const rate = Number(dtfInput.rate), width = Number(dtfInput.width), gap = Number(dtfInput.gap);
+    if (dtfInput.rate.trim() === '' || isNaN(rate) || rate < 0) {
+      showToast('Please enter a valid DTF rate per 0.5 m', 'error');
+      return;
+    }
+    if (dtfInput.width.trim() === '' || isNaN(width) || width <= 0) {
+      showToast('Please enter a valid roll width', 'error');
+      return;
+    }
+    if (dtfInput.gap.trim() === '' || isNaN(gap) || gap < 0) {
+      showToast('Please enter a valid gap', 'error');
+      return;
+    }
+    setSavingDtf(true);
+    try {
+      const response = await fetch('/api/dtf-pricing/', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ price_per_half_meter: rate, roll_width_in: width, gap_in: gap }),
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      applyDtfSetting(await response.json());
+      showToast('DTF rule updated', 'success');
+    } catch (error) {
+      console.error('Error saving DTF rule:', error);
+      showToast('Failed to update DTF rule', 'error');
+    } finally {
+      setSavingDtf(false);
+    }
+  };
+
   useEffect(() => {
     fetchRushRate();
+    fetchDtfSetting();
   }, []);
 
   const fetchCategories = async (): Promise<CustomerCategoryGrouped[]> => {
@@ -559,6 +624,68 @@ const IdealPricingPage: React.FC = () => {
             </button>
             <p className="text-xs text-gray-500 w-full">
               No manual toggle — if the customer's required-by date is within {thresholdDays || 'N'} day(s) of today, the order is automatically rush and charged Rs. {rushRate || '0'} × total pieces.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* DTF Logo Printing Rule (Hoodie / Jacket - categories ticked "DTF logos") */}
+      <div className="mb-6 p-4 bg-gray-50 rounded border">
+        <h3 className="text-md font-semibold text-regal-black mb-3">DTF Logo Printing</h3>
+        {loadingDtf ? (
+          <div className="animate-pulse h-10 bg-gray-200 rounded w-full max-w-md"></div>
+        ) : (
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label htmlFor="dtf-rate" className="block text-sm font-medium mb-1">Rs. per 0.5 m of roll</label>
+              <input
+                id="dtf-rate"
+                type="number"
+                value={dtfInput.rate}
+                onChange={(e) => setDtfInput(prev => ({ ...prev, rate: e.target.value }))}
+                className="regal-input w-40"
+                placeholder="750"
+                min="0"
+                step="1"
+              />
+            </div>
+            <div>
+              <label htmlFor="dtf-width" className="block text-sm font-medium mb-1">Roll width (inches)</label>
+              <input
+                id="dtf-width"
+                type="number"
+                value={dtfInput.width}
+                onChange={(e) => setDtfInput(prev => ({ ...prev, width: e.target.value }))}
+                className="regal-input w-40"
+                placeholder="23"
+                min="1"
+                step="0.5"
+              />
+            </div>
+            <div>
+              <label htmlFor="dtf-gap" className="block text-sm font-medium mb-1">Gap between logos (inches)</label>
+              <input
+                id="dtf-gap"
+                type="number"
+                value={dtfInput.gap}
+                onChange={(e) => setDtfInput(prev => ({ ...prev, gap: e.target.value }))}
+                className="regal-input w-40"
+                placeholder="0.5"
+                min="0"
+                step="0.1"
+              />
+            </div>
+            <button
+              onClick={handleSaveDtf}
+              disabled={savingDtf || (dtfInput.rate === dtfSaved.rate && dtfInput.width === dtfSaved.width && dtfInput.gap === dtfSaved.gap)}
+              className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            >
+              {savingDtf ? 'Saving...' : 'Save DTF Rule'}
+            </button>
+            <p className="text-xs text-gray-500 w-full">
+              Logos are laid out on a {dtfSaved.width || 'N'}&quot; roll with {dtfSaved.gap || '0'}&quot; between them. Roll length used is charged per 0.5 m with no tolerance:
+              up to 0.5 m = Rs. {Number(dtfSaved.rate || 0).toLocaleString()}, up to 1 m = Rs. {(Number(dtfSaved.rate || 0) * 2).toLocaleString()}, and so on.
+              Only for categories ticked &quot;DTF logos&quot; on the Customer Category page.
             </p>
           </div>
         )}

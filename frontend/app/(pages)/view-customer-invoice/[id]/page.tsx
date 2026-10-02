@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useToast } from '@/components/ui/Toast';
 import PageHeader from '@/components/ui/PageHeader';
+import { DtfBlock, dtfLogosLabel, metersLabel } from '@/lib/dtfLayout';
+import { DtfLayoutDetails } from '@/components/DtfLogos';
 
 interface InvoiceItem {
   product_name: string;
@@ -18,6 +20,7 @@ interface InvoiceItem {
   imgfile?: string;
   imgfile2?: string;
   imgfile3?: string;
+  dtf?: DtfBlock; // DTF logos + the saved roll layout the designer follows
 }
 
 interface Invoice {
@@ -28,6 +31,7 @@ interface Invoice {
   subtotal: number;
   rush_charge: number;
   mockup_charges: { category: string; pieces: number; amount: number }[];
+  dtf_charges: { line: number; category: string; meters: number; amount: number }[];
   total_amount: number;
   amount_paid: number;
   balance_due: number;
@@ -265,6 +269,12 @@ const ViewCustomerInvoicePage: React.FC = () => {
                           ))}
                         </div>
                       )}
+                      {item.dtf && (
+                        <div className="mt-1 text-xs text-teal-700">
+                          <span className="font-medium">DTF:</span> {dtfLogosLabel(item.dtf)} · {metersLabel(item.dtf.half_meters)} roll
+                          <span className="block text-gray-500">Layout below the table</span>
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-4 text-sm">
                       {itemImages.length > 0 ? (
@@ -304,7 +314,25 @@ const ViewCustomerInvoicePage: React.FC = () => {
           </table>
         </div>
 
-        {/* Totals - items subtotal + rush + mockup add up to the order total */}
+        {/* DTF layouts for the designer - drawn from the saved positions, exactly as priced */}
+        {invoice.items.some(item => item.dtf) && (
+          <div className="mt-6 flex flex-col gap-4">
+            <h3 className="text-lg font-semibold text-gray-900">DTF Logo Layout (for the designer)</h3>
+            <p className="text-sm text-gray-600 -mt-2">
+              Place the logos on the roll exactly like this - the order was priced on this layout. Each box shows its logo number.
+            </p>
+            {invoice.items.map((item, index) => item.dtf && (
+              <DtfLayoutDetails
+                key={index}
+                block={item.dtf}
+                category={`${item.cat_name || item.product_name} (item ${index + 1})`}
+                quantity={item.quantity}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Totals - items subtotal + rush + mockup + DTF add up to the order total */}
         <div className="flex justify-end mt-6">
           <div className="w-full sm:w-96 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm">
             <div className="flex justify-between text-gray-600 mb-2">
@@ -321,6 +349,12 @@ const ViewCustomerInvoicePage: React.FC = () => {
               <div key={mc.category} className="flex justify-between text-purple-700 font-medium mb-2">
                 <span>Mockup ({mc.category})</span>
                 <span>+ Rs. {Number(mc.amount).toFixed(2)}</span>
+              </div>
+            ))}
+            {(invoice.dtf_charges || []).map(dc => (
+              <div key={dc.line} className="flex justify-between text-teal-700 font-medium mb-2">
+                <span>DTF ({dc.category}, {dc.meters} m)</span>
+                <span>+ Rs. {Number(dc.amount).toFixed(2)}</span>
               </div>
             ))}
             <div className="flex justify-between font-bold text-gray-900 text-base pt-2 mt-2 border-t border-gray-200">

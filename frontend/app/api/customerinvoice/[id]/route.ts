@@ -37,6 +37,7 @@ export async function GET(
         subtotal: data.fields?.totals?.subtotal || 0,
         rush_charge: data.fields?.totals?.rush_charge || 0,
         mockup_charges: data.fields?.totals?.mockup_charges || [],
+        dtf_charges: data.fields?.totals?.dtf_charges || [],
         total_amount: data.fields?.totals?.total || 0,
         amount_paid: data.fields?.totals?.amount_paid || 0,
         balance_due: data.fields?.totals?.balance_due || 0,

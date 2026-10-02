@@ -10,6 +10,8 @@
  *   piece). The amount is the category's own customer_categories.mockup_charge.
  */
 
+import type { DtfBlock } from './dtfLayout';
+
 export interface SubCategoryOption {
   sub_category: string;
   options: string[];
@@ -29,6 +31,7 @@ export interface CustomerCategoryGrouped {
   ideal_prices?: Record<string, Record<string, number>>;
   modifiers?: Record<string, Record<string, ModifierValue>>;
   mockup_charge?: number | null; // this category's mockup charge (Ideal Pricing page); null or 0 = no mockup
+  dtf_enabled?: boolean;         // true = the optional DTF logos box shows for this category (Hoodie, Jacket)
 }
 
 // The mockup charge a category starts with, set per category on the Ideal Pricing page
@@ -112,6 +115,7 @@ export interface PricedLine {
   previousUnitPrice?: number | null; // shown struck out - only right after the rate went DOWN
   rateChange?: 'down' | 'up' | null; // direction of the last automatic change, for the tag under the rate
   missingTierPrice?: boolean;        // the category's tier has no price for this line - staff must enter it
+  dtf?: DtfBlock | null;             // DTF logos + saved roll layout (Hoodie / Jacket) - see lib/dtfLayout.ts
 }
 
 export const piecesOfCategory = (items: PricedLine[], category: string) =>

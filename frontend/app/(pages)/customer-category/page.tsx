@@ -20,6 +20,7 @@ interface CustomerCategory {
   main_category: string;
   sub_categories: SubCategory[];
   branch: string;
+  dtf_enabled?: boolean; // DTF logos box in Quotation / Customer Invoice (Hoodie, Jacket)
   created_at: string;
 }
 
@@ -49,6 +50,7 @@ const CustomerCategoryPage: React.FC = () => {
   const [subCategories, setSubCategories] = useState<SubCategory[]>([
     { sub_category: '', options: [''], is_modifier: false, is_optional: false }
   ]);
+  const [dtfEnabled, setDtfEnabled] = useState(false);
 
   // Fetch customer categories
   const fetchCategories = async () => {
@@ -94,6 +96,7 @@ const CustomerCategoryPage: React.FC = () => {
   const resetForm = () => {
     setMainCategoryName('');
     setSubCategories([{ sub_category: '', options: [''], is_modifier: false, is_optional: false }]);
+    setDtfEnabled(false);
     setEditingCategory(null);
     setShowAddForm(false);
   };
@@ -186,7 +189,8 @@ const CustomerCategoryPage: React.FC = () => {
           },
           credentials: 'include',
           body: JSON.stringify({
-            sub_categories: subCategories
+            sub_categories: subCategories,
+            dtf_enabled: dtfEnabled
           }),
         });
 
@@ -214,6 +218,7 @@ const CustomerCategoryPage: React.FC = () => {
           body: JSON.stringify({
             main_category: mainCategoryName.trim(),
             sub_categories: subCategories,
+            dtf_enabled: dtfEnabled,
             branch: currentBranch?.name // omitted until loaded -> backend uses the session's branch
           }),
         });
@@ -254,6 +259,7 @@ const CustomerCategoryPage: React.FC = () => {
       is_modifier: sc.is_modifier || false,
       is_optional: sc.is_optional || false
     })));
+    setDtfEnabled(!!category.dtf_enabled);
     setShowAddForm(true);
   };
 
@@ -389,6 +395,23 @@ const CustomerCategoryPage: React.FC = () => {
                 <p className="text-xs text-gray-500 mt-1">Main category name cannot be changed</p>
               )}
             </div>
+
+            {/* DTF logos - adds the optional DTF box (width x height per logo) in Quotation / Customer Invoice */}
+            <label htmlFor="category-dtf-enabled" className="mb-6 flex items-start gap-2.5 cursor-pointer rounded-lg border border-teal-200 bg-teal-50 p-3">
+              <input
+                id="category-dtf-enabled"
+                type="checkbox"
+                checked={dtfEnabled}
+                onChange={(e) => setDtfEnabled(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-teal-700"
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-900">DTF logos</span>
+                <span className="block text-xs text-gray-600">
+                  Adds the optional DTF logo box (width × height per logo) under &quot;+ More options&quot; in Quotation and Customer Invoice for this category.
+                </span>
+              </span>
+            </label>
 
             {/* Sub-Categories */}
             <div className="mb-4">
@@ -548,7 +571,12 @@ const CustomerCategoryPage: React.FC = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {categories.map((category) => (
                   <tr key={category.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{category.main_category}</td>
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                      {category.main_category}
+                      {category.dtf_enabled && (
+                        <span className="ml-2 inline-block rounded bg-teal-700 px-1.5 py-px align-middle text-[10px] font-bold tracking-wide text-white">DTF</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-sm text-gray-700">
                       <div className="space-y-1">
                         {category.sub_categories.map((sc, idx) => (

@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import ReportModal from '@/components/ui/ReportModal';
 import PageHeader from '@/components/ui/PageHeader';
+import { useBranch } from '@/lib/branch';
 
 interface Customer {
   cus_id: string;
@@ -48,10 +49,9 @@ const WarehouseCustomersPage: React.FC = () => {
     branch: ''
   });
 
-  const branchOptions = [
-    'European Sports Light House',
-    'Warehouse Main'
-  ];
+  // Branch options: the branch this user is logged into, plus the warehouse
+  const currentBranch = useBranch();
+  const branchOptions = [...(currentBranch ? [currentBranch.name] : []), 'Warehouse Main'];
 
   const fetchCustomers = async () => {
     try {

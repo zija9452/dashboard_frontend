@@ -52,6 +52,8 @@ interface Invoice {
   amount_paid: number;
   balance_due: number;
   payment_status: string;
+  transfer_status?: string | null; // Stock transfer to another branch: null / 'pending' / 'done'
+  transfer_error?: string | null;
   date: string;
   created_at: string;
 }
@@ -70,6 +72,7 @@ const WarehouseCustomerPaymentPage: React.FC = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
+  const [retryingInvoiceId, setRetryingInvoiceId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showPaymentHistoryPDF, setShowPaymentHistoryPDF] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -256,6 +259,29 @@ const WarehouseCustomerPaymentPage: React.FC = () => {
       showToast('Failed to fetch payment history', 'error');
     } finally {
       setLoadingInvoiceId(null);
+    }
+  };
+
+  // Retry a pending warehouse -> branch stock transfer (safe to repeat: backend never adds stock twice)
+  const retryTransfer = async (invoice: Invoice) => {
+    try {
+      setRetryingInvoiceId(invoice.orderid);
+      const response = await fetch(`/api/warehouse-invoice/retry-transfer/${invoice.orderid}`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await response.json();
+      if (response.ok) {
+        showToast(data.message || `Stock of ${invoice.invoice_no} transferred`, 'success');
+        await fetchInvoices();
+      } else {
+        Swal.fire('Transfer Failed', data.error || 'Transfer failed', 'error');
+      }
+    } catch (error) {
+      console.error('Error retrying transfer:', error);
+      Swal.fire('Error', 'Server connection failed', 'error');
+    } finally {
+      setRetryingInvoiceId(null);
     }
   };
 
@@ -567,6 +593,19 @@ const WarehouseCustomerPaymentPage: React.FC = () => {
                           <td className="px-3 py-6">
                             <div className="flex flex-col">
                               <span className="font-medium text-gray-900">{invoice.invoice_no}</span>
+                              {invoice.transfer_status === 'pending' && (
+                                <span
+                                  className="mt-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-800 w-fit"
+                                  title={invoice.transfer_error || 'Stock not yet added to branch'}
+                                >
+                                  TRANSFER PENDING
+                                </span>
+                              )}
+                              {invoice.transfer_status === 'done' && (
+                                <span className="mt-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-800 w-fit">
+                                  TRANSFERRED
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="px-3 py-6">
@@ -603,6 +642,22 @@ const WarehouseCustomerPaymentPage: React.FC = () => {
                               >
                                 {loadingInvoiceId === invoice.orderid ? 'Loading...' : 'History'}
                               </button>
+                              {invoice.transfer_status === 'pending' && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    retryTransfer(invoice);
+                                  }}
+                                  disabled={retryingInvoiceId === invoice.orderid}
+                                  className={`text-xs font-medium px-3 py-1 rounded border ${
+                                    retryingInvoiceId === invoice.orderid
+                                      ? 'bg-gray-100 text-gray-400 border-gray-300 cursor-not-allowed'
+                                      : 'bg-red-600 text-white border-red-600 hover:bg-red-700'
+                                  }`}
+                                >
+                                  {retryingInvoiceId === invoice.orderid ? 'Retrying...' : 'Retry Transfer'}
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>

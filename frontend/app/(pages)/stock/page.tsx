@@ -7,6 +7,7 @@ import Pagination from '@/components/ui/Pagination';
 import ReportModal from '@/components/ui/ReportModal';
 import DateRangeModal from '@/components/ui/DateRangeModal';
 import PageHeader from '@/components/ui/PageHeader';
+import { useBranch } from '@/lib/branch';
 
 interface StockItem {
   pro_id: string;
@@ -43,10 +44,9 @@ const StockPage: React.FC = () => {
   // Calculate totalPages
   const totalPages = totalPagesFromApi;
 
-  // Predefined branch options
-  const branchOptions = [
-    'European Sports Light House'
-  ];
+  // Branch options: the branch this user is logged into
+  const currentBranch = useBranch();
+  const branchOptions = currentBranch ? [currentBranch.name] : [];
 
   // Fetch stock
   const fetchStock = async () => {

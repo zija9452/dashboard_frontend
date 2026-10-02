@@ -6,6 +6,7 @@ import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import PageHeader from '@/components/ui/PageHeader';
+import { useBranch } from '@/lib/branch';
 
 interface Category {
   id: string;
@@ -17,6 +18,7 @@ interface Category {
 const CategoryPage: React.FC = () => {
   const router = useRouter();
   const { showToast } = useToast();
+  const currentBranch = useBranch(); // Branch this user is logged into
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
@@ -40,6 +42,13 @@ const CategoryPage: React.FC = () => {
     name: '',
     branch: ''
   });
+
+  // New category: pre-select the logged-in branch
+  useEffect(() => {
+    if (showAddForm && !editingCategory && !formData.branch && currentBranch) {
+      setFormData(prev => ({ ...prev, branch: currentBranch.name }));
+    }
+  }, [showAddForm, editingCategory, formData.branch, currentBranch]);
 
   // Fetch categories
   const fetchCategories = async () => {
@@ -82,7 +91,7 @@ const CategoryPage: React.FC = () => {
   }, [currentPage, pageSize, searchTerm]);
 
   // Handle form input changes
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -321,15 +330,22 @@ const CategoryPage: React.FC = () => {
               
               <div>
                 <label className="block text-sm font-medium mb-1">Branch *</label>
-                <input
-                  type="text"
+                <select
                   name="branch"
                   value={formData.branch}
                   onChange={handleInputChange}
                   className="regal-input w-full"
-                  placeholder="Enter branch"
                   required
-                />
+                >
+                  <option value="">Select Branch</option>
+                  {currentBranch && (
+                    <option value={currentBranch.name}>{currentBranch.name}</option>
+                  )}
+                  {/* Keep an existing category's saved value selectable when editing */}
+                  {formData.branch && formData.branch !== currentBranch?.name && (
+                    <option value={formData.branch}>{formData.branch}</option>
+                  )}
+                </select>
               </div>
             </div>
             

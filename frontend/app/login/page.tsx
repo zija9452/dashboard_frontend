@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSession } from '@/auth/session-provider';
 import { useRouter } from 'next/navigation';
-import { EyeIcon, EyeSlashIcon, LockClosedIcon, UserCircleIcon, UserGroupIcon } from '@heroicons/react/24/outline';
+import { BuildingStorefrontIcon, EyeIcon, EyeSlashIcon, LockClosedIcon, UserCircleIcon, UserGroupIcon } from '@heroicons/react/24/outline';
 
 const LoginPage: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<'admin' | 'cashier' | 'production' | 'sales' | 'warehouse' | 'order_booker'>('admin'); // Default to admin
+  const [branches, setBranches] = useState<{ code: string; name: string }[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState(''); // User must pick a branch
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -14,6 +16,22 @@ const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { signIn } = useSession();
   const router = useRouter();
+
+  // Load available branches for the dropdown
+  useEffect(() => {
+    const fetchBranches = async () => {
+      try {
+        const response = await fetch('/api/auth/branches');
+        if (response.ok) {
+          setBranches(await response.json());
+        }
+      } catch (err) {
+        console.error('Failed to load branches:', err);
+      }
+    };
+
+    fetchBranches();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +50,7 @@ const LoginPage: React.FC = () => {
 
     try {
       // Prevent credentials from being passed in URL by ensuring they're only in request body
-      await signIn({ username, password, role: selectedRole });
+      await signIn({ username, password, role: selectedRole, branch: selectedBranch });
 
       // Clear form fields after successful login
       setUsername('');
@@ -91,6 +109,37 @@ const LoginPage: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {/* Branch Selection Field */}
+            <div>
+              <label htmlFor="branch" className="block text-sm font-medium text-gray-700 mb-2">
+                Branch
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <BuildingStorefrontIcon className="h-5 w-5 text-gray-400" />
+                </div>
+                <select
+                  id="branch"
+                  name="branch"
+                  required
+                  className="block w-full pl-10 pr-10 py-3 border border-regal-yellow/30 rounded-lg shadow-sm focus:ring-2 focus:ring-regal-yellow focus:border-regal-yellow bg-white appearance-none cursor-pointer"
+                  value={selectedBranch}
+                  onChange={(e) => setSelectedBranch(e.target.value)}
+                  disabled={loading}
+                >
+                  <option value="" disabled>Select Branch</option>
+                  {branches.map((branch) => (
+                    <option key={branch.code} value={branch.code}>{branch.name}</option>
+                  ))}
+                </select>
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              </div>
+            </div>
 
             {/* Role Selection Field */}
             <div>

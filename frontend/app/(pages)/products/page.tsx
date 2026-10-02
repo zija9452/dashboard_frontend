@@ -8,6 +8,7 @@ import Pagination from '@/components/ui/Pagination';
 import { productsApi, Product } from '@/lib/api/products';
 import PageHeader from '@/components/ui/PageHeader';
 import { CloudinaryImage, IMAGE_SIZES } from '@/lib/cloudinary';
+import { useBranch } from '@/lib/branch';
 
 interface Category {
   id: string;
@@ -91,10 +92,9 @@ const ProductsPage: React.FC = () => {
   const [modalImages, setModalImages] = useState<string[]>([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
-  // Predefined branch options
-  const branchOptions = [
-    'European Sports Light House'
-  ];
+  // Branch options: the branch this user is logged into
+  const currentBranch = useBranch();
+  const branchOptions = currentBranch ? [currentBranch.name] : [];
 
   // Fetch products
   const fetchProducts = async () => {

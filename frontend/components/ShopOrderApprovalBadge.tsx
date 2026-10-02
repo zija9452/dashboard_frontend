@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { branchSignalId, useBranch } from '@/lib/branch';
 
 // Shop order data lives on Neon - keep polling infrequent so the badge
 // doesn't burn extra queries against it while an admin is just logged in.
@@ -35,10 +36,12 @@ const ShopOrderApprovalBadge: React.FC = () => {
   // Instant push the moment a new order is placed by anyone, instead of
   // waiting for the next poll - the interval above stays as a fallback in
   // case the Firestore listener ever misses an update (e.g. offline tab).
+  const branch = useBranch();
   useEffect(() => {
-    const unsubscribe = onSnapshot(doc(db, 'signals', 'shop_order_approval'), () => fetchCount());
+    if (!branch) return;
+    const unsubscribe = onSnapshot(doc(db, 'signals', branchSignalId('shop_order_approval', branch.code)), () => fetchCount());
     return () => unsubscribe();
-  }, [fetchCount]);
+  }, [fetchCount, branch]);
 
   // The approval page marks everything seen as soon as it's opened - clear
   // the badge immediately instead of waiting for the next poll, since the

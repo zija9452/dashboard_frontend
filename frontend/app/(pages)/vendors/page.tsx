@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import ReportModal from '@/components/ui/ReportModal';
 import PageHeader from '@/components/ui/PageHeader';
+import { useBranch } from '@/lib/branch';
 
 interface Vendor {
   ven_id: string;
@@ -47,10 +48,9 @@ const VendorsPage: React.FC = () => {
     branch: ''
   });
 
-  // Predefined branch options
-  const branchOptions = [
-    'European Sports Light House'
-  ];
+  // Branch options: the branch this user is logged into
+  const currentBranch = useBranch();
+  const branchOptions = currentBranch ? [currentBranch.name] : [];
 
   // Fetch vendors
   const fetchVendors = async () => {

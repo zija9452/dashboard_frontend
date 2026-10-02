@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { username, password, role } = await request.json();
+    const { username, password, role, branch } = await request.json();
 
     // Forward the login request to the backend
     const backendResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/auth/login`, {
@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
         username,
         password,
         role, // Include the selected role
+        branch, // Selected branch decides which database is used
       }),
     });
 
@@ -36,7 +37,19 @@ export async function POST(request: NextRequest) {
           response.cookies.set('session_token', sessionToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            maxAge: 60 * 60 * 3, // 3 hours
+            maxAge: 60 * 60 * 10, // 10 hours
+            path: '/',
+            sameSite: 'lax',
+          });
+        }
+
+        // Forward the branch cookie (which branch's database this session lives in)
+        const branchMatch = setCookieHeader.match(/(?:^|,\s*)branch=([^;,]+)/);
+        if (branchMatch) {
+          response.cookies.set('branch', branchMatch[1], {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            maxAge: 60 * 60 * 10, // 10 hours, same as session_token
             path: '/',
             sameSite: 'lax',
           });

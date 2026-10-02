@@ -6,6 +6,7 @@ import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import PageHeader from '@/components/ui/PageHeader';
+import { useBranch } from '@/lib/branch';
 
 interface Expense {
   id: string;
@@ -49,10 +50,9 @@ const ExpensesPage: React.FC = () => {
     is_admin_only: false
   });
 
-  // Predefined branch options
-  const branchOptions = [
-    'European Sports Light House'
-  ];
+  // Branch options: the branch this user is logged into
+  const currentBranch = useBranch();
+  const branchOptions = currentBranch ? [currentBranch.name] : [];
 
   // Fetch expenses
   const fetchExpenses = async () => {

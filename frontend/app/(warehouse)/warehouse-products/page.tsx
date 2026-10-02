@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import { productsApi, Product } from '@/lib/api/products';
 import PageHeader from '@/components/ui/PageHeader';
+import { useBranch } from '@/lib/branch';
 
 const ShopWarehouseProductsPage: React.FC = () => {
   const router = useRouter();
@@ -35,10 +36,9 @@ const ShopWarehouseProductsPage: React.FC = () => {
 
   const totalPages = totalPagesFromApi;
 
-  // Predefined branch options
-  const branchOptions = [
-    'European Sports Light House'
-  ];
+  // Branch options: the branch this user is logged into
+  const currentBranch = useBranch();
+  const branchOptions = currentBranch ? [currentBranch.name] : [];
 
   // Form state
   const [formData, setFormData] = useState({

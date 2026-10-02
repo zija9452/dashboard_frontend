@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import PageHeader from '@/components/ui/PageHeader';
+import { useBranch } from '@/lib/branch';
 
 // Define TypeScript interface for admin user
 interface AdminUser {
@@ -36,6 +37,7 @@ interface AdminUser {
 
 const AdministrationPage: React.FC = () => {
   const { showToast } = useToast();
+  const currentBranch = useBranch(); // Branch this user is logged into
 
   // Function to get role name - backend sends role_name directly
   const getRoleName = (role_name: string | undefined): string => {
@@ -620,7 +622,7 @@ const AdministrationPage: React.FC = () => {
                   required
                 >
                   <option value="">Select Branch</option>
-                  <option value="European Sports Light House">European Sports Light House</option>
+                  {currentBranch && <option value={currentBranch.name}>{currentBranch.name}</option>}
                 </select>
               </div>
               <div>

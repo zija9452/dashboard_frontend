@@ -1,7 +1,7 @@
 import { signIn as betterSignIn, signOut as betterSignOut, getSession as betterGetSession } from '@/lib/auth/client';
 
 // Better-Auth adapter implementation
-export const signIn = async (credentials: { username: string; password: string; role?: string }) => {
+export const signIn = async (credentials: { username: string; password: string; role?: string; branch?: string }) => {
   try {
     // Call the Better-Auth sign-in function
     // Note: Better-Auth expects specific credential properties, so we'll pass role separately
@@ -14,6 +14,9 @@ export const signIn = async (credentials: { username: string; password: string; 
     // Add role to the options if provided
     if (credentials.role) {
       signInOptions.role = credentials.role;
+    }
+    if (credentials.branch) {
+      signInOptions.branch = credentials.branch;
     }
 
     const result = await betterSignIn('credentials', signInOptions);

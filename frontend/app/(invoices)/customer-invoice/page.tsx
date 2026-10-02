@@ -19,6 +19,7 @@ import {
   categoryMockupDefault,
 } from '@/lib/quantityPricing';
 import { QuantityTierCards, MockupChargeRows, MockupLinePreview } from '@/components/QuantityTierCards';
+import { useBranch } from '@/lib/branch';
 
 interface Customer {
   cus_id: string;
@@ -266,13 +267,14 @@ const CustomerInvoicePage: React.FC = () => {
 
   // Add customer modal state
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+  const currentBranch = useBranch(); // Branch this user is logged into
   const [newCustomer, setNewCustomer] = useState({
     cus_name: '',
     cus_phone: '',
     cus_cnic: '',
     cus_address: '',
     cus_sal_id_fk: '',
-    branch: 'European Sports Light House'
+    branch: ''
   });
   const [addingCustomer, setAddingCustomer] = useState(false);
 
@@ -785,7 +787,7 @@ const CustomerInvoicePage: React.FC = () => {
       cus_cnic: '',
       cus_address: '',
       cus_sal_id_fk: '',
-      branch: 'European Sports Light House'
+      branch: ''
     });
   };
 
@@ -828,7 +830,7 @@ const handleAddCustomer = async () => {
         cus_phone: newCustomer.cus_phone,
         cus_cnic: newCustomer.cus_cnic,
         cus_address: newCustomer.cus_address,
-        branch: newCustomer.branch,
+        branch: newCustomer.branch || currentBranch?.name || '',
         cus_sal_id_fk: newCustomer.cus_sal_id_fk,
       };
 
@@ -858,7 +860,7 @@ const handleAddCustomer = async () => {
           cus_cnic: '',
           cus_address: '',
           cus_sal_id_fk: '',
-          branch: 'European Sports Light House'
+          branch: ''
         });
 
         Swal.fire({
@@ -1804,11 +1806,11 @@ const handleAddCustomer = async () => {
               <div>
                 <label className="block text-sm font-medium mb-1">Branch</label>
                 <select
-                  value={newCustomer.branch}
+                  value={newCustomer.branch || currentBranch?.name || ''}
                   onChange={(e) => setNewCustomer({...newCustomer, branch: e.target.value})}
                   className="regal-input w-full"
                 >
-                  <option value="European Sports Light House">European Sports Light House</option>
+                  {currentBranch && <option value={currentBranch.name}>{currentBranch.name}</option>}
                 </select>
               </div>
           

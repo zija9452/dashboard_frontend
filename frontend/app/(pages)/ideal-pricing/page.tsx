@@ -5,6 +5,7 @@ import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/ui/PageHeader';
+import { useBranch } from '@/lib/branch';
 
 interface SubCategoryOption {
   sub_category: string;
@@ -54,6 +55,7 @@ const hasAnyPrice = (c: PriceCombination) => PRICE_TIERS.some(t => (c.prices[t.k
 const IdealPricingPage: React.FC = () => {
   const router = useRouter();
   const { showToast } = useToast();
+  const currentBranch = useBranch(); // Branch this user is logged into
 
   const [categories, setCategories] = useState<CustomerCategoryGrouped[]>([]);
   const [loading, setLoading] = useState(false);
@@ -322,7 +324,7 @@ const IdealPricingPage: React.FC = () => {
         credentials: 'include',
         body: JSON.stringify({
           category_id: selectedCategoryId,
-          branch: 'European Sports Light House',
+          branch: currentBranch?.name, // omitted until loaded -> backend uses the session's branch
           entries: entries.map(e => ({
             options_combination: e.combination,
             min_qty: e.min_qty,

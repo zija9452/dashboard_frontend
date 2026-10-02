@@ -7,6 +7,7 @@ import Swal from 'sweetalert2';
 import Pagination from '@/components/ui/Pagination';
 import ReportModal from '@/components/ui/ReportModal';
 import PageHeader from '@/components/ui/PageHeader';
+import { useBranch } from '@/lib/branch';
 
 interface Salesman {
   sal_id: string;
@@ -46,10 +47,9 @@ const SalesmanPage: React.FC = () => {
     branch: ''
   });
 
-  // Predefined branch options
-  const branchOptions = [
-    'European Sports Light House'
-  ];
+  // Branch options: the branch this user is logged into
+  const currentBranch = useBranch();
+  const branchOptions = currentBranch ? [currentBranch.name] : [];
 
   // Fetch salesmen
   const fetchSalesmen = async () => {

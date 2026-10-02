@@ -12,6 +12,7 @@ import DemandTrendPanel, {
   type DemandTopItem,
   type DemandStatsResponse,
 } from '@/components/demand/DemandTrendPanel';
+import { useBranch } from '@/lib/branch';
 
 interface Demand {
   id: string;
@@ -133,13 +134,14 @@ const DemandPage: React.FC = () => {
   // Add Customer modal (shared between Add Demand form and edit panel, same logic as Customer Invoice)
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [addCustomerTarget, setAddCustomerTarget] = useState<'add' | 'edit' | null>(null);
+  const currentBranch = useBranch(); // Branch this user is logged into
   const [newCustomer, setNewCustomer] = useState<NewCustomerType>({
     cus_name: '',
     cus_phone: '',
     cus_cnic: '',
     cus_address: '',
     cus_sal_id_fk: '',
-    branch: 'European Sports Light House',
+    branch: '',
   });
   const [addingCustomer, setAddingCustomer] = useState(false);
 
@@ -496,7 +498,7 @@ const DemandPage: React.FC = () => {
       cus_cnic: '',
       cus_address: '',
       cus_sal_id_fk: '',
-      branch: 'European Sports Light House',
+      branch: '',
     });
   };
 
@@ -513,7 +515,7 @@ const DemandPage: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(newCustomer),
+        body: JSON.stringify({ ...newCustomer, branch: newCustomer.branch || currentBranch?.name || '' }),
       });
 
       if (response.ok) {
@@ -1243,11 +1245,11 @@ const DemandPage: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium mb-1">Branch</label>
                 <select
-                  value={newCustomer.branch}
+                  value={newCustomer.branch || currentBranch?.name || ''}
                   onChange={(e) => setNewCustomer({ ...newCustomer, branch: e.target.value })}
                   className="regal-input w-full"
                 >
-                  <option value="European Sports Light House">European Sports Light House</option>
+                  {currentBranch && <option value={currentBranch.name}>{currentBranch.name}</option>}
                 </select>
               </div>
 

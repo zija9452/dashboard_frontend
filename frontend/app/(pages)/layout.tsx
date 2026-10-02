@@ -8,6 +8,7 @@ import SidebarClientWrapper from "@/components/SidebarClientWrapper";
 import PageHamburgerButton from "@/components/PageHamburgerButton";
 import SalesmanAttendanceWidget from "@/components/SalesmanAttendanceWidget";
 import ShopOrderApprovalBadge from "@/components/ShopOrderApprovalBadge";
+import BranchSwitcher from "@/components/BranchSwitcher";
 import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
 import Image from "next/image";
 import { useEffect, useState } from "react";
@@ -189,6 +190,7 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
             }`}
           >
             <header className="bg-white shadow-sm sticky top-0 z-20 flex items-center justify-end px-4 py-2">
+              <BranchSwitcher userRole={userRole} />
               {userRole === 'cashier' && (
                 <SalesmanAttendanceWidget />
               )}

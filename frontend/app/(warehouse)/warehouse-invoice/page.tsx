@@ -355,6 +355,15 @@ const WarehouseInvoicePage: React.FC = () => {
         setBillType('WAREHOUSE RECEIPT');
         setShowPdfModal(true);
 
+        // Branch customer (e.g. Karim Abad): invoice saved, but stock could not be added there yet
+        if (data.transfer_status === 'pending') {
+          Swal.fire(
+            'Transfer Pending',
+            `${data.invoice_no} saved, but stock was not added to the branch: ${data.transfer_error || 'unknown error'}. Use "Retry Transfer" on the Customer Payment page.`,
+            'warning'
+          );
+        }
+
         clearAll();
         setShowPaymentModal(false);
         setManualDiscount(0);

@@ -4,6 +4,7 @@ export async function POST(request: NextRequest) {
   try {
     // Get the session cookie to forward to the backend
     const sessionToken = request.cookies.get('session_token');
+    const branch = request.cookies.get('branch');
     
     // Forward the logout request to the backend
     if (sessionToken) {
@@ -11,7 +12,8 @@ export async function POST(request: NextRequest) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Cookie': `session_token=${sessionToken.value}`,
+          // Branch cookie tells the backend which branch database holds this session
+          'Cookie': `session_token=${sessionToken.value}${branch ? `; branch=${branch.value}` : ''}`,
         },
       });
     }
@@ -20,6 +22,7 @@ export async function POST(request: NextRequest) {
 
     // Clear the session cookie
     response.cookies.delete('session_token');
+    response.cookies.delete('branch');
 
     return response;
   } catch (error) {

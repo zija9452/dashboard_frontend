@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import PageHeader from '@/components/ui/PageHeader';
+import { fetchCurrentBranch } from '@/lib/branch';
 
 interface Vendor {
   ven_id: string;
@@ -76,9 +77,9 @@ const VendorPaymentPage: React.FC = () => {
   // Fetch branches for dropdown
   const fetchBranches = async () => {
     try {
-      setBranches([
-        { id: '1', name: 'European Sports Light House' },
-      ]);
+      // The branch this user is logged into
+      const currentBranch = await fetchCurrentBranch();
+      setBranches(currentBranch ? [{ id: '1', name: currentBranch.name }] : []);
       setFormData(prev => ({
         ...prev,
         branch_id: '1'

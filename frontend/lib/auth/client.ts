@@ -41,6 +41,7 @@ export const signIn = async (provider: string, options: any): Promise<SignInResu
         username: options.username,
         password: options.password,
         role: options.role, // Include the selected role
+        branch: options.branch, // Selected branch (which shop's database)
       }),
       credentials: 'include', // Important: include cookies in requests
     });

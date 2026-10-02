@@ -5,6 +5,7 @@ import { useToast } from '@/components/ui/Toast';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/ui/PageHeader';
 import ReportModal from '@/components/ui/ReportModal';
+import { useBranch } from '@/lib/branch';
 
 // Walk-in Invoice interface
 interface WalkInInvoice {
@@ -90,11 +91,12 @@ interface CustomizedSummary {
 const SalesViewPage: React.FC = () => {
   const router = useRouter();
   const { showToast } = useToast();
+  const currentBranch = useBranch(); // Branch this user is logged into
 
   // Filter states
   const [fromDate, setFromDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [toDate, setToDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [selectedBranch, setSelectedBranch] = useState<string>('European Sports Light House');
+  const [selectedBranch, setSelectedBranch] = useState<string>('');
   const [reportType, setReportType] = useState<string>('daily');
 
   // Data states
@@ -141,8 +143,10 @@ const SalesViewPage: React.FC = () => {
   // Branch options
   const branchOptions = [
     "Select Branch",
-    'European Sports Light House',
+    ...(currentBranch ? [currentBranch.name] : []),
   ];
+  // Defaults to the logged-in branch until the user picks one
+  const salesBranch = selectedBranch || currentBranch?.name || '';
 
   // Report type options
   const reportOptions = [
@@ -162,19 +166,19 @@ const SalesViewPage: React.FC = () => {
       // Fetch all APIs in parallel for better performance
       const [walkinResponse, customizedResponse, summaryResponse, customizedSummaryResponse] = await Promise.all([
         fetch(
-          `/api/salesview/walkin-invoices?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
+          `/api/salesview/walkin-invoices?from_date=${fromDate}&to_date=${toDate}&branch=${salesBranch}`,
           { credentials: 'include' }
         ),
         fetch(
-          `/api/salesview/customized-invoices?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
+          `/api/salesview/customized-invoices?from_date=${fromDate}&to_date=${toDate}&branch=${salesBranch}`,
           { credentials: 'include' }
         ),
         fetch(
-          `/api/salesview/summary?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
+          `/api/salesview/summary?from_date=${fromDate}&to_date=${toDate}&branch=${salesBranch}`,
           { credentials: 'include' }
         ),
         fetch(
-          `/api/salesview/customized-summary?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`,
+          `/api/salesview/customized-summary?from_date=${fromDate}&to_date=${toDate}&branch=${salesBranch}`,
           { credentials: 'include' }
         )
       ]);
@@ -212,19 +216,19 @@ const SalesViewPage: React.FC = () => {
 
       // Determine which report to generate based on reportType
       if (reportType === 'walkin-invoice') {
-        apiUrl = `/api/salesview/walkin-invoices/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        apiUrl = `/api/salesview/walkin-invoices/excel?from_date=${fromDate}&to_date=${toDate}&branch=${salesBranch}`;
         reportName = 'Walk-in Invoices';
       } else if (reportType === 'customer-invoice') {
-        apiUrl = `/api/salesview/customized-invoices/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        apiUrl = `/api/salesview/customized-invoices/excel?from_date=${fromDate}&to_date=${toDate}&branch=${salesBranch}`;
         reportName = 'Customer Invoices';
       } else if (reportType === 'expense') {
-        apiUrl = `/api/salesview/expenses/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        apiUrl = `/api/salesview/expenses/excel?from_date=${fromDate}&to_date=${toDate}&branch=${salesBranch}`;
         reportName = 'Expenses';
       } else if (reportType === 'refund') {
-        apiUrl = `/api/salesview/refunds/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        apiUrl = `/api/salesview/refunds/excel?from_date=${fromDate}&to_date=${toDate}&branch=${salesBranch}`;
         reportName = 'Refunds';
       } else if (reportType === 'stockadjustment') {
-        apiUrl = `/api/salesview/stock-adjustments/excel?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        apiUrl = `/api/salesview/stock-adjustments/excel?from_date=${fromDate}&to_date=${toDate}&branch=${salesBranch}`;
         reportName = 'Stock Adjustments';
       } else {
         showToast('Please select Walk-in Invoice, Customer Invoice, Expense or Stock Adjustment report type', 'info');
@@ -281,19 +285,19 @@ const SalesViewPage: React.FC = () => {
 
       // Determine which report to generate based on reportType
       if (reportType === 'walkin-invoice') {
-        apiUrl = `/api/salesview/walkin-invoices/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        apiUrl = `/api/salesview/walkin-invoices/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${salesBranch}`;
         reportTitleText = 'Walk-in Invoice Report';
       } else if (reportType === 'customer-invoice') {
-        apiUrl = `/api/salesview/customized-invoices/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        apiUrl = `/api/salesview/customized-invoices/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${salesBranch}`;
         reportTitleText = 'Customer Invoice Payment Report';
       } else if (reportType === 'expense') {
-        apiUrl = `/api/salesview/expenses/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        apiUrl = `/api/salesview/expenses/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${salesBranch}`;
         reportTitleText = 'Expense Report';
       } else if (reportType === 'refund') {
-        apiUrl = `/api/salesview/refunds/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        apiUrl = `/api/salesview/refunds/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${salesBranch}`;
         reportTitleText = 'Refund Report';
       } else if (reportType === 'stockadjustment') {
-        apiUrl = `/api/salesview/stock-adjustments/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${selectedBranch}`;
+        apiUrl = `/api/salesview/stock-adjustments/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${salesBranch}`;
         reportTitleText = 'Stock Adjustment Report';
       } else {
         showToast('Please select Walk-in Invoice, Customer Invoice, Expense or Stock Adjustment report type', 'info');
@@ -445,7 +449,7 @@ const SalesViewPage: React.FC = () => {
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
               <select
-                value={selectedBranch}
+                value={salesBranch}
                 onChange={(e) => setSelectedBranch(e.target.value)}
                 className="regal-input w-full"
               >
@@ -497,7 +501,7 @@ const SalesViewPage: React.FC = () => {
             <div className="md:col-span-3">
               <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
               <select
-                value={selectedBranch}
+                value={salesBranch}
                 onChange={(e) => setSelectedBranch(e.target.value)}
                 className="regal-input w-full"
               >

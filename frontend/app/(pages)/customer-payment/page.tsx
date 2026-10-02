@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import PageHeader from '@/components/ui/PageHeader';
+import { fetchCurrentBranch } from '@/lib/branch';
 
 // Print styles - only print modal content
 const printStyles = `
@@ -138,10 +139,9 @@ const CustomerPaymentPage: React.FC = () => {
   // Fetch branches for dropdown (placeholder - API to be added later)
   const fetchBranches = async () => {
     try {
-      // For now, using placeholder data
-      setBranches([
-        { id: '1', name: 'European Sports Light House' },
-      ]);
+      // The branch this user is logged into
+      const currentBranch = await fetchCurrentBranch();
+      setBranches(currentBranch ? [{ id: '1', name: currentBranch.name }] : []);
       // Set default branch
       setFormData(prev => ({
         ...prev,

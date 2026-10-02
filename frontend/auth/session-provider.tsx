@@ -7,7 +7,7 @@ import { getSession } from './adapter';
 interface SessionContextType {
   session: any | null;
   loading: boolean;
-  signIn: (credentials: { username: string; password: string; role?: string }) => Promise<void>;
+  signIn: (credentials: { username: string; password: string; role?: string; branch?: string }) => Promise<void>;
   signOut: () => Promise<void>;
   updateSession: () => void;
 }
@@ -49,7 +49,7 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
   };
 
   // Sign in function
-  const signIn = async (credentials: { username: string; password: string; role?: string }) => {
+  const signIn = async (credentials: { username: string; password: string; role?: string; branch?: string }) => {
     try {
       // Use Better-Auth's signIn function
       const result = await import('./adapter').then(adapter => adapter.signIn(credentials));

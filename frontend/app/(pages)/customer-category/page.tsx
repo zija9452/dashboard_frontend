@@ -6,6 +6,7 @@ import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import PageHeader from '@/components/ui/PageHeader';
+import { useBranch } from '@/lib/branch';
 
 interface SubCategory {
   sub_category: string;
@@ -25,6 +26,7 @@ interface CustomerCategory {
 const CustomerCategoryPage: React.FC = () => {
   const router = useRouter();
   const { showToast } = useToast();
+  const currentBranch = useBranch(); // Branch this user is logged into
 
   const [categories, setCategories] = useState<CustomerCategory[]>([]);
   const [loading, setLoading] = useState(false);
@@ -212,7 +214,7 @@ const CustomerCategoryPage: React.FC = () => {
           body: JSON.stringify({
             main_category: mainCategoryName.trim(),
             sub_categories: subCategories,
-            branch: 'European Sports Light House'
+            branch: currentBranch?.name // omitted until loaded -> backend uses the session's branch
           }),
         });
 

@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { branchSignalId, useBranch } from '@/lib/branch';
 import { useToast } from '@/components/ui/Toast';
 
 interface AttendanceEntry {
@@ -113,10 +114,12 @@ const SalesmanAttendanceWidget: React.FC = () => {
   // Instant push the moment anyone checks in/out on any machine, instead of
   // waiting for the next 45s poll - the interval above stays as a fallback
   // in case the Firestore listener ever misses an update (e.g. offline tab).
+  const branch = useBranch();
   useEffect(() => {
-    const unsubscribe = onSnapshot(doc(db, 'signals', 'salesman_attendance'), () => fetchOverview());
+    if (!branch) return;
+    const unsubscribe = onSnapshot(doc(db, 'signals', branchSignalId('salesman_attendance', branch.code)), () => fetchOverview());
     return () => unsubscribe();
-  }, [fetchOverview]);
+  }, [fetchOverview, branch]);
 
   const handleCheckIn = async (salesmanId: string, name: string) => {
     setActingId(salesmanId);

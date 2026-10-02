@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { apiErrorMessage } from '@/lib/apiError';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
@@ -21,26 +22,12 @@ import {
 import { QuantityTierCards, MockupChargeRows, MockupLinePreview } from '@/components/QuantityTierCards';
 import { DtfSettings, DtfLogo, DtfResult, computeDtf, dtfLogosLabel, dtfTotalOf, metersLabel } from '@/lib/dtfLayout';
 import { DtfLogoBox, DtfChargeRows } from '@/components/DtfLogos';
-import { useBranch } from '@/lib/branch';
+import AddCustomerModal from '@/components/AddCustomerModal';
 
 interface Customer {
   cus_id: string;
   cus_name: string;
   cus_phone: string;
-}
-
-interface NewCustomerType {
-  cus_name: string;
-  cus_phone: string;
-  cus_cnic: string;
-  cus_address: string;
-  cus_sal_id_fk: string;
-  branch: string;
-}
-
-interface Salesman {
-  sal_id: string;
-  sal_name: string;
 }
 
 // Pricing (tiers from all pieces of a category, re-pricing, mockup) is shared with
@@ -209,7 +196,6 @@ const CustomerInvoicePage: React.FC = () => {
 
   // Form state
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [salesmans, setSalesmans] = useState<Salesman[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [unitPrice, setUnitPrice] = useState<number | ''>('');
   const [priceWasAutoFilled, setPriceWasAutoFilled] = useState(false);
@@ -285,17 +271,6 @@ const CustomerInvoicePage: React.FC = () => {
 
   // Add customer modal state
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
-  const currentBranch = useBranch(); // Branch this user is logged into
-  const [newCustomer, setNewCustomer] = useState({
-    cus_name: '',
-    cus_phone: '',
-    cus_cnic: '',
-    cus_address: '',
-    cus_sal_id_fk: '',
-    branch: ''
-  });
-  const [addingCustomer, setAddingCustomer] = useState(false);
-
   // Receipt modal state - using ReportModal component
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [invoiceIdForReceipt, setInvoiceIdForReceipt] = useState('');
@@ -339,10 +314,9 @@ const CustomerInvoicePage: React.FC = () => {
   const tierSummaries = categoryTierSummaries(cart, customerCategories, mockupAmountFor, hasMockupCharge);
   const linesMissingPrice = cart.filter(item => item.missingTierPrice);
 
-  // Fetch customers, salesmans and customer categories
+  // Fetch customers and customer categories
   useEffect(() => {
     fetchCustomers();
-    fetchSalesmans();
     fetchCustomerCategories();
     fetchRushSettings();
     fetchDtfSettings();
@@ -528,22 +502,6 @@ const CustomerInvoicePage: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching DTF settings:', error);
-    }
-  };
-
-  const fetchSalesmans = async () => {
-    try {
-      const response = await fetch('/api/admin/getcustomervendorbybranch', {
-        method: 'GET',
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setSalesmans(data.salesmans || []);
-      }
-    } catch (error) {
-      console.error('Error fetching salesmans:', error);
     }
   };
 
@@ -836,109 +794,9 @@ const CustomerInvoicePage: React.FC = () => {
     setDtfLogos([]);
   };
 
-  // Reset new customer form
-  const resetNewCustomerForm = () => {
-    setNewCustomer({
-      cus_name: '',
-      cus_phone: '',
-      cus_cnic: '',
-      cus_address: '',
-      cus_sal_id_fk: '',
-      branch: ''
-    });
-  };
-
   // Remove item from cart
   const removeFromCart = (id: string) => {
     updateCart(cart.filter(item => item.id !== id));
-  };
-
- const validateCustomerForm = (customer: NewCustomerType) => {
-  const requiredFields = [
-    { key: 'cus_name', label: 'Customer Name' },
-    { key: 'cus_phone', label: 'Phone' },
-    { key: 'cus_cnic', label: 'CNIC' },
-    { key: 'cus_address', label: 'Address' },
-    { key: 'cus_sal_id_fk', label: 'Salesman' },
-  ];
-
-  const missing = requiredFields.filter(field => {
-    const value = customer[field.key as keyof NewCustomerType];
-    return !value || (typeof value === 'string' && !value.trim());
-  });
-
-  return missing;
-};
-
-const handleAddCustomer = async () => {
-  // 🔍 Validate all fields at once
-  const missingFields = validateCustomerForm(newCustomer);
-  
-  if (missingFields.length > 0) {
-    showToast('Please fill all required fields', 'error');
-      return;
-    }
-
-    setAddingCustomer(true);
-
-    try {
-      const payload = {
-        cus_name: newCustomer.cus_name,
-        cus_phone: newCustomer.cus_phone,
-        cus_cnic: newCustomer.cus_cnic,
-        cus_address: newCustomer.cus_address,
-        branch: newCustomer.branch || currentBranch?.name || '',
-        cus_sal_id_fk: newCustomer.cus_sal_id_fk,
-      };
-
-      const response = await fetch('/api/customerinvoice/Customers', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        const addedCustomer = await response.json();
-        
-        // Refresh customer list immediately
-        await fetchCustomers();
-        
-        // Auto-select the newly added customer
-        setSelectedCustomer(addedCustomer.cus_id || addedCustomer.id);
-        
-        // Close modal and reset form
-        setShowAddCustomerModal(false);
-        setNewCustomer({
-          cus_name: '',
-          cus_phone: '',
-          cus_cnic: '',
-          cus_address: '',
-          cus_sal_id_fk: '',
-          branch: ''
-        });
-
-        Swal.fire({
-          title: 'Success!',
-          text: 'Customer added successfully!',
-          icon: 'success',
-          timer: 2000,
-          timerProgressBar: true,
-          showConfirmButton: false,
-        });
-      } else {
-        const errorData = await response.json();
-        console.error('Add customer error:', errorData.error);
-        showToast(errorData.error || errorData.detail || 'Failed to add customer', 'error');
-      }
-    } catch (error) {
-      console.error('Error adding customer:', error);
-      showToast('Failed to add customer', 'error');
-    } finally {
-      setAddingCustomer(false);
-    }
   };
 
   // Submit invoice
@@ -1089,7 +947,7 @@ const handleAddCustomer = async () => {
         }
       } else {
         const errorData = await response.json();
-        showToast(errorData.error || 'Failed to create invoice', 'error');
+        showToast(apiErrorMessage(errorData, 'Failed to create invoice'), 'error');
       }
     } catch (error: any) {
       console.error('Error creating invoice:', error);
@@ -1813,114 +1671,15 @@ const handleAddCustomer = async () => {
         </div>
       </div>
 
-      {/* Add Customer Modal */}
-      {showAddCustomerModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="regal-card bg-white p-3 md:p-6 rounded-lg max-w-md w-full">
-            <h3 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Add New Customer</h3>
-
-            <form onSubmit={(e) => { e.preventDefault(); handleAddCustomer(); }} className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium mb-1">Customer Name *</label>
-                <input
-                  type="text"
-                  value={newCustomer.cus_name}
-                  onChange={(e) => setNewCustomer({...newCustomer, cus_name: e.target.value})}
-                  className="regal-input w-full"
-                  placeholder="Enter customer name"
-                  required 
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Phone</label>
-                <input
-                  type="text"
-                  value={newCustomer.cus_phone}
-                  onChange={(e) => setNewCustomer({...newCustomer, cus_phone: e.target.value})}
-                  className="regal-input w-full"
-                  placeholder="Enter phone number"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">CNIC</label>
-                <input
-                  type="text"
-                  value={newCustomer.cus_cnic}
-                  onChange={(e) => setNewCustomer({...newCustomer, cus_cnic: e.target.value})}
-                  className="regal-input w-full"
-                  placeholder="Enter CNIC"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Address</label>
-                <textarea
-                  value={newCustomer.cus_address}
-                  onChange={(e) => setNewCustomer({...newCustomer, cus_address: e.target.value})}
-                  className="regal-input w-full"
-                  placeholder="Enter address"
-                  rows={3}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Salesman</label>
-                <select
-                  value={newCustomer.cus_sal_id_fk}
-                  onChange={(e) => setNewCustomer({...newCustomer, cus_sal_id_fk: e.target.value})}
-                  className="regal-input w-full"
-                >
-                  <option value="">Select Salesman</option>
-                  {salesmans.map(salesman => (
-                    <option key={salesman.sal_id} value={salesman.sal_id}>
-                      {salesman.sal_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Branch</label>
-                <select
-                  value={newCustomer.branch || currentBranch?.name || ''}
-                  onChange={(e) => setNewCustomer({...newCustomer, branch: e.target.value})}
-                  className="regal-input w-full"
-                >
-                  {currentBranch && <option value={currentBranch.name}>{currentBranch.name}</option>}
-                </select>
-              </div>
-          
-
-            <div className="flex gap-2 mt-6">
-              <button
-              type='submit'
-                onClick={handleAddCustomer}
-                disabled={addingCustomer}
-                className={`regal-btn bg-regal-yellow text-regal-black flex-1 ${addingCustomer ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {addingCustomer ? 'Adding...' : 'Add Customer'}
-              </button>
-              <button
-              type='button'
-                onClick={() => {
-                  setShowAddCustomerModal(false);
-                  resetNewCustomerForm();
-                }}
-                disabled={addingCustomer}
-                className="regal-btn bg-gray-300 text-black flex-1"
-              >
-                Cancel
-              </button>
-            </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Add Customer Modal - shared with Quotation */}
+      <AddCustomerModal
+        open={showAddCustomerModal}
+        onClose={() => setShowAddCustomerModal(false)}
+        onAdded={async (customerId) => {
+          await fetchCustomers();
+          setSelectedCustomer(customerId);
+        }}
+      />
 
       {loadingReceipt && (
         <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-[100]">

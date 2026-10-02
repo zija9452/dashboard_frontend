@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { apiErrorMessage } from '@/lib/apiError';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
@@ -15,10 +16,12 @@ import {
   mockupLines,
   categoryTierSummaries,
   categoryMockupDefault,
+  needsMockup,
 } from '@/lib/quantityPricing';
 import { QuantityTierCards, MockupChargeRows, MockupLinePreview } from '@/components/QuantityTierCards';
 import { DtfSettings, DtfLogo, computeDtf, dtfLogosLabel, dtfTotalOf, metersLabel } from '@/lib/dtfLayout';
 import { DtfLogoBox, DtfChargeRows } from '@/components/DtfLogos';
+import AddCustomerModal from '@/components/AddCustomerModal';
 
 interface Customer {
   cus_id: string;
@@ -27,6 +30,38 @@ interface Customer {
 }
 
 type CartItem = PricedLine;
+
+// DRAFT / SENT / REJECTED can be revised; APPROVED and CONVERTED are locked (backend checks too).
+const REVISABLE = ['DRAFT', 'SENT', 'REJECTED'];
+
+// The quotation being revised (opened from View Quotations with ?revise=<id>).
+interface RevisingQuotation {
+  id: string;
+  quotation_no: string;
+  revision: number;
+}
+
+// A saved quotation as GET /api/quotation/<id> returns it (only what a revision needs).
+interface SavedQuotation {
+  quotation_no: string;
+  revision: number;
+  status: string;
+  replaced_by_id: string | null;
+  customer_id: string | null;
+  team_name: string | null;
+  required_by_date: string | null;
+  discounts: number;
+  rush_rate_snapshot: number | null;
+  totals: { mockup_charges?: { category: string; amount: number }[] };
+  items: {
+    product_name: string;
+    cat_name: string;
+    unit_price: number;
+    quantity: number;
+    category_fields?: string;
+    dtf?: { logos: { w: number; h: number }[]; charge: number; amount: number };
+  }[];
+}
 
 const QuotationPage: React.FC = () => {
   const router = useRouter();
@@ -37,6 +72,7 @@ const QuotationPage: React.FC = () => {
   const [loadingCategories, setLoadingCategories] = useState(false);
 
   const [selectedCustomer, setSelectedCustomer] = useState('');
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [teamName, setTeamName] = useState('');
   const [requiredByDate, setRequiredByDate] = useState('');
 
@@ -54,6 +90,14 @@ const QuotationPage: React.FC = () => {
   const [price, setPrice] = useState<number>(0);
 
   const [cart, setCart] = useState<CartItem[]>([]);
+  // Revise mode: the cart and customer fields are pre-filled from this quotation, and
+  // saving creates its next revision instead of a new quotation.
+  const [revising, setRevising] = useState<RevisingQuotation | null>(null);
+  const [loadingRevision, setLoadingRevision] = useState(false);
+  const revisionRequested = useRef(false);
+  // The revision is filled in once both of these have answered (ok or not).
+  const [categoriesLoaded, setCategoriesLoaded] = useState(false);
+  const [dtfSettingsLoaded, setDtfSettingsLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [discount, setDiscount] = useState<number | ''>('');
 
@@ -156,6 +200,7 @@ const QuotationPage: React.FC = () => {
       console.error('Error fetching customer categories:', error);
     } finally {
       setLoadingCategories(false);
+      setCategoriesLoaded(true);
     }
   };
 
@@ -188,7 +233,118 @@ const QuotationPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching DTF settings:', error);
+    } finally {
+      setDtfSettingsLoaded(true);
     }
+  };
+
+  // ?revise=<id>: show the loader straight away, so the page never looks like an empty
+  // New Quotation while the price list, DTF rule and the quotation itself load.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('revise')) setLoadingRevision(true);
+  }, []);
+
+  // ...and fill it in once the price list and DTF rule have answered.
+  useEffect(() => {
+    if (revisionRequested.current || !categoriesLoaded || !dtfSettingsLoaded) return;
+    const reviseId = new URLSearchParams(window.location.search).get('revise');
+    if (!reviseId) return;
+    revisionRequested.current = true;
+    loadRevision(reviseId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoriesLoaded, dtfSettingsLoaded]);
+
+  const loadRevision = async (id: string) => {
+    setLoadingRevision(true);
+    try {
+      const response = await fetch(`/api/quotation/${id}`, { method: 'GET', credentials: 'include' });
+      if (!response.ok) {
+        showToast('Quotation not found', 'error');
+        router.replace('/quotation');
+        return;
+      }
+      const data: SavedQuotation = await response.json();
+      if (!REVISABLE.includes(data.status) || data.replaced_by_id) {
+        showToast(`${data.quotation_no} Rev.${data.revision} is ${data.status} - it can't be revised`, 'error');
+        router.replace('/quotation');
+        return;
+      }
+
+      // Lines keep their saved rates. A line whose rate is still the price-list rate stays
+      // auto-priced (moves with the qty tier); any other rate is kept as a manual rate.
+      // DTF is worked out again with the current DTF rule.
+      const droppedDtf: number[] = [];
+      const lines: CartItem[] = data.items.map((item, index) => {
+        let fields: Record<string, string> = {};
+        try { fields = JSON.parse(item.category_fields || '{}'); } catch { fields = {}; }
+        let dtf: CartItem['dtf'] = null;
+        if (item.dtf) {
+          const result = computeDtf(item.dtf.logos, item.quantity, dtfSettings);
+          if (result.status === 'ok') {
+            // An amount staff had changed (or waived) is kept; otherwise the new charge applies.
+            const edited = item.dtf.amount !== item.dtf.charge;
+            dtf = { ...result.block, amount: edited ? item.dtf.amount : result.block.charge };
+          } else {
+            droppedDtf.push(index + 1);
+          }
+        }
+        return {
+          id: `${Date.now()}-${index}`,
+          category: item.cat_name || item.product_name,
+          unitPrice: item.unit_price,
+          quantity: item.quantity,
+          totalPrice: item.unit_price * item.quantity,
+          category_fields: fields,
+          autoPriced: false,
+          dtf,
+        };
+      });
+      const priced = lines.map(line => {
+        const categoryForLine = customerCategories.find(c => c.main_category === line.category);
+        const listRate = lookupIdealPrice(categoryForLine, line.category_fields || {}, piecesOfCategory(lines, line.category));
+        return { ...line, autoPriced: listRate !== null && listRate === line.unitPrice };
+      });
+      updateCart(priced);
+
+      // Mockup amounts as saved. A category that needed a mockup but isn't in the saved
+      // list had it waived (0 rows aren't saved), so it stays 0.
+      const amounts: Record<string, number> = Object.fromEntries(
+        (data.totals.mockup_charges || []).map(m => [m.category, Number(m.amount)])
+      );
+      for (const category of Array.from(new Set(priced.map(l => l.category)))) {
+        if (!(category in amounts) && needsMockup(priced, category) && mockupDefaultFor(category) > 0) amounts[category] = 0;
+      }
+      setMockupAmounts(amounts);
+
+      setSelectedCustomer(data.customer_id || '');
+      setTeamName(data.team_name || '');
+      setRequiredByDate(data.required_by_date || '');
+      setDiscount(data.discounts ? data.discounts : '');
+      if (data.rush_rate_snapshot !== null) setRushRate(data.rush_rate_snapshot);
+      setRevising({ id, quotation_no: data.quotation_no, revision: data.revision });
+
+      if (droppedDtf.length) {
+        showToast(`DTF of item ${droppedDtf.join(', ')} doesn't fit the current DTF rule - remove the item and add it again`, 'error');
+      }
+    } catch (error) {
+      console.error('Error loading quotation to revise:', error);
+      showToast('Failed to load the quotation', 'error');
+    } finally {
+      setLoadingRevision(false);
+    }
+  };
+
+  // Leave revise mode without saving - back to the list, the old quotation is unchanged.
+  const cancelRevision = () => {
+    setRevising(null);
+    setCart([]);
+    setSelectedCustomer('');
+    setTeamName('');
+    setRequiredByDate('');
+    setDiscount('');
+    setRushRate(rushRatePerPiece ?? '');
+    setMockupAmounts({});
+    router.push('/view-quotation');
   };
 
   const clearItemForm = () => {
@@ -352,7 +508,8 @@ const QuotationPage: React.FC = () => {
         mockup_charges: mockups.map(m => ({ category: m.category, amount: m.amount })),
       };
 
-      const response = await fetch('/api/quotation/', {
+      // A revision is saved against the old quotation (it becomes REVISED, this is Rev.N+1).
+      const response = await fetch(revising ? `/api/quotation/${revising.id}/revise` : '/api/quotation/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -363,8 +520,9 @@ const QuotationPage: React.FC = () => {
 
       if (response.ok && result.success) {
         await Swal.fire({
-          title: 'Quotation Created!',
-          html: `<p><strong>${result.quotation_no}</strong></p>` +
+          title: revising ? 'Revision Saved!' : 'Quotation Created!',
+          html: `<p><strong>${result.quotation_no}${result.revision > 1 ? ` (Rev.${result.revision})` : ''}</strong></p>` +
+                (revising ? `<p style="color:#6B7280;">Rev.${revising.revision} is now REVISED (PDF only).</p>` : '') +
                 (result.is_rush ? `<p style="color:#EA580C;font-weight:bold;">RUSH ORDER - Rs. ${result.rush_charge} rush charge (Rs. ${result.rush_rate_per_piece ?? 0} per piece × ${result.total_pieces ?? totalPieces} pcs)</p>` : '<p>Normal order (not rush)</p>') +
                 (result.mockup_charge > 0 ? `<p style="color:#7E22CE;">Designing / mockup - Rs. ${result.mockup_charge}</p>` : '') +
                 (result.dtf_charge > 0 ? `<p style="color:#0F766E;">DTF printing - Rs. ${result.dtf_charge}</p>` : '') +
@@ -378,6 +536,10 @@ const QuotationPage: React.FC = () => {
         setDiscount('');
         setRushRate(rushRatePerPiece ?? '');
         setMockupAmounts({});
+        if (revising) {
+          setRevising(null);
+          router.replace('/quotation'); // drop ?revise= so a refresh doesn't load the old one again
+        }
 
         // Same blob-building pattern as view-quotation/page.tsx's handleViewPdf -
         // show the PDF right here instead of redirecting to /view-quotation.
@@ -401,7 +563,7 @@ const QuotationPage: React.FC = () => {
           setLoadingPdf(false);
         }
       } else {
-        showToast(result.error || result.detail || 'Failed to create quotation', 'error');
+        showToast(apiErrorMessage(result, revising ? 'Failed to save the revision' : 'Failed to create quotation'), 'error');
       }
     } catch (error) {
       console.error('Error creating quotation:', error);
@@ -415,13 +577,39 @@ const QuotationPage: React.FC = () => {
     <div className="max-w-[98%] md:max-w-[95%] mx-auto px-2 md:px-4 py-4">
       <div className="flex items-center justify-between mb-4 md:mb-6">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-regal-black">New Quotation</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-regal-black">
+            {revising ? `Revise ${revising.quotation_no} (Rev.${revising.revision})` : 'New Quotation'}
+          </h1>
           <p className="text-sm text-gray-500 mt-0.5">A price offer for the customer - converts into a real order once approved.</p>
         </div>
         <button onClick={() => router.push('/view-quotation')} className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap">
           View Quotations
         </button>
       </div>
+
+      {/* Same blurred loader as the PDF one below - until the quotation is filled in */}
+      {loadingRevision && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-[100]" role="status" aria-live="polite">
+          <div className="bg-white rounded-lg px-8 py-6 shadow-xl flex flex-col items-center gap-3">
+            <svg className="animate-spin h-8 w-8 text-regal-orange" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span className="text-regal-black font-medium">Loading quotation to revise...</span>
+          </div>
+        </div>
+      )}
+      {revising && (
+        <div className="mb-4 p-3 rounded-lg border border-amber-300 bg-amber-50 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-amber-900">
+            Revising <b>{revising.quotation_no} Rev.{revising.revision}</b>. Saving creates <b>Rev.{revising.revision + 1}</b>;
+            Rev.{revising.revision} becomes REVISED (PDF only). Change anything below - items, rates, customer, deadline.
+          </p>
+          <button type="button" onClick={cancelRevision} className="text-sm font-medium text-amber-900 underline hover:no-underline">
+            Cancel revision
+          </button>
+        </div>
+      )}
 
       {/* Left: build what's being ordered (category, options, price, quantity) first.
           Right: cart on top, customer/deadline + submit at the bottom - same split as
@@ -677,12 +865,22 @@ const QuotationPage: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Customer *</label>
-                  <select value={selectedCustomer} onChange={(e) => setSelectedCustomer(e.target.value)} className="regal-input w-full" required>
-                    <option value="">Select Customer</option>
-                    {customers.map((c) => (
-                      <option key={c.cus_id} value={c.cus_id}>{c.cus_name}</option>
-                    ))}
-                  </select>
+                  <div className="flex gap-2">
+                    <select value={selectedCustomer} onChange={(e) => setSelectedCustomer(e.target.value)} className="regal-input w-full" required>
+                      <option value="">Select Customer</option>
+                      {customers.map((c) => (
+                        <option key={c.cus_id} value={c.cus_id}>{c.cus_name}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddCustomerModal(true)}
+                      className="regal-btn bg-regal-yellow text-regal-black px-5"
+                      title="Add New Customer"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Team Name *</label>
@@ -800,12 +998,22 @@ const QuotationPage: React.FC = () => {
                 disabled={submitting || cart.length === 0}
                 className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed w-full py-3 text-lg font-semibold"
               >
-                {submitting ? 'Creating...' : 'Create Quotation'}
+                {submitting ? 'Saving...' : revising ? `Save as Rev.${revising.revision + 1}` : 'Create Quotation'}
               </button>
             </form>
           </div>
         </div>
       </div>
+
+      {/* Add Customer Modal - same as Customer Invoice */}
+      <AddCustomerModal
+        open={showAddCustomerModal}
+        onClose={() => setShowAddCustomerModal(false)}
+        onAdded={async (customerId) => {
+          await fetchCustomers();
+          setSelectedCustomer(customerId);
+        }}
+      />
 
       {loadingPdf && (
         <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-[100]">

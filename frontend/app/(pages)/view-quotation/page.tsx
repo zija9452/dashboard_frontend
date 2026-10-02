@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { apiErrorMessage } from '@/lib/apiError';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import PageHeader from '@/components/ui/PageHeader';
@@ -20,7 +21,12 @@ interface QuotationListItem {
   revision: number;
   converted_invoice_id: string | null;
   created_at: string;
+  // Older revisions of this quotation (REVISED, read-only), newest first
+  old_revisions: { id: string; revision: number; total_amount: number; status: string; created_at: string }[];
 }
+
+// DRAFT / SENT / REJECTED can be revised; APPROVED and CONVERTED are locked (backend checks too).
+const REVISABLE = ['DRAFT', 'SENT', 'REJECTED'];
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-gray-100 text-gray-700',
@@ -28,6 +34,7 @@ const STATUS_STYLES: Record<string, string> = {
   APPROVED: 'bg-green-100 text-green-800',
   REJECTED: 'bg-red-100 text-red-800',
   CONVERTED: 'bg-purple-100 text-purple-800',
+  REVISED: 'bg-gray-100 text-gray-500',
 };
 
 const ViewQuotationPage: React.FC = () => {
@@ -82,7 +89,7 @@ const ViewQuotationPage: React.FC = () => {
         showToast(`Status updated to ${newStatus}`, 'success');
         fetchQuotations();
       } else {
-        showToast(result.detail || result.error || 'Failed to update status', 'error');
+        showToast(apiErrorMessage(result, 'Failed to update status'), 'error');
       }
     } catch (error) {
       console.error('Error updating status:', error);
@@ -115,7 +122,7 @@ const ViewQuotationPage: React.FC = () => {
         });
         fetchQuotations();
       } else {
-        showToast(result.detail || result.error || 'Failed to convert', 'error');
+        showToast(apiErrorMessage(result, 'Failed to convert'), 'error');
       }
     } catch (error) {
       console.error('Error converting quotation:', error);
@@ -125,9 +132,11 @@ const ViewQuotationPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string, quotationNo: string) => {
+  const handleDelete = async (id: string, quotationNo: string, revision: number) => {
     const confirm = await Swal.fire({
-      title: `Delete ${quotationNo}?`,
+      title: `Delete ${quotationNo}${revision > 1 ? ` Rev.${revision}` : ''}?`,
+      // Deleting a revision re-opens the one it replaced (backend puts its old status back)
+      text: revision > 1 ? `Rev.${revision - 1} will become the active quotation again.` : undefined,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#d33',
@@ -143,7 +152,7 @@ const ViewQuotationPage: React.FC = () => {
         fetchQuotations();
       } else {
         const result = await response.json();
-        showToast(result.detail || result.error || 'Failed to delete', 'error');
+        showToast(apiErrorMessage(result, 'Failed to delete'), 'error');
       }
     } catch (error) {
       console.error('Error deleting quotation:', error);
@@ -168,7 +177,7 @@ const ViewQuotationPage: React.FC = () => {
         setPdfFilename(result.filename || 'quotation.pdf');
         setShowPdfModal(true);
       } else {
-        showToast(result.detail || result.error || 'Failed to load PDF', 'error');
+        showToast(apiErrorMessage(result, 'Failed to load PDF'), 'error');
       }
     } catch (error) {
       console.error('Error loading PDF:', error);
@@ -217,7 +226,8 @@ const ViewQuotationPage: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
               {quotations.map((q) => (
-                <tr key={q.id} className="hover:bg-gray-50">
+                <React.Fragment key={q.id}>
+                <tr className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium">{q.quotation_no} <span className="text-xs text-gray-400">(Rev.{q.revision})</span></td>
                   <td className="px-4 py-3">{q.customer_name || '-'}{q.team_name ? ` / ${q.team_name}` : ''}</td>
                   <td className="px-4 py-3">{q.required_by_date || '-'}</td>
@@ -282,10 +292,20 @@ const ViewQuotationPage: React.FC = () => {
                         </button>
                       )}
 
+                      {REVISABLE.includes(q.status) && (
+                        <button
+                          disabled={actioningId === q.id}
+                          onClick={() => router.push(`/quotation?revise=${q.id}`)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium border border-gray-300 text-gray-800 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          ✎ Revise
+                        </button>
+                      )}
+
                       {q.status === 'DRAFT' && (
                         <button
                           disabled={actioningId === q.id}
-                          onClick={() => handleDelete(q.id, q.quotation_no)}
+                          onClick={() => handleDelete(q.id, q.quotation_no, q.revision)}
                           className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                           🗑 Delete
@@ -300,6 +320,31 @@ const ViewQuotationPage: React.FC = () => {
                     </div>
                   </td>
                 </tr>
+                {/* Older revisions, grey under the latest one - read-only, PDF only */}
+                {q.old_revisions.map((old) => (
+                  <tr key={old.id} className="bg-gray-50 text-gray-400 text-sm">
+                    <td className="px-4 py-2 pl-8">
+                      ↳ {q.quotation_no} <span className="text-xs">(Rev.{old.revision})</span>
+                    </td>
+                    <td className="px-4 py-2" colSpan={4}>
+                      <span className="text-xs">Replaced by Rev.{old.revision + 1}</span>
+                    </td>
+                    <td className="px-4 py-2">Rs. {old.total_amount}</td>
+                    <td className="px-4 py-2">
+                      <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${STATUS_STYLES.REVISED}`}>REVISED</span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <button
+                        disabled={actioningId === old.id}
+                        onClick={() => handleViewPdf(old.id)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        📄 PDF
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                </React.Fragment>
               ))}
             </tbody>
           </table>

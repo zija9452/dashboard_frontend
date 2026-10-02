@@ -119,6 +119,9 @@ const ViewCustomerInvoicePage: React.FC = () => {
   const [modalImages, setModalImages] = useState<string[]>([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
+  // DTF layout section - closed by default, opened with the "+" heading
+  const [showDtfLayout, setShowDtfLayout] = useState(false);
+
   useEffect(() => {
     if (params && params.id) {
       const id = Array.isArray(params.id) ? params.id[0] : params.id;
@@ -317,18 +320,30 @@ const ViewCustomerInvoicePage: React.FC = () => {
         {/* DTF layouts for the designer - drawn from the saved positions, exactly as priced */}
         {invoice.items.some(item => item.dtf) && (
           <div className="mt-6 flex flex-col gap-4">
-            <h3 className="text-lg font-semibold text-gray-900">DTF Logo Layout (for the designer)</h3>
-            <p className="text-sm text-gray-600 -mt-2">
-              Place the logos on the roll exactly like this - the order was priced on this layout. Each box shows its logo number.
-            </p>
-            {invoice.items.map((item, index) => item.dtf && (
-              <DtfLayoutDetails
-                key={index}
-                block={item.dtf}
-                category={`${item.cat_name || item.product_name} (item ${index + 1})`}
-                quantity={item.quantity}
-              />
-            ))}
+            <button
+              type="button"
+              onClick={() => setShowDtfLayout(open => !open)}
+              aria-expanded={showDtfLayout}
+              className="self-start flex items-center gap-2 text-lg font-semibold text-gray-900 hover:underline"
+            >
+              <span className="text-2xl leading-none w-5">{showDtfLayout ? '−' : '+'}</span>
+              DTF Logo Layout (for the designer)
+            </button>
+            {showDtfLayout && (
+              <>
+                <p className="text-sm text-gray-600 -mt-2">
+                  Place the logos on the roll exactly like this - the order was priced on this layout. Each box shows its logo number.
+                </p>
+                {invoice.items.map((item, index) => item.dtf && (
+                  <DtfLayoutDetails
+                    key={index}
+                    block={item.dtf}
+                    category={`${item.cat_name || item.product_name} (item ${index + 1})`}
+                    quantity={item.quantity}
+                  />
+                ))}
+              </>
+            )}
           </div>
         )}
 

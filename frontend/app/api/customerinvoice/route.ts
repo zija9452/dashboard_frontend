@@ -28,7 +28,8 @@ export async function POST(request: NextRequest) {
       let errorMessage = 'Backend request failed';
       try {
         const errorData = JSON.parse(errorText);
-        errorMessage = errorData.detail || errorData.message || errorMessage;
+        // Backend error handler sends { error: { message } } (e.g. DTF checks)
+        errorMessage = errorData.error?.message || errorData.detail || errorData.message || errorMessage;
       } catch {
         errorMessage = errorText || errorMessage;
       }
@@ -78,7 +79,8 @@ export async function GET(request: NextRequest) {
       let errorMessage = 'Backend request failed';
       try {
         const errorData = JSON.parse(errorText);
-        errorMessage = errorData.detail || errorData.message || errorMessage;
+        // Backend error handler sends { error: { message } } (e.g. DTF checks)
+        errorMessage = errorData.error?.message || errorData.detail || errorData.message || errorMessage;
       } catch {
         errorMessage = errorText || errorMessage;
       }

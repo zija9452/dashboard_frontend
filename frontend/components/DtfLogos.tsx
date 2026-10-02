@@ -202,6 +202,7 @@ export const DtfLayoutDetails: React.FC<{ block: DtfBlock; category: string; qua
           {inches(block.roll_width_in)} roll · {inches(block.gap_in)} gap · {block.layout.length} prints · {inches(block.length_in)} used · {metersLabel(block.half_meters)}
         </span>
       </div>
+
       <div className="flex flex-wrap gap-2">
         {block.logos.map((l, i) => (
           <span key={i} className="inline-flex items-center gap-1.5 text-xs bg-white border border-gray-200 rounded-full px-2 py-0.5">

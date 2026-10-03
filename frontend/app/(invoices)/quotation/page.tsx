@@ -524,7 +524,7 @@ const QuotationPage: React.FC = () => {
           html: `<p><strong>${result.quotation_no}${result.revision > 1 ? ` (Rev.${result.revision})` : ''}</strong></p>` +
                 (revising ? `<p style="color:#6B7280;">Rev.${revising.revision} is now REVISED (PDF only).</p>` : '') +
                 (result.is_rush ? `<p style="color:#EA580C;font-weight:bold;">RUSH ORDER - Rs. ${result.rush_charge} rush charge (Rs. ${result.rush_rate_per_piece ?? 0} per piece × ${result.total_pieces ?? totalPieces} pcs)</p>` : '<p>Normal order (not rush)</p>') +
-                (result.mockup_charge > 0 ? `<p style="color:#7E22CE;">Designing / mockup - Rs. ${result.mockup_charge}</p>` : '') +
+                (result.mockup_charge > 0 ? `<p style="color:#7E22CE;">Flat Charges - Rs. ${result.mockup_charge}</p>` : '') +
                 (result.dtf_charge > 0 ? `<p style="color:#0F766E;">DTF printing - Rs. ${result.dtf_charge}</p>` : '') +
                 `<p>Total: Rs. ${result.total_amount}</p>`,
           icon: 'success',

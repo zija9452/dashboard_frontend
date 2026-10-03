@@ -8,6 +8,7 @@ import SidebarClientWrapper from "@/components/SidebarClientWrapper";
 import PageHamburgerButton from "@/components/PageHamburgerButton";
 import SalesmanAttendanceWidget from "@/components/SalesmanAttendanceWidget";
 import ShopOrderApprovalBadge from "@/components/ShopOrderApprovalBadge";
+import CashDepositBadge from "@/components/CashDepositBadge";
 import BranchSwitcher from "@/components/BranchSwitcher";
 import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
 import Image from "next/image";
@@ -133,6 +134,14 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
                   {userRole !== 'order_booker' && userRole !== 'production' && (
                     <SidebarLink href="/expenses" className="text-base py-3 border-b border-gray-200">
                       Expenses
+                    </SidebarLink>
+                  )}
+                  {(userRole === 'admin' || userRole === 'cashier' || userRole === 'sales') && (
+                    <SidebarLink href="/cash-deposits" className="text-base py-3 border-b border-gray-200">
+                      <span className="flex items-center">
+                        Cash Deposits
+                        <CashDepositBadge role={userRole} />
+                      </span>
                     </SidebarLink>
                   )}
                   {userRole !== 'production' && userRole !== 'sales' && (

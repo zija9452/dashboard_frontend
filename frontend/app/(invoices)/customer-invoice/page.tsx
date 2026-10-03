@@ -1594,7 +1594,7 @@ const CustomerInvoicePage: React.FC = () => {
                       <p className="text-xs text-orange-700 mt-1">Includes Rs. {estimatedRushCharge.toLocaleString()} rush charge</p>
                     )}
                     {mockupTotal > 0 && (
-                      <p className="text-xs text-purple-700 mt-1">Includes Rs. {mockupTotal.toLocaleString()} mockup charge</p>
+                      <p className="text-xs text-purple-700 mt-1">Includes Rs. {mockupTotal.toLocaleString()} flat charges</p>
                     )}
                     {dtfTotal > 0 && (
                       <p className="text-xs text-teal-700 mt-1">Includes Rs. {dtfTotal.toLocaleString()} DTF printing</p>

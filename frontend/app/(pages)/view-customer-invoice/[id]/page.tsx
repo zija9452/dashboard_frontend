@@ -362,7 +362,7 @@ const ViewCustomerInvoicePage: React.FC = () => {
             )}
             {invoice.mockup_charges.map(mc => (
               <div key={mc.category} className="flex justify-between text-purple-700 font-medium mb-2">
-                <span>Mockup ({mc.category})</span>
+                <span>Flat Charges ({mc.category})</span>
                 <span>+ Rs. {Number(mc.amount).toFixed(2)}</span>
               </div>
             ))}

@@ -60,7 +60,7 @@ export const QuantityTierCards: React.FC<{ summaries: CategoryTierSummary[] }> =
   );
 };
 
-// Totals-box rows: one editable "Designing / mockup - T-shirt (3 pcs)" row per category.
+// Totals-box rows: one editable "Flat Charges - T-shirt (3 pcs)" row per category.
 export const MockupChargeRows: React.FC<{
   lines: MockupLine[];
   onAmountChange: (category: string, amount: number) => void;
@@ -72,7 +72,7 @@ export const MockupChargeRows: React.FC<{
         className="flex flex-wrap justify-between items-center gap-2 text-sm text-purple-700 font-medium mb-2 px-2 py-1.5 bg-purple-50 border border-purple-200 rounded-md"
       >
         <label htmlFor={`mockup-${m.category}`}>
-          Designing / mockup - {m.category} ({m.pieces} pcs)
+          Flat Charges - {m.category} ({m.pieces} pcs)
           <span className="block text-xs font-normal text-gray-500">
             Under {MOCKUP_MAX_PIECES + 1} pcs. Once for this category, not per piece.
           </span>
@@ -106,10 +106,10 @@ export const MockupLinePreview: React.FC<{
   let text: React.ReactNode = null;
   if (tierPieces <= MOCKUP_MAX_PIECES) {
     text = alreadyInCart > 0
-      ? <>{category} mockup (Rs. {amount.toLocaleString()}) is already in the total, not added again.</>
-      : <>+ Mockup ({category}, under {MOCKUP_MAX_PIECES + 1} pcs): Rs. {amount.toLocaleString()} → <b className="text-gray-900">Rs. {(lineTotal + amount).toLocaleString()}</b> with mockup. Added once to the total, not per piece.</>;
+      ? <>{category} flat charges (Rs. {amount.toLocaleString()}) are already in the total, not added again.</>
+      : <>+ Flat Charges ({category}, under {MOCKUP_MAX_PIECES + 1} pcs): Rs. {amount.toLocaleString()} → <b className="text-gray-900">Rs. {(lineTotal + amount).toLocaleString()}</b> with flat charges. Added once to the total, not per piece.</>;
   } else if (alreadyInCart > 0 && alreadyInCart <= MOCKUP_MAX_PIECES) {
-    text = <>{category} reaches {tierPieces} pcs, so the Rs. {amount.toLocaleString()} mockup charge will be removed.</>;
+    text = <>{category} reaches {tierPieces} pcs, so the Rs. {amount.toLocaleString()} flat charges will be removed.</>;
   }
   if (!text) return null;
   return <p className="text-xs mt-1.5 px-2 py-1.5 rounded-md bg-purple-50 text-purple-700">{text}</p>;

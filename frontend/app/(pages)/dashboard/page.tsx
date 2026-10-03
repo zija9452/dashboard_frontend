@@ -100,6 +100,7 @@ const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState(false);
   const [userRole, setUserRole] = useState<string>('Admin');
+  const [pendingDeposits, setPendingDeposits] = useState(0);
   const isCashierLike = userRole === 'Cashier' || userRole === 'Order Booker' || userRole === 'Production' || userRole === 'Sales';
   const [showShopReportModal, setShowShopReportModal] = useState(false);
   const [upcomingTournaments, setUpcomingTournaments] = useState<UpcomingTournament[]>([]);
@@ -178,6 +179,14 @@ const DashboardPage: React.FC = () => {
               // ADMIN/EMPLOYEE: Auto-fetch TODAY's data with chart on mount
               fetchDashboardData(todayStr, todayStr, true);
               fetchDemandStats(todayStr, todayStr);
+            }
+
+            // Cash deposits waiting for approval (sales/admin review them)
+            if (role === 'admin' || role === 'sales') {
+              fetch('/api/cash-deposits/pending-count', { credentials: 'include' })
+                .then((res) => (res.ok ? res.json() : null))
+                .then((counts) => setPendingDeposits(counts?.pending || 0))
+                .catch((error) => console.error('Error fetching pending deposits:', error));
             }
 
             // Tournaments card is hidden for Production/Sales - skip the call
@@ -576,6 +585,24 @@ const DashboardPage: React.FC = () => {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Cash deposits waiting for approval - sales/admin only */}
+        {pendingDeposits > 0 && (
+          <div className="regal-card p-3 md:p-4 mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-l-4 border-regal-yellow">
+            <div className="flex items-center gap-3">
+              <div className="text-3xl">🏦</div>
+              <div>
+                <p className="text-base md:text-lg font-semibold text-gray-900">
+                  {pendingDeposits} cash deposit{pendingDeposits === 1 ? '' : 's'} pending
+                </p>
+                <p className="text-xs md:text-sm text-gray-600">Check the bank slips and approve or reject.</p>
+              </div>
+            </div>
+            <Link href="/cash-deposits" className="regal-btn bg-regal-yellow text-regal-black text-center whitespace-nowrap">
+              Review
+            </Link>
           </div>
         )}
 

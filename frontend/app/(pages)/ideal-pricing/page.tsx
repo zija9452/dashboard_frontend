@@ -243,7 +243,7 @@ const IdealPricingPage: React.FC = () => {
     if (!selectedCategory) return;
     const value = categoryMockupInput.trim();
     if (value !== '' && (isNaN(Number(value)) || Number(value) < 0)) {
-      showToast('Please enter a valid mockup charge, or leave it empty for no mockup charge', 'error');
+      showToast('Please enter a valid flat charges amount, or leave it empty for no flat charges', 'error');
       return;
     }
     setSavingCategoryMockup(true);
@@ -260,10 +260,10 @@ const IdealPricingPage: React.FC = () => {
       setSelectedCategory(updated);
       setCategories(prev => prev.map(c => c.id === updated.id ? updated : c));
       setCategoryMockupInput(saved === null ? '' : String(saved));
-      showToast(`${selectedCategory.main_category} mockup charge updated`, 'success');
+      showToast(`${selectedCategory.main_category} flat charges updated`, 'success');
     } catch (error) {
       console.error('Error saving category mockup charge:', error);
-      showToast('Failed to update mockup charge', 'error');
+      showToast('Failed to update flat charges', 'error');
     } finally {
       setSavingCategoryMockup(false);
     }
@@ -722,7 +722,7 @@ const IdealPricingPage: React.FC = () => {
           <div className="flex flex-wrap items-end gap-3 p-4 bg-gray-50 rounded border">
             <div>
               <label htmlFor="category-mockup" className="block text-sm font-medium mb-1">
-                {selectedCategory.main_category} — designing / mockup charge (Rs.)
+                {selectedCategory.main_category} — flat charges (Rs.)
               </label>
               <input
                 id="category-mockup"
@@ -730,7 +730,7 @@ const IdealPricingPage: React.FC = () => {
                 value={categoryMockupInput}
                 onChange={(e) => setCategoryMockupInput(e.target.value)}
                 className="regal-input w-40"
-                placeholder="No mockup"
+                placeholder="No flat charges"
                 min="0"
                 step="1"
               />
@@ -744,9 +744,9 @@ const IdealPricingPage: React.FC = () => {
             </button>
             <p className="text-xs text-gray-500 w-full">
               {selectedCategory.mockup_charge == null || Number(selectedCategory.mockup_charge) === 0
-                ? `No mockup charge for ${selectedCategory.main_category}.`
+                ? `No flat charges for ${selectedCategory.main_category}.`
                 : `Rs. ${Number(selectedCategory.mockup_charge).toLocaleString()} once when ${selectedCategory.main_category} has 1-4 pcs in a Quotation or Customer Invoice — not per piece, and none at 5+ pcs.`}
-              {' '}Leave empty for no mockup charge. Staff can change or waive it on each order.
+              {' '}Leave empty for no flat charges. Staff can change or waive it on each order.
             </p>
           </div>
         )}

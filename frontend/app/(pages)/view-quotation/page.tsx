@@ -6,6 +6,7 @@ import { apiErrorMessage } from '@/lib/apiError';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import PageHeader from '@/components/ui/PageHeader';
+import ReportModal from '@/components/ui/ReportModal';
 
 interface QuotationListItem {
   id: string;
@@ -51,6 +52,17 @@ const ViewQuotationPage: React.FC = () => {
   const [pdfUrl, setPdfUrl] = useState<string>('');
   const [pdfFilename, setPdfFilename] = useState<string>('');
 
+  // Invoice receipt for the order a convert just created - same receipt (and same
+  // recovery logic) as Customer Invoice, so it can be handed to the customer.
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptPdfData, setReceiptPdfData] = useState('');
+  // True while fetchAndShowReceipt() is in flight - full-screen loading overlay.
+  const [loadingReceipt, setLoadingReceipt] = useState(false);
+  // Remembers "order X was created but its receipt hasn't been shown yet", so a
+  // refresh or a dropped connection can quietly recover it (the order already exists,
+  // so this is a plain re-fetch with no duplicate risk).
+  const CONVERT_LAST_CREATED_STORAGE = 'quotation-convert-last-created';
+
   const fetchQuotations = async () => {
     try {
       setLoading(true);
@@ -69,6 +81,58 @@ const ViewQuotationPage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Fetch the receipt PDF for an already-created invoice and show it. A plain read,
+  // so always safe to retry. Returns whether it was actually shown.
+  const fetchAndShowReceipt = async (invoiceId: string): Promise<boolean> => {
+    setLoadingReceipt(true);
+    try {
+      const res = await fetch(`/api/customerinvoice/receipt/${invoiceId}`, {
+        method: 'POST',
+        credentials: 'include',
+        // A stalled connection would otherwise hang (and the overlay with it) forever.
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      const pdf = typeof data === 'string' ? data : data.pdf;
+      if (!pdf) return false;
+      setReceiptPdfData(pdf);
+      setShowReceiptModal(true);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setLoadingReceipt(false);
+    }
+  };
+
+  // Recover a receipt that never got shown. Runs on mount and again whenever the
+  // browser comes back online, so no manual refresh is needed.
+  const recoverLastCreatedReceipt = async () => {
+    let stored: { invoiceId: string; invoiceNo: string } | null = null;
+    try {
+      stored = JSON.parse(localStorage.getItem(CONVERT_LAST_CREATED_STORAGE) || 'null');
+    } catch {
+      stored = null;
+    }
+    if (!stored) return;
+
+    const shown = await fetchAndShowReceipt(stored.invoiceId);
+    if (shown) {
+      try { localStorage.removeItem(CONVERT_LAST_CREATED_STORAGE); } catch { /* ignore */ }
+      showToast(`Recovered receipt for order ${stored.invoiceNo}`, 'success');
+    }
+    // Still failing (net still down) - leave it for the 'online' event, next mount,
+    // or Duplicate Bill. No retry loop.
+  };
+
+  useEffect(() => {
+    recoverLastCreatedReceipt();
+    window.addEventListener('online', recoverLastCreatedReceipt);
+    return () => window.removeEventListener('online', recoverLastCreatedReceipt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     fetchQuotations();
@@ -115,18 +179,43 @@ const ViewQuotationPage: React.FC = () => {
       const response = await fetch(`/api/quotation/${id}/convert`, { method: 'POST', credentials: 'include' });
       const result = await response.json();
       if (response.ok && result.success) {
-        await Swal.fire({
+        Swal.fire({
           title: 'Converted!',
           text: `Order ${result.invoice_no} has been created.`,
           icon: 'success',
+          timer: 1500,
+          showConfirmButton: false,
         });
         fetchQuotations();
+
+        // Remember it until the receipt is actually shown, so a failed fetch or a
+        // refresh can be recovered (see recoverLastCreatedReceipt).
+        try {
+          localStorage.setItem(CONVERT_LAST_CREATED_STORAGE, JSON.stringify({
+            invoiceId: result.invoice_id,
+            invoiceNo: result.invoice_no,
+          }));
+        } catch { /* ignore */ }
+
+        const shown = await fetchAndShowReceipt(result.invoice_id);
+        if (shown) {
+          try { localStorage.removeItem(CONVERT_LAST_CREATED_STORAGE); } catch { /* ignore */ }
+        } else {
+          showToast(
+            `Order ${result.invoice_no} was created, but the receipt could not be loaded. Check your internet connection and reopen it from Duplicate Bill.`,
+            'error'
+          );
+        }
       } else {
         showToast(apiErrorMessage(result, 'Failed to convert'), 'error');
       }
     } catch (error) {
       console.error('Error converting quotation:', error);
-      showToast('Failed to convert', 'error');
+      const isNetworkError = error instanceof TypeError && /fetch/i.test((error as Error).message || '');
+      showToast(
+        isNetworkError ? 'Internet connection problem. Please check your connection and try again.' : 'Failed to convert',
+        'error'
+      );
     } finally {
       setActioningId(null);
     }
@@ -381,6 +470,29 @@ const ViewQuotationPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {loadingReceipt && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-[100]">
+          <div className="bg-white rounded-lg px-8 py-6 shadow-xl flex flex-col items-center gap-3">
+            <svg className="animate-spin h-8 w-8 text-regal-orange" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span className="text-regal-black font-medium">Loading receipt...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice receipt of the converted order - same ReportModal as Customer Invoice */}
+      <ReportModal
+        isOpen={showReceiptModal}
+        onClose={() => {
+          setShowReceiptModal(false);
+          setReceiptPdfData('');
+        }}
+        title="Invoice Receipt"
+        pdfData={receiptPdfData}
+      />
     </div>
   );
 };

@@ -20,23 +20,28 @@ export const DtfRollPreview: React.FC<{ block: DtfBlock; maxHeight?: number }> =
         <svg viewBox={`${-pad} ${-pad} ${W + pad * 2} ${L + pad * 2}`} className="block w-full h-auto" role="img" aria-label={`Logos placed on the ${W} inch roll`}>
           <rect x={0} y={0} width={W} height={L} fill="#ffffff" stroke="#94a3b8" strokeWidth={0.08} />
           <rect x={0} y={block.length_in} width={W} height={Math.max(0, L - block.length_in)} fill="#f1f5f9" />
-          {block.layout.map((p, i) => (
-            <g key={i}>
-              <rect x={p.x} y={p.y} width={p.w} height={p.h} rx={0.15} fill={colorFor(p.logo)} fillOpacity={0.85} />
-              {/* Logo number in the middle of each box, sized to fit it */}
-              <text
-                x={p.x + p.w / 2}
-                y={p.y + p.h / 2}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fontSize={Math.min(p.w, p.h, 6) * 0.5}
-                fontWeight={700}
-                fill="#ffffff"
-              >
-                {p.logo}
-              </text>
-            </g>
-          ))}
+          {block.layout.map((p, i) => {
+            // Logo number in the middle of each box, sized to fit it. A print turned 90°
+            // also gets "Rotate 90°" under the number so the designer sees it at a glance.
+            const num = Math.min(p.w, p.h, 6) * (p.rotated ? 0.4 : 0.5);
+            const tag = p.rotated ? Math.min(p.w / 6.2, p.h * 0.22, 1.4) : 0;
+            const groupH = p.rotated ? num * 1.2 + tag : num;
+            const cx = p.x + p.w / 2;
+            const cy = p.y + p.h / 2;
+            return (
+              <g key={i}>
+                <rect x={p.x} y={p.y} width={p.w} height={p.h} rx={0.15} fill={colorFor(p.logo)} fillOpacity={0.85} />
+                <text x={cx} y={cy - groupH / 2 + num / 2} textAnchor="middle" dominantBaseline="central" fontSize={num} fontWeight={700} fill="#ffffff">
+                  {p.logo}
+                </text>
+                {p.rotated && (
+                  <text x={cx} y={cy + groupH / 2 - tag / 2} textAnchor="middle" dominantBaseline="central" fontSize={tag} fontWeight={600} fill="#ffffff">
+                    Rotate 90°
+                  </text>
+                )}
+              </g>
+            );
+          })}
           {Array.from({ length: steps }, (_, k) => (
             <line key={k} x1={0} x2={W} y1={(k + 1) * HALF_METER_IN} y2={(k + 1) * HALF_METER_IN} stroke="#0f766e" strokeWidth={0.08} strokeDasharray="0.4 0.3" />
           ))}
@@ -241,7 +246,7 @@ export const DtfLayoutDetails: React.FC<{ block: DtfBlock; category: string; qua
                   <td className="px-2 py-1 text-right">{inches(p.x)}</td>
                   <td className="px-2 py-1 text-right">{inches(p.y)}</td>
                   <td className="px-2 py-1 text-right">{p.w}×{p.h}&quot;</td>
-                  <td className="px-2 py-1">{p.rotated ? 'Yes, 90°' : 'No'}</td>
+                  <td className="px-2 py-1">{p.rotated ? 'Rotate 90°' : 'No'}</td>
                 </tr>
               ))}
             </tbody>

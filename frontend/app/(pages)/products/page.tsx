@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import { productsApi, Product } from '@/lib/api/products';
 import PageHeader from '@/components/ui/PageHeader';
+import ImageZoomViewer from '@/components/ui/ImageZoomViewer';
 import { CloudinaryImage, IMAGE_SIZES } from '@/lib/cloudinary';
 import { useBranch } from '@/lib/branch';
 
@@ -985,21 +986,11 @@ const ProductsPage: React.FC = () => {
 
       {/* Image Modal */}
       {showImageModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
-          <button
-            onClick={() => setShowImageModal(false)}
-            className="absolute top-4 right-4 text-white hover:text-gray-300 z-10"
-          >
-            <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-          <img
-            src={modalImages[currentImageIndex]}
-            alt="Product preview"
-            className="max-h-[80vh] max-w-full object-contain rounded-lg"
-          />
-        </div>
+        <ImageZoomViewer
+          src={modalImages[currentImageIndex]}
+          alt="Product preview"
+          onClose={() => setShowImageModal(false)}
+        />
       )}
     </div>
   );

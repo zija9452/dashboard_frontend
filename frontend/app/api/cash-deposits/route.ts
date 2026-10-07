@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { proxyCashDeposits } from './proxy';
 
-// GET /api/cash-deposits - List (status_filter, from_date, to_date, page, limit)
+// GET /api/cash-deposits - List (status_filter, search, page, limit)
 export async function GET(request: NextRequest) {
   return proxyCashDeposits(request, '', 'GET');
 }

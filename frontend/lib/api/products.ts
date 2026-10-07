@@ -172,14 +172,9 @@ export class ProductsApi {
     const response = await this.apiClient.get(`/products/${id}`, {
       timeout: 60000,
     });
-    const product = response.data;
-    
-    // Optimize Cloudinary image URL if present
-    if (product?.pro_image) {
-      product.pro_image = optimizeCloudinaryUrl(product.pro_image);
-    }
-    
-    return product;
+    // Original image URL (no f_auto/q_auto): shown as-is in the edit form and
+    // saved back unchanged on update
+    return response.data;
   }
 
   /**

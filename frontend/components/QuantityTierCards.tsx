@@ -27,6 +27,11 @@ export const QuantityTierCards: React.FC<{ summaries: CategoryTierSummary[] }> =
               + Rs. {s.mockupAmount.toLocaleString()} mockup
             </span>
           )}
+          {s.dyeMultiplier > 1 && (
+            <span className="whitespace-nowrap text-xs font-semibold text-pink-700 bg-white border border-pink-200 rounded-full px-2 py-px">
+              Dye {s.dyePieces} pcs · rate ×{s.dyeMultiplier}
+            </span>
+          )}
           {s.next && (
             <>
               <span className="whitespace-nowrap text-xs font-bold text-regal-black bg-regal-yellow rounded px-1.5 py-px">
@@ -74,7 +79,7 @@ export const MockupChargeRows: React.FC<{
         <label htmlFor={`mockup-${m.category}`}>
           Flat Charges - {m.category} ({m.pieces} pcs)
           <span className="block text-xs font-normal text-gray-500">
-            Under {MOCKUP_MAX_PIECES + 1} pcs. Once for this category, not per piece.
+            One-time charge for orders 1-{MOCKUP_MAX_PIECES} pcs. Removed at {MOCKUP_MAX_PIECES + 1}+ pcs.
           </span>
         </label>
         <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
@@ -95,20 +100,27 @@ export const MockupChargeRows: React.FC<{
 );
 
 // Under the Line Total in the item form: what adding this item does to the mockup.
+// Only non-dye pieces bring the flat charge (dye lines pay x2 / x1.5 in the rate).
 export const MockupLinePreview: React.FC<{
   category: string;
   tierPieces: number;      // pieces of this category incl. this item
   alreadyInCart: number;   // pieces of this category already in the cart
+  nonDyeInCart: number;    // non-dye pieces of this category already in the cart
+  isDye: boolean;          // the item being entered is dye
   lineTotal: number;
   amount: number;
-}> = ({ category, tierPieces, alreadyInCart, lineTotal, amount }) => {
+}> = ({ category, tierPieces, alreadyInCart, nonDyeInCart, isDye, lineTotal, amount }) => {
   if (!category || tierPieces <= 0) return null;
   let text: React.ReactNode = null;
   if (tierPieces <= MOCKUP_MAX_PIECES) {
-    text = alreadyInCart > 0
-      ? <>{category} flat charges (Rs. {amount.toLocaleString()}) are already in the total, not added again.</>
-      : <>+ Flat Charges ({category}, under {MOCKUP_MAX_PIECES + 1} pcs): Rs. {amount.toLocaleString()} → <b className="text-gray-900">Rs. {(lineTotal + amount).toLocaleString()}</b> with flat charges. Added once to the total, not per piece.</>;
-  } else if (alreadyInCart > 0 && alreadyInCart <= MOCKUP_MAX_PIECES) {
+    if (nonDyeInCart > 0) {
+      text = <>{category} flat charges (Rs. {amount.toLocaleString()}) are already in the total, not added again.</>;
+    } else if (isDye) {
+      text = <>Dye: no flat charges - the dye rate applies instead.</>;
+    } else {
+      text = <>+ Flat Charges ({category}, under {MOCKUP_MAX_PIECES + 1} pcs): Rs. {amount.toLocaleString()} → <b className="text-gray-900">Rs. {(lineTotal + amount).toLocaleString()}</b> with flat charges. Added once to the total, not per piece.</>;
+    }
+  } else if (nonDyeInCart > 0 && alreadyInCart <= MOCKUP_MAX_PIECES) {
     text = <>{category} reaches {tierPieces} pcs, so the Rs. {amount.toLocaleString()} flat charges will be removed.</>;
   }
   if (!text) return null;

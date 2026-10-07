@@ -18,6 +18,10 @@ import {
   mockupLines,
   categoryTierSummaries,
   categoryMockupDefault,
+  isDyeLine,
+  dyePiecesOfCategory,
+  formDyePieces,
+  lineDyeMultiplier,
 } from '@/lib/quantityPricing';
 import { QuantityTierCards, MockupChargeRows, MockupLinePreview } from '@/components/QuantityTierCards';
 import { DtfSettings, DtfLogo, DtfResult, computeDtf, dtfLogosLabel, dtfTotalOf, metersLabel } from '@/lib/dtfLayout';
@@ -46,13 +50,14 @@ const DynamicCategoryFields: React.FC<{
   dynamicCategoryFields: Record<string, string>;
   setDynamicCategoryFields: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   tierPieces: number | ''; // this item's quantity + pieces of this category already in the cart
+  dyePieces: number;       // dye pieces of this category incl. this item (0 when not dye)
   onIdealPriceChange?: (price: number) => void;
   // DTF logos box (categories with dtf_enabled) - state lives in the page so Add to Invoice can use it
   dtfLogos: DtfLogo[];
   onDtfLogosChange: (logos: DtfLogo[]) => void;
   dtfResult: DtfResult;
   quantity: number | '';
-}> = ({ selectedCategory, customerCategories, dynamicCategoryFields, setDynamicCategoryFields, tierPieces, onIdealPriceChange, dtfLogos, onDtfLogosChange, dtfResult, quantity }) => {
+}> = ({ selectedCategory, customerCategories, dynamicCategoryFields, setDynamicCategoryFields, tierPieces, dyePieces, onIdealPriceChange, dtfLogos, onDtfLogosChange, dtfResult, quantity }) => {
   // Whether the optional fields (Rib, Zip...) are revealed - hidden by default,
   // shown via the "+" button below the required fields.
   const [showOptionalFields, setShowOptionalFields] = useState(false);
@@ -72,7 +77,7 @@ const DynamicCategoryFields: React.FC<{
 
   // Price for the selected options at the tier of all this category's pieces (see
   // lookupIdealPrice in lib/quantityPricing.ts).
-  const idealPrice = lookupIdealPrice(categoryData, dynamicCategoryFields, tierPieces);
+  const idealPrice = lookupIdealPrice(categoryData, dynamicCategoryFields, tierPieces, dyePieces);
 
   // Notify parent of ideal price change (re-evaluates whenever quantity crosses the bulk tier)
   useEffect(() => {
@@ -301,7 +306,10 @@ const CustomerInvoicePage: React.FC = () => {
   const piecesAlreadyInCart = selectedCategory ? piecesOfCategory(cart, selectedCategory) : 0;
   const tierPieces: number | '' = quantity === '' ? '' : quantity + piecesAlreadyInCart;
   const selectedCategoryData = customerCategories.find(cat => cat.main_category === selectedCategory);
-  const matchedIdealPrice = lookupIdealPrice(selectedCategoryData, dynamicCategoryFields, tierPieces);
+  const entryIsDye = isDyeLine(customerCategories.find(c => c.main_category === selectedCategory), dynamicCategoryFields);
+  const nonDyeInCart = selectedCategory ? piecesAlreadyInCart - dyePiecesOfCategory(cart, customerCategories, selectedCategory) : 0;
+  const entryDyePieces = formDyePieces(cart, customerCategories, selectedCategory, dynamicCategoryFields, quantity);
+  const matchedIdealPrice = lookupIdealPrice(selectedCategoryData, dynamicCategoryFields, tierPieces, entryDyePieces);
   // Roll layout + charge for the logos being entered, re-worked on every keystroke.
   const dtfResult = useMemo(
     () => (selectedCategoryData?.dtf_enabled ? computeDtf(dtfLogos, quantity, dtfSettings) : computeDtf([], '', null)),
@@ -309,7 +317,7 @@ const CustomerInvoicePage: React.FC = () => {
   );
   const dtfTotal = dtfTotalOf(cart);
 
-  const mockups = mockupLines(cart, mockupAmounts, mockupDefaultFor);
+  const mockups = mockupLines(cart, customerCategories, mockupAmounts, mockupDefaultFor);
   const mockupTotal = mockups.reduce((sum, m) => sum + m.amount, 0);
   const tierSummaries = categoryTierSummaries(cart, customerCategories, mockupAmountFor, hasMockupCharge);
   const linesMissingPrice = cart.filter(item => item.missingTierPrice);
@@ -1053,6 +1061,7 @@ const CustomerInvoicePage: React.FC = () => {
                     dynamicCategoryFields={dynamicCategoryFields}
                     setDynamicCategoryFields={setDynamicCategoryFields}
                     tierPieces={tierPieces}
+                    dyePieces={entryDyePieces}
                     onIdealPriceChange={handleIdealPriceChange}
                     dtfLogos={dtfLogos}
                     onDtfLogosChange={setDtfLogos}
@@ -1135,6 +1144,8 @@ const CustomerInvoicePage: React.FC = () => {
                       category={selectedCategory}
                       tierPieces={tierPieces}
                       alreadyInCart={piecesAlreadyInCart}
+                      nonDyeInCart={nonDyeInCart}
+                      isDye={entryIsDye}
                       lineTotal={price}
                       amount={mockupAmountFor(selectedCategory)}
                     />
@@ -1403,6 +1414,9 @@ const CustomerInvoicePage: React.FC = () => {
                             <span className="block text-[10px] text-amber-600">
                               {isQtyTier(piecesOfCategory(cart, item.category)) ? 'qty' : 'single'} rate · {piecesOfCategory(cart, item.category)} pcs
                             </span>
+                          )}
+                          {item.autoPriced && lineDyeMultiplier(cart, customerCategories, item) > 1 && (
+                            <span className="block text-[10px] text-pink-700">dye ×{lineDyeMultiplier(cart, customerCategories, item)}</span>
                           )}
                           {!item.autoPriced && <span className="block text-[10px] text-gray-400">manual</span>}
                           {item.missingTierPrice && (

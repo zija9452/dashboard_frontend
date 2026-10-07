@@ -17,6 +17,10 @@ import {
   categoryTierSummaries,
   categoryMockupDefault,
   needsMockup,
+  isDyeLine,
+  dyePiecesOfCategory,
+  formDyePieces,
+  lineDyeMultiplier,
 } from '@/lib/quantityPricing';
 import { QuantityTierCards, MockupChargeRows, MockupLinePreview } from '@/components/QuantityTierCards';
 import { DtfSettings, DtfLogo, computeDtf, dtfLogosLabel, dtfTotalOf, metersLabel } from '@/lib/dtfLayout';
@@ -131,7 +135,11 @@ const QuotationPage: React.FC = () => {
   // in the cart + the quantity being entered.
   const piecesAlreadyInCart = selectedCategory ? piecesOfCategory(cart, selectedCategory) : 0;
   const tierPieces: number | '' = quantity === '' ? '' : quantity + piecesAlreadyInCart;
-  const matchedIdealPrice = lookupIdealPrice(categoryData, dynamicCategoryFields, tierPieces);
+  const entryIsDye = isDyeLine(customerCategories.find(c => c.main_category === selectedCategory), dynamicCategoryFields);
+  const nonDyeInCart = selectedCategory ? piecesAlreadyInCart - dyePiecesOfCategory(cart, customerCategories, selectedCategory) : 0;
+  const matchedIdealPrice = lookupIdealPrice(
+    categoryData, dynamicCategoryFields, tierPieces, formDyePieces(cart, customerCategories, selectedCategory, dynamicCategoryFields, quantity)
+  );
   // Roll layout + charge for the logos being entered, re-worked on every keystroke.
   const dtfResult = useMemo(
     () => (categoryData?.dtf_enabled ? computeDtf(dtfLogos, quantity, dtfSettings) : computeDtf([], '', null)),
@@ -301,7 +309,9 @@ const QuotationPage: React.FC = () => {
       });
       const priced = lines.map(line => {
         const categoryForLine = customerCategories.find(c => c.main_category === line.category);
-        const listRate = lookupIdealPrice(categoryForLine, line.category_fields || {}, piecesOfCategory(lines, line.category));
+        const listRate = lookupIdealPrice(
+          categoryForLine, line.category_fields || {}, piecesOfCategory(lines, line.category), dyePiecesOfCategory(lines, customerCategories, line.category)
+        );
         return { ...line, autoPriced: listRate !== null && listRate === line.unitPrice };
       });
       updateCart(priced);
@@ -312,7 +322,7 @@ const QuotationPage: React.FC = () => {
         (data.totals.mockup_charges || []).map(m => [m.category, Number(m.amount)])
       );
       for (const category of Array.from(new Set(priced.map(l => l.category)))) {
-        if (!(category in amounts) && needsMockup(priced, category) && mockupDefaultFor(category) > 0) amounts[category] = 0;
+        if (!(category in amounts) && needsMockup(priced, customerCategories, category) && mockupDefaultFor(category) > 0) amounts[category] = 0;
       }
       setMockupAmounts(amounts);
 
@@ -434,7 +444,7 @@ const QuotationPage: React.FC = () => {
   const cartSubtotal = cart.reduce((sum, item) => sum + item.totalPrice, 0);
   const dtfTotal = dtfTotalOf(cart);
   const totalPieces = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const mockups = mockupLines(cart, mockupAmounts, mockupDefaultFor);
+  const mockups = mockupLines(cart, customerCategories, mockupAmounts, mockupDefaultFor);
   const mockupTotal = mockups.reduce((sum, m) => sum + m.amount, 0);
   const tierSummaries = categoryTierSummaries(cart, customerCategories, mockupAmountFor, hasMockupCharge);
   const linesMissingPrice = cart.filter(item => item.missingTierPrice);
@@ -760,6 +770,8 @@ const QuotationPage: React.FC = () => {
                     category={selectedCategory}
                     tierPieces={tierPieces}
                     alreadyInCart={piecesAlreadyInCart}
+                    nonDyeInCart={nonDyeInCart}
+                    isDye={entryIsDye}
                     lineTotal={price}
                     amount={mockupAmountFor(selectedCategory)}
                   />
@@ -840,6 +852,9 @@ const QuotationPage: React.FC = () => {
                             <span className="block text-[10px] text-amber-600">
                               {isQtyTier(piecesOfCategory(cart, item.category)) ? 'qty' : 'single'} rate · {piecesOfCategory(cart, item.category)} pcs
                             </span>
+                          )}
+                          {item.autoPriced && lineDyeMultiplier(cart, customerCategories, item) > 1 && (
+                            <span className="block text-[10px] text-pink-700">dye ×{lineDyeMultiplier(cart, customerCategories, item)}</span>
                           )}
                           {!item.autoPriced && <span className="block text-[10px] text-gray-400">manual</span>}
                           {item.missingTierPrice && (

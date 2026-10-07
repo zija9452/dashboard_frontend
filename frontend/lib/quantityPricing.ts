@@ -8,6 +8,10 @@
  *   themselves. A rate the staff typed (manual) never changes by itself.
  * - A category with only 1-4 pcs gets one mockup charge (once per category, not per
  *   piece). The amount is the category's own customer_categories.mockup_charge.
+ * - Dye lines (an option ticked "Dye" on the Customer Category page) get no mockup
+ *   charge; their rate is raised instead, by the dye pieces of the category: 1-4 pcs =
+ *   dye_rate_single (default x2), 5-15 = dye_rate_qty (x1.5), 16+ = normal. Both rates
+ *   are set per category on the Ideal Pricing page (see dyeMultiplier).
  */
 
 import type { DtfBlock } from './dtfLayout';
@@ -17,6 +21,7 @@ export interface SubCategoryOption {
   options: string[];
   is_modifier?: boolean; // true = a price adjustment dimension (Sleeves, Size Type...), not part of the base combination
   is_optional?: boolean; // true = hidden by default, shown via the "+" more-options toggle
+  dye_options?: string[]; // options ticked "Dye" (e.g. Dye Fabric) - see isDyeLine
 }
 
 export interface ModifierValue {
@@ -32,6 +37,8 @@ export interface CustomerCategoryGrouped {
   modifiers?: Record<string, Record<string, ModifierValue>>;
   mockup_charge?: number | null; // this category's mockup charge (Ideal Pricing page); null or 0 = no mockup
   dtf_enabled?: boolean;         // true = the optional DTF logos box shows for this category (Hoodie, Jacket)
+  dye_rate_single?: number;      // dye rate multiplier at 1-4 dye pcs (default 2)
+  dye_rate_qty?: number;         // dye rate multiplier at 5-15 dye pcs (default 1.5)
 }
 
 // The mockup charge a category starts with, set per category on the Ideal Pricing page
@@ -55,6 +62,19 @@ export const tierForQuantity = (quantity: number) =>
 
 export const isQtyTier = (pieces: number) => pieces >= PRICE_TIERS[1].minQty;
 
+// A line is dye when a selected option is ticked "Dye" on the Customer Category page.
+export const isDyeLine = (categoryData: CustomerCategoryGrouped | undefined, fields?: Record<string, string>) =>
+  !!categoryData && !!fields &&
+  categoryData.sub_categories.some(sc => !!fields[sc.sub_category] && (sc.dye_options || []).includes(fields[sc.sub_category]));
+
+// Dye rate multiplier from the category's dye pieces: 1-4 = dye_rate_single, 5-15 =
+// dye_rate_qty, 16+ = x1.
+export const dyeMultiplier = (categoryData: CustomerCategoryGrouped | undefined, dyePieces: number) =>
+  dyePieces <= 0 ? 1
+    : dyePieces <= MOCKUP_MAX_PIECES ? Number(categoryData?.dye_rate_single ?? 2)
+    : dyePieces < PRICE_TIERS[2].minQty ? Number(categoryData?.dye_rate_qty ?? 1.5)
+    : 1;
+
 // The next tier up and how many more pieces reach it, or null at the top tier.
 export const nextTierFor = (pieces: number) => {
   const next = PRICE_TIERS.find(t => t.minQty > pieces);
@@ -67,10 +87,13 @@ export const nextTierFor = (pieces: number) => {
 // final = (base + sum of flat adjustments) × product of multiply adjustments.
 // Returns null until every required option is selected, or when that exact tier has
 // no price (no fallback to another tier - staff enter the rate manually).
+// Dye lines add (base + flat adjustments) x (dyeMultiplier - 1) on top, so the dye extra
+// isn't multiplied again by Oversize+ (100 -> Oversize+ 200 -> dye 1-4 pcs 300).
 export function lookupIdealPrice(
   categoryData: CustomerCategoryGrouped | undefined,
   fields: Record<string, string>,
-  tierPieces: number | ''
+  tierPieces: number | '',
+  dyePieces: number = 0 // dye pieces of this category incl. this line (0 for non-dye)
 ): number | null {
   if (!categoryData?.ideal_prices) return null;
   if (tierPieces === '' || tierPieces <= 0) return null;
@@ -100,7 +123,8 @@ export function lookupIdealPrice(
     else flatSum += modifier.value;
   }
 
-  return (basePrice + flatSum) * multiplyProduct;
+  const dyeExtra = isDyeLine(categoryData, fields) ? (basePrice + flatSum) * (dyeMultiplier(categoryData, dyePieces) - 1) : 0;
+  return (basePrice + flatSum) * multiplyProduct + dyeExtra;
 }
 
 // The pricing-related fields every cart line carries (each page adds its own extras).
@@ -123,6 +147,34 @@ export const piecesOfCategory = (items: PricedLine[], category: string) =>
 
 export const categoriesIn = (items: PricedLine[]) => Array.from(new Set(items.map(i => i.category)));
 
+const findCategory = (categories: CustomerCategoryGrouped[], category: string) =>
+  categories.find(c => c.main_category === category);
+
+export const dyePiecesOfCategory = (items: PricedLine[], categories: CustomerCategoryGrouped[], category: string) => {
+  const categoryData = findCategory(categories, category);
+  return items
+    .filter(i => i.category === category && isDyeLine(categoryData, i.category_fields))
+    .reduce((sum, i) => sum + i.quantity, 0);
+};
+
+// Dye pieces for the line being entered in the form: dye already in the cart + this
+// quantity, or 0 when the selected options aren't dye.
+export const formDyePieces = (
+  items: PricedLine[], categories: CustomerCategoryGrouped[], category: string,
+  fields: Record<string, string>, quantity: number | ''
+) =>
+  isDyeLine(findCategory(categories, category), fields) && quantity !== ''
+    ? dyePiecesOfCategory(items, categories, category) + quantity
+    : 0;
+
+// A cart line's dye multiplier right now (1 = not dye, or 16+ dye pcs).
+export const lineDyeMultiplier = (items: PricedLine[], categories: CustomerCategoryGrouped[], line: PricedLine) => {
+  const categoryData = findCategory(categories, line.category);
+  return isDyeLine(categoryData, line.category_fields)
+    ? dyeMultiplier(categoryData, dyePiecesOfCategory(items, categories, line.category))
+    : 1;
+};
+
 // Re-prices every auto-priced line from its category's total pieces. Returns the new
 // lines plus, per category, whether rates went down or up (for the toast).
 export function repriceCart<T extends PricedLine>(
@@ -133,7 +185,9 @@ export function repriceCart<T extends PricedLine>(
   const out = items.map(item => {
     if (!item.autoPriced) return { ...item, previousUnitPrice: null, rateChange: null, missingTierPrice: false };
     const categoryData = categories.find(c => c.main_category === item.category);
-    const price = lookupIdealPrice(categoryData, item.category_fields || {}, piecesOfCategory(items, item.category));
+    const price = lookupIdealPrice(
+      categoryData, item.category_fields || {}, piecesOfCategory(items, item.category), dyePiecesOfCategory(items, categories, item.category)
+    );
     if (price === null) {
       // Keep the current rate but flag it: this tier has no price in the list.
       return { ...item, previousUnitPrice: null, rateChange: null, missingTierPrice: true };
@@ -155,9 +209,10 @@ export function repriceCart<T extends PricedLine>(
   return { items: out, changed };
 }
 
-export const needsMockup = (items: PricedLine[], category: string) => {
+// 1-4 pcs in the category and at least one non-dye piece (dye pays x2 instead).
+export const needsMockup = (items: PricedLine[], categories: CustomerCategoryGrouped[], category: string) => {
   const pieces = piecesOfCategory(items, category);
-  return pieces > 0 && pieces <= MOCKUP_MAX_PIECES;
+  return pieces > 0 && pieces <= MOCKUP_MAX_PIECES && pieces > dyePiecesOfCategory(items, categories, category);
 };
 
 export interface MockupLine {
@@ -166,15 +221,16 @@ export interface MockupLine {
   amount: number;
 }
 
-// One mockup charge per category with 1-4 pcs, skipping categories whose own charge is
-// 0. `amounts` holds per-order edits; a category without an edit gets `defaultFor`.
+// One mockup charge per category with 1-4 pcs (not dye-only), skipping categories whose
+// own charge is 0. `amounts` holds per-order edits; a category without an edit gets `defaultFor`.
 export function mockupLines(
   items: PricedLine[],
+  categories: CustomerCategoryGrouped[],
   amounts: Record<string, number>,
   defaultFor: (category: string) => number
 ): MockupLine[] {
   return categoriesIn(items)
-    .filter(c => needsMockup(items, c) && defaultFor(c) > 0)
+    .filter(c => needsMockup(items, categories, c) && defaultFor(c) > 0)
     .map(c => ({ category: c, pieces: piecesOfCategory(items, c), amount: amounts[c] ?? defaultFor(c) }));
 }
 
@@ -193,6 +249,8 @@ export interface CategoryTierSummary {
   tierLabel: string;
   isQty: boolean;
   mockupAmount: number | null; // null = no mockup for this category
+  dyePieces: number;
+  dyeMultiplier: number;       // dye_rate_single / dye_rate_qty / 1 - see dyeMultiplier
   next: { need: number; label: string; rates: NextTierRate[]; tierPriceMissing: boolean } | null;
 }
 
@@ -204,6 +262,7 @@ export function categoryTierSummaries(
 ): CategoryTierSummary[] {
   return categoriesIn(items).map(category => {
     const pieces = piecesOfCategory(items, category);
+    const dyePieces = dyePiecesOfCategory(items, categories, category);
     const next = nextTierFor(pieces);
     let nextInfo: CategoryTierSummary['next'] = null;
     if (next) {
@@ -216,8 +275,10 @@ export function categoryTierSummaries(
       const rates: NextTierRate[] = [];
       let tierPriceMissing = false;
       for (const line of autoLines) {
-        // Same lookup the cart uses, at the next tier's piece count.
-        const nextRate = lookupIdealPrice(categoryData, line.category_fields || {}, next.minQty);
+        // Same lookup the cart uses, at the next tier's piece count. For a dye line the
+        // added pieces are taken as more of the same dye item.
+        const lineIsDye = isDyeLine(categoryData, line.category_fields);
+        const nextRate = lookupIdealPrice(categoryData, line.category_fields || {}, next.minQty, lineIsDye ? dyePieces + next.need : 0);
         if (nextRate === null) { tierPriceMissing = true; continue; }
         // A bare "Yes"/"No" means nothing on its own, so those get their sub-category
         // name ("Panel: Yes"); other options read fine alone ("Full", "Oversize+").
@@ -237,7 +298,9 @@ export function categoryTierSummaries(
       pieces,
       tierLabel: tierForQuantity(pieces).label,
       isQty: isQtyTier(pieces),
-      mockupAmount: needsMockup(items, category) && hasMockupCharge(category) ? mockupAmountFor(category) : null,
+      mockupAmount: needsMockup(items, categories, category) && hasMockupCharge(category) ? mockupAmountFor(category) : null,
+      dyePieces,
+      dyeMultiplier: dyeMultiplier(categories.find(c => c.main_category === category), dyePieces),
       next: nextInfo,
     };
   });

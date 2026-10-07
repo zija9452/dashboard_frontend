@@ -101,6 +101,8 @@ const DashboardPage: React.FC = () => {
   const [chartLoading, setChartLoading] = useState(false);
   const [userRole, setUserRole] = useState<string>('Admin');
   const [pendingDeposits, setPendingDeposits] = useState(0);
+  // Oldest few pending deposits (deposit no + Cash Of) shown in the banner
+  const [pendingDepositItems, setPendingDepositItems] = useState<{ deposit_no: string; cash_from: string; cash_to: string }[]>([]);
   const isCashierLike = userRole === 'Cashier' || userRole === 'Order Booker' || userRole === 'Production' || userRole === 'Sales';
   const [showShopReportModal, setShowShopReportModal] = useState(false);
   const [upcomingTournaments, setUpcomingTournaments] = useState<UpcomingTournament[]>([]);
@@ -185,7 +187,10 @@ const DashboardPage: React.FC = () => {
             if (role === 'admin' || role === 'sales') {
               fetch('/api/cash-deposits/pending-count', { credentials: 'include' })
                 .then((res) => (res.ok ? res.json() : null))
-                .then((counts) => setPendingDeposits(counts?.pending || 0))
+                .then((counts) => {
+                  setPendingDeposits(counts?.pending || 0);
+                  setPendingDepositItems(counts?.items || []);
+                })
                 .catch((error) => console.error('Error fetching pending deposits:', error));
             }
 
@@ -597,6 +602,18 @@ const DashboardPage: React.FC = () => {
                 <p className="text-base md:text-lg font-semibold text-gray-900">
                   {pendingDeposits} cash deposit{pendingDeposits === 1 ? '' : 's'} pending
                 </p>
+                {pendingDepositItems.map((d) => {
+                  const fmt = (v: string) => new Date(v).toLocaleDateString('en-GB');
+                  const cashOf = d.cash_from === d.cash_to ? fmt(d.cash_from) : `${fmt(d.cash_from)} – ${fmt(d.cash_to)}`;
+                  return (
+                    <p key={d.deposit_no} className="text-xs md:text-sm text-gray-700">
+                      <span className="font-medium">{d.deposit_no}</span> · Cash of {cashOf}
+                    </p>
+                  );
+                })}
+                {pendingDeposits > pendingDepositItems.length && pendingDepositItems.length > 0 && (
+                  <p className="text-xs text-gray-500">+{pendingDeposits - pendingDepositItems.length} more</p>
+                )}
                 <p className="text-xs md:text-sm text-gray-600">Check the bank slips and approve or reject.</p>
               </div>
             </div>

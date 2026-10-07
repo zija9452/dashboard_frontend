@@ -10,6 +10,7 @@ const protectedRoutes = [
   '/salesman',
   '/stock',
   '/expenses',
+  '/cash-deposits',
   '/invoices',
   '/custom-invoice',
   '/view-custom-order',

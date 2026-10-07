@@ -11,6 +11,7 @@ interface SubCategoryOption {
   sub_category: string;
   options: string[];
   is_modifier?: boolean; // true = a price adjustment dimension (Sleeves, Size Type...), not part of the base combination
+  dye_options?: string[]; // options ticked "Dye" on the Customer Category page
 }
 
 interface ModifierValue {
@@ -25,6 +26,8 @@ interface CustomerCategoryGrouped {
   ideal_prices: Record<string, Record<string, number>>;
   modifiers?: Record<string, Record<string, ModifierValue>>; // sub_category -> option -> { type, value }
   mockup_charge?: number | null; // this category's designing / mockup charge; null = none
+  dye_rate_single?: number;      // dye line rate multiplier at 1-4 dye pcs (default 2)
+  dye_rate_qty?: number;         // dye line rate multiplier at 5-15 dye pcs (default 1.5)
 }
 
 interface PriceCombination {
@@ -269,11 +272,54 @@ const IdealPricingPage: React.FC = () => {
     }
   };
 
+  // Selected category's dye rate multipliers (1-4 / 5-15 dye pcs), as typed.
+  const [dyeSingleInput, setDyeSingleInput] = useState<string>('2');
+  const [dyeQtyInput, setDyeQtyInput] = useState<string>('1.5');
+  const [savingDyeRates, setSavingDyeRates] = useState(false);
+  const savedDyeSingle = String(selectedCategory?.dye_rate_single ?? 2);
+  const savedDyeQty = String(selectedCategory?.dye_rate_qty ?? 1.5);
+  const dyeOptionsOfSelected = selectedCategory
+    ? selectedCategory.sub_categories.flatMap(sc => sc.dye_options || [])
+    : [];
+
+  const handleSaveDyeRates = async () => {
+    if (!selectedCategory) return;
+    const single = Number(dyeSingleInput);
+    const qty = Number(dyeQtyInput);
+    if (dyeSingleInput.trim() === '' || dyeQtyInput.trim() === '' || isNaN(single) || isNaN(qty) || single < 1 || qty < 1) {
+      showToast('Dye rates must be numbers, 1 or more (1 = normal rate)', 'error');
+      return;
+    }
+    setSavingDyeRates(true);
+    try {
+      const response = await fetch(`/api/customer-category/${selectedCategory.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ dye_rate_single: single, dye_rate_qty: qty }),
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const updated = { ...selectedCategory, dye_rate_single: single, dye_rate_qty: qty };
+      setSelectedCategory(updated);
+      setCategories(prev => prev.map(c => c.id === updated.id ? updated : c));
+      setDyeSingleInput(String(single));
+      setDyeQtyInput(String(qty));
+      showToast(`${selectedCategory.main_category} dye rates updated`, 'success');
+    } catch (error) {
+      console.error('Error saving dye rates:', error);
+      showToast('Failed to update dye rates', 'error');
+    } finally {
+      setSavingDyeRates(false);
+    }
+  };
+
   const handleCategorySelect = (categoryId: string) => {
     setSelectedCategoryId(categoryId);
     const category = categories.find(cat => cat.id === categoryId);
     setSelectedCategory(category || null);
     setCategoryMockupInput(category?.mockup_charge != null ? String(category.mockup_charge) : '');
+    setDyeSingleInput(String(category?.dye_rate_single ?? 2));
+    setDyeQtyInput(String(category?.dye_rate_qty ?? 1.5));
 
     if (category) {
       generateCombinationsForCategory(category);
@@ -747,6 +793,47 @@ const IdealPricingPage: React.FC = () => {
                 ? `No flat charges for ${selectedCategory.main_category}.`
                 : `Rs. ${Number(selectedCategory.mockup_charge).toLocaleString()} once when ${selectedCategory.main_category} has 1-4 pcs in a Quotation or Customer Invoice — not per piece, and none at 5+ pcs.`}
               {' '}Leave empty for no flat charges. Staff can change or waive it on each order.
+            </p>
+          </div>
+        )}
+
+        {/* Dye rate multipliers - only for a category with options ticked "Dye" (Customer Category page) */}
+        {selectedCategory && dyeOptionsOfSelected.length > 0 && (
+          <div className="flex flex-wrap items-end gap-3 p-4 bg-pink-50 rounded border border-pink-200">
+            <div>
+              <label htmlFor="dye-rate-single" className="block text-sm font-medium mb-1">Dye rate × (1-4 pcs)</label>
+              <input
+                id="dye-rate-single"
+                type="number"
+                value={dyeSingleInput}
+                onChange={(e) => setDyeSingleInput(e.target.value)}
+                className="regal-input w-28"
+                min="1"
+                step="0.1"
+              />
+            </div>
+            <div>
+              <label htmlFor="dye-rate-qty" className="block text-sm font-medium mb-1">Dye rate × (5-15 pcs)</label>
+              <input
+                id="dye-rate-qty"
+                type="number"
+                value={dyeQtyInput}
+                onChange={(e) => setDyeQtyInput(e.target.value)}
+                className="regal-input w-28"
+                min="1"
+                step="0.1"
+              />
+            </div>
+            <button
+              onClick={handleSaveDyeRates}
+              disabled={savingDyeRates || (dyeSingleInput.trim() === savedDyeSingle && dyeQtyInput.trim() === savedDyeQty)}
+              className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            >
+              {savingDyeRates ? 'Saving...' : 'Save'}
+            </button>
+            <p className="text-xs text-gray-600 w-full">
+              Dye options: <b>{dyeOptionsOfSelected.join(', ')}</b>. A dye line gets no flat charges; its rate is
+              ×{savedDyeSingle} at 1-4 dye pcs, ×{savedDyeQty} at 5-15, normal at 16+ (e.g. 950 → {Math.round(950 * Number(savedDyeSingle)).toLocaleString()} / {Math.round(950 * Number(savedDyeQty)).toLocaleString()}).
             </p>
           </div>
         )}

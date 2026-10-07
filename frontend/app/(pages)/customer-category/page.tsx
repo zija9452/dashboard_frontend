@@ -7,12 +7,14 @@ import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import PageHeader from '@/components/ui/PageHeader';
 import { useBranch } from '@/lib/branch';
+import { PencilSquareIcon, TrashIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 
 interface SubCategory {
   sub_category: string;
   options: string[];
   is_modifier?: boolean;
   is_optional?: boolean;
+  dye_options?: string[]; // options ticked "Dye" - no flat charges, dye rate instead (Ideal Pricing page)
 }
 
 interface CustomerCategory {
@@ -139,15 +141,27 @@ const CustomerCategoryPage: React.FC = () => {
   const handleRemoveOption = (subCatIndex: number, optionIndex: number) => {
     const updated = [...subCategories];
     if (updated[subCatIndex].options.length > 1) {
+      const removed = updated[subCatIndex].options[optionIndex];
       updated[subCatIndex].options = updated[subCatIndex].options.filter((_, i) => i !== optionIndex);
+      updated[subCatIndex].dye_options = (updated[subCatIndex].dye_options || []).filter(o => o !== removed);
       setSubCategories(updated);
     }
   };
 
-  // Update option value
+  // Update option value (a ticked Dye option keeps its tick when renamed)
   const handleUpdateOption = (subCatIndex: number, optionIndex: number, value: string) => {
     const updated = [...subCategories];
+    const old = updated[subCatIndex].options[optionIndex];
     updated[subCatIndex].options[optionIndex] = value;
+    updated[subCatIndex].dye_options = (updated[subCatIndex].dye_options || []).map(o => (o === old ? value : o));
+    setSubCategories(updated);
+  };
+
+  // Tick / untick an option as Dye
+  const handleToggleDyeOption = (subCatIndex: number, option: string) => {
+    const updated = [...subCategories];
+    const dye = updated[subCatIndex].dye_options || [];
+    updated[subCatIndex].dye_options = dye.includes(option) ? dye.filter(o => o !== option) : [...dye, option];
     setSubCategories(updated);
   };
 
@@ -257,7 +271,8 @@ const CustomerCategoryPage: React.FC = () => {
       sub_category: sc.sub_category,
       options: sc.options.length > 0 ? sc.options : [''],
       is_modifier: sc.is_modifier || false,
-      is_optional: sc.is_optional || false
+      is_optional: sc.is_optional || false,
+      dye_options: sc.dye_options || []
     })));
     setDtfEnabled(!!category.dtf_enabled);
     setShowAddForm(true);
@@ -493,6 +508,19 @@ const CustomerCategoryPage: React.FC = () => {
                             placeholder="e.g., Round, V-Neck, Polyzone..."
                             required
                           />
+                          <label
+                            className="flex items-center gap-1 text-xs text-gray-700 cursor-pointer whitespace-nowrap"
+                            title="Dye: no flat charges, the dye rate (Ideal Pricing page) applies instead"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={!!option && (subCat.dye_options || []).includes(option)}
+                              disabled={!option.trim()}
+                              onChange={() => handleToggleDyeOption(subCatIndex, option)}
+                              className="rounded border-gray-300"
+                            />
+                            Dye
+                          </label>
                           {subCat.options.length > 1 && (
                             <button
                               type="button"
@@ -561,69 +589,102 @@ const CustomerCategoryPage: React.FC = () => {
             <table className="w-full">
               <thead className="bg-gray-100">
                 <tr>
-                  <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">Main Category</th>
-                  <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">Sub-Categories</th>
-                  <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">Branch</th>
-                  <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">Created At</th>
-                  <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase w-48">Main Category</th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Sub-Categories &amp; Options</th>
+                  <th className="px-4 py-4 text-right text-xs font-medium text-gray-500 uppercase w-28">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {categories.map((category) => (
-                  <tr key={category.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                      {category.main_category}
-                      {category.dtf_enabled && (
-                        <span className="ml-2 inline-block rounded bg-teal-700 px-1.5 py-px align-middle text-[10px] font-bold tracking-wide text-white">DTF</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-700">
-                      <div className="space-y-1">
-                        {category.sub_categories.map((sc, idx) => (
-                          <div key={idx} className="text-xs">
-                            <span className="font-semibold text-gray-900">{sc.sub_category}:</span>
-                            <span className="text-gray-600 ml-1">{sc.options.join(', ')}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">{category.branch}</td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {new Date(category.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-sm flex">
-                      <button
-                        onClick={() => handleEdit(category)}
-                        disabled={deletingId === category.id}
-                        className={`mr-3 ${
-                          deletingId === category.id
-                            ? 'text-gray-400 cursor-not-allowed'
-                            : 'text-blue-600 hover:text-blue-900'
-                        }`}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(category.id)}
-                        disabled={deletingId === category.id}
-                        className={`${
-                          deletingId === category.id
-                            ? 'text-gray-400 cursor-not-allowed'
-                            : 'text-red-600 hover:text-red-900'
-                        }`}
-                      >
-                        {deletingId === category.id ? (
-                          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
-                        ) : (
-                          'Delete'
-                        )}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {categories.map((category) => {
+                  const busy = deletingId === category.id;
+                  return (
+                    <tr key={category.id} className="align-top hover:bg-gray-50">
+                      {/* Name + DTF badge, sub-category count and date underneath */}
+                      <td className="px-4 py-4">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-sm font-semibold text-gray-900">{category.main_category}</span>
+                          {category.dtf_enabled && (
+                            <span className="rounded bg-teal-700 px-1.5 py-px text-[10px] font-bold tracking-wide text-white">DTF</span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-xs text-gray-500">
+                          {category.sub_categories.length} sub-categor{category.sub_categories.length === 1 ? 'y' : 'ies'}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          Added {new Date(category.created_at).toLocaleDateString('en-GB')}
+                        </p>
+                      </td>
+
+                      {/* One row per sub-category: name + tags, then its options as chips */}
+                      <td className="px-4 py-4">
+                        <div className="space-y-2">
+                          {category.sub_categories.map((sc, idx) => (
+                            <div key={idx} className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-3">
+                              <div className="flex flex-wrap items-center gap-1 sm:w-44 sm:shrink-0 sm:pt-0.5">
+                                <span className="text-xs font-semibold text-gray-800">{sc.sub_category}</span>
+                                {sc.is_modifier && (
+                                  <span
+                                    className="rounded bg-indigo-50 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-indigo-600"
+                                    title="Price modifier: adjusts the base price"
+                                  >
+                                    Mod
+                                  </span>
+                                )}
+                                {sc.is_optional && (
+                                  <span
+                                    className="rounded bg-gray-100 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-gray-500"
+                                    title="Optional: hidden behind the + button"
+                                  >
+                                    Opt
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {sc.options.map((o) => {
+                                  const dye = (sc.dye_options || []).includes(o);
+                                  return (
+                                    <span
+                                      key={o}
+                                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${
+                                        dye ? 'border-pink-200 bg-pink-50 text-pink-800' : 'border-gray-200 bg-white text-gray-700'
+                                      }`}
+                                    >
+                                      {o}
+                                      {dye && <span className="text-[9px] font-bold text-pink-600">DYE</span>}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-4">
+                        <div className="flex justify-end gap-1">
+                          <button
+                            onClick={() => handleEdit(category)}
+                            disabled={busy}
+                            title="Edit"
+                            aria-label={`Edit ${category.main_category}`}
+                            className="rounded-md p-2 text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-300"
+                          >
+                            <PencilSquareIcon className="h-5 w-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(category.id)}
+                            disabled={busy}
+                            title="Delete"
+                            aria-label={`Delete ${category.main_category}`}
+                            className="rounded-md p-2 text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:text-gray-300"
+                          >
+                            {busy ? <ArrowPathIcon className="h-5 w-5 animate-spin" /> : <TrashIcon className="h-5 w-5" />}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
 

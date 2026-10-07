@@ -8,7 +8,6 @@ import Pagination from '@/components/ui/Pagination';
 import { productsApi, Product } from '@/lib/api/products';
 import PageHeader from '@/components/ui/PageHeader';
 import ImageZoomViewer from '@/components/ui/ImageZoomViewer';
-import { CloudinaryImage, IMAGE_SIZES } from '@/lib/cloudinary';
 import { useBranch } from '@/lib/branch';
 
 interface Category {
@@ -85,8 +84,6 @@ const ProductsPage: React.FC = () => {
   });
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [deletingImage, setDeletingImage] = useState(false);
   
   // Image modal state
   const [showImageModal, setShowImageModal] = useState(false);
@@ -205,85 +202,26 @@ const ProductsPage: React.FC = () => {
     }));
   };
 
-  // Handle image selection and upload to Cloudinary
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Pick an image: local preview only. Upload happens on Save (like Cash Deposits),
+  // so Cancel / a failed save leaves nothing behind on Cloudinary.
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      // Delete existing image from Cloudinary if one exists
-      if (imagePreview && formData.attributes) {
-        try {
-          await productsApi.deleteImage(formData.attributes, editingProduct?.pro_id);
-        } catch (error) {
-          console.error('Error deleting old image:', error);
-          // Continue with new upload anyway
-        }
-      }
-
-      setUploadingImage(true);
-      setSelectedImage(file);
-
-      // Upload to Cloudinary immediately
-      try {
-        const { url } = await productsApi.uploadImage(file);
-
-        // Set the URL as preview and for form submission
-        setImagePreview(url);
-        setFormData(prev => ({ ...prev, attributes: url }));
-      } catch (error) {
-        console.error('Image upload error:', error);
-        showToast('Failed to upload image', 'error');
-        // Fallback to local preview
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setImagePreview(reader.result as string);
-        };
-        reader.readAsDataURL(file);
-      } finally {
-        setUploadingImage(false);
-      }
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select an image file', 'error');
+      return;
     }
+    if (imagePreview.startsWith('blob:')) URL.revokeObjectURL(imagePreview);
+    setSelectedImage(file);
+    setImagePreview(URL.createObjectURL(file));
   };
 
-  // Handle image deletion
-  const handleDeleteImage = async () => {
-    const result = await Swal.fire({
-      title: 'Are you sure?',
-      text: "You won't be able to revert this!",
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#d33',
-      cancelButtonColor: '#3085d6',
-      confirmButtonText: 'Yes, delete it!',
-      cancelButtonText: 'Cancel'
-    });
-
-    if (result.isConfirmed) {
-      setDeletingImage(true);
-      try {
-        // Delete image from Cloudinary via backend
-        // Pass product ID if editing an existing product
-        await productsApi.deleteImage(formData.attributes, editingProduct?.pro_id);
-        
-        // Clear image state
-        setImagePreview('');
-        setFormData(prev => ({ ...prev, attributes: '' }));
-        setSelectedImage(null);
-        
-        Swal.fire({
-          title: 'Deleted!',
-          text: 'Image has been deleted.',
-          icon: 'success',
-          timer: 2000,
-          timerProgressBar: true,
-          showConfirmButton: false
-        });
-      } catch (error) {
-        console.error('Error deleting image:', error);
-        showToast('Failed to delete image', 'error');
-      } finally {
-        setDeletingImage(false);
-      }
-    }
+  // Remove image from the form only; the old Cloudinary image is deleted after Save
+  const handleDeleteImage = () => {
+    if (imagePreview.startsWith('blob:')) URL.revokeObjectURL(imagePreview);
+    setSelectedImage(null);
+    setImagePreview('');
+    setFormData(prev => ({ ...prev, attributes: '' }));
   };
 
   // Reset form
@@ -307,12 +245,14 @@ const ProductsPage: React.FC = () => {
     setShowAddForm(false);
     setSelectedImage(null);
     setImagePreview('');
-    setUploadingImage(false);
-    setDeletingImage(false);
   };
 
   // Close form without resetting (for cancel button)
   const closeForm = () => {
+    // Drop a picked-but-unsaved image so it can't be saved onto the next product
+    if (imagePreview.startsWith('blob:')) URL.revokeObjectURL(imagePreview);
+    setSelectedImage(null);
+    setImagePreview('');
     setShowAddForm(false);
     setEditingProduct(null);
   };
@@ -333,17 +273,24 @@ const ProductsPage: React.FC = () => {
     
     setSubmitting(true);
 
+    // Image currently saved on the product (edit only); deleted after a successful save if replaced/removed
+    const oldImageUrl = editingProduct?.pro_image?.startsWith('http') ? editingProduct.pro_image : '';
+    let uploadedUrl = '';
+
     try {
       let imageUrl = formData.attributes;
 
-      // Upload image if selected
+      // Upload the picked image now, on Save
       if (selectedImage) {
-        const imageFormData = new FormData();
-        imageFormData.append('file', selectedImage);
-        imageFormData.append('upload_preset', 'regal-pos'); // You may need to configure this
-
-        // For now, we'll store the image as base64 in attributes field
-        imageUrl = imagePreview;
+        try {
+          uploadedUrl = (await productsApi.uploadImage(selectedImage)).url;
+        } catch (error) {
+          console.error('Image upload error:', error);
+          showToast('Failed to upload image', 'error');
+          setSubmitting(false);
+          return;
+        }
+        imageUrl = uploadedUrl;
       }
 
       // Only send fields that exist in ProductCreate model
@@ -384,12 +331,24 @@ const ProductsPage: React.FC = () => {
         });
       }
 
+      uploadedUrl = ''; // Saved: keep it even if the refresh below fails
+
+      // Old image replaced or removed: delete it from Cloudinary only now that the save worked
+      if (oldImageUrl && oldImageUrl !== imageUrl) {
+        productsApi.deleteImage(oldImageUrl).catch((error) => console.error('Error deleting old image:', error));
+      }
+
       // Clear cache and refresh products
       productsApi.clearCache();
       await fetchProducts();
       await resetForm();
       setSubmitting(false);
     } catch (error: any) {
+      // Save failed: remove the image just uploaded so it isn't left on Cloudinary
+      if (uploadedUrl) {
+        productsApi.deleteImage(uploadedUrl).catch((err) => console.error('Error deleting uploaded image:', err));
+      }
+
       // Extract error message from response
       let errorMessage = 'Failed to save product';
       
@@ -424,6 +383,8 @@ const ProductsPage: React.FC = () => {
       const fullProduct = await productsApi.getProductById(product.pro_id);
 
       setEditingProduct(fullProduct);
+      if (imagePreview.startsWith('blob:')) URL.revokeObjectURL(imagePreview);
+      setSelectedImage(null);
       setFormData({
         name: fullProduct.pro_name,
         unit_price: fullProduct.pro_price,
@@ -766,29 +727,15 @@ const ProductsPage: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium mb-1">Product Image</label>
                 <div className="flex items-start gap-2">
-                  {/* Upload Spinner */}
-                  {uploadingImage && (
-                    <div className="flex items-center justify-center h-32 w-32 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
-                      <div className="text-center">
-                        <svg className="animate-spin h-8 w-8 text-regal-yellow mx-auto mb-2" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                        <p className="text-xs text-gray-600">Uploading...</p>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Image Preview with View/Delete Buttons */}
-                  {!uploadingImage && imagePreview && (
+                  {imagePreview && (
                     <div className="flex items-center gap-2">
                       <div className="relative group">
-                        <CloudinaryImage
+                        {/* Original image (no Cloudinary optimizer), like cash deposit slips */}
+                        <img
                           src={imagePreview}
                           alt="Product preview"
-                          size="medium"
                           className="h-32 w-32 object-cover rounded-lg border-2 border-gray-200 hover:border-regal-yellow transition-colors cursor-pointer"
-                          priority={true}
                         />
                         {/* View Button */}
                         <button
@@ -809,23 +756,17 @@ const ProductsPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={handleDeleteImage}
-                        disabled={deletingImage}
+                        disabled={submitting}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-md shadow-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Delete image"
                       >
-                        {deletingImage ? (
-                          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
-                        ) : null}
                         <span>Delete Image</span>
                       </button>
                     </div>
                   )}
 
                   {/* Choose File Input (shown when no image) */}
-                  {!uploadingImage && !imagePreview && (
+                  {!imagePreview && (
                     <input
                       type="file"
                       name="product_image"

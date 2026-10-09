@@ -4,6 +4,9 @@
  *
  * - The rate tier comes from ALL pieces of the same main category in the order (all
  *   T-shirts together, Shorts counted separately), not from one line's quantity.
+ * - Teams (Quotation page): every count - rate tier, dye, mockup - is per team. Two
+ *   teams with 8 jerseys each are two 5-15 tiers, not one 16-99 tier. Lines without a
+ *   team (Customer Invoice page) are all one team, so they price as before.
  * - When pieces are added/removed, auto-priced lines move to the new tier by
  *   themselves. A rate the staff typed (manual) never changes by itself.
  * - A category with only 1-4 pcs gets one mockup charge (once per category, not per
@@ -140,20 +143,30 @@ export interface PricedLine {
   rateChange?: 'down' | 'up' | null; // direction of the last automatic change, for the tag under the rate
   missingTierPrice?: boolean;        // the category's tier has no price for this line - staff must enter it
   dtf?: DtfBlock | null;             // DTF logos + saved roll layout (Hoodie / Jacket) - see lib/dtfLayout.ts
+  team?: string;                     // team this line belongs to (Quotation page); unset = the one team
 }
 
-export const piecesOfCategory = (items: PricedLine[], category: string) =>
-  items.filter(i => i.category === category).reduce((sum, i) => sum + i.quantity, 0);
+export const teamOf = (line: PricedLine) => line.team ?? '';
+
+// Edited mockup amounts are keyed by team + category; without a team it's just the
+// category, as before.
+export const mockupKey = (team: string, category: string) => (team ? `${team}|${category}` : category);
+
+// Pieces of one category in one team ('' = lines without a team).
+export const piecesOfCategory = (items: PricedLine[], category: string, team = '') =>
+  items.filter(i => i.category === category && teamOf(i) === team).reduce((sum, i) => sum + i.quantity, 0);
 
 export const categoriesIn = (items: PricedLine[]) => Array.from(new Set(items.map(i => i.category)));
+
+export const teamsIn = (items: PricedLine[]) => Array.from(new Set(items.map(teamOf)));
 
 const findCategory = (categories: CustomerCategoryGrouped[], category: string) =>
   categories.find(c => c.main_category === category);
 
-export const dyePiecesOfCategory = (items: PricedLine[], categories: CustomerCategoryGrouped[], category: string) => {
+export const dyePiecesOfCategory = (items: PricedLine[], categories: CustomerCategoryGrouped[], category: string, team = '') => {
   const categoryData = findCategory(categories, category);
   return items
-    .filter(i => i.category === category && isDyeLine(categoryData, i.category_fields))
+    .filter(i => i.category === category && teamOf(i) === team && isDyeLine(categoryData, i.category_fields))
     .reduce((sum, i) => sum + i.quantity, 0);
 };
 
@@ -161,22 +174,22 @@ export const dyePiecesOfCategory = (items: PricedLine[], categories: CustomerCat
 // quantity, or 0 when the selected options aren't dye.
 export const formDyePieces = (
   items: PricedLine[], categories: CustomerCategoryGrouped[], category: string,
-  fields: Record<string, string>, quantity: number | ''
+  fields: Record<string, string>, quantity: number | '', team = ''
 ) =>
   isDyeLine(findCategory(categories, category), fields) && quantity !== ''
-    ? dyePiecesOfCategory(items, categories, category) + quantity
+    ? dyePiecesOfCategory(items, categories, category, team) + quantity
     : 0;
 
 // A cart line's dye multiplier right now (1 = not dye, or 16+ dye pcs).
 export const lineDyeMultiplier = (items: PricedLine[], categories: CustomerCategoryGrouped[], line: PricedLine) => {
   const categoryData = findCategory(categories, line.category);
   return isDyeLine(categoryData, line.category_fields)
-    ? dyeMultiplier(categoryData, dyePiecesOfCategory(items, categories, line.category))
+    ? dyeMultiplier(categoryData, dyePiecesOfCategory(items, categories, line.category, teamOf(line)))
     : 1;
 };
 
-// Re-prices every auto-priced line from its category's total pieces. Returns the new
-// lines plus, per category, whether rates went down or up (for the toast).
+// Re-prices every auto-priced line from its category's total pieces in its team. Returns
+// the new lines plus, per mockupKey(team, category), whether rates went down or up.
 export function repriceCart<T extends PricedLine>(
   items: T[],
   categories: CustomerCategoryGrouped[]
@@ -186,7 +199,8 @@ export function repriceCart<T extends PricedLine>(
     if (!item.autoPriced) return { ...item, previousUnitPrice: null, rateChange: null, missingTierPrice: false };
     const categoryData = categories.find(c => c.main_category === item.category);
     const price = lookupIdealPrice(
-      categoryData, item.category_fields || {}, piecesOfCategory(items, item.category), dyePiecesOfCategory(items, categories, item.category)
+      categoryData, item.category_fields || {},
+      piecesOfCategory(items, item.category, teamOf(item)), dyePiecesOfCategory(items, categories, item.category, teamOf(item))
     );
     if (price === null) {
       // Keep the current rate but flag it: this tier has no price in the list.
@@ -196,7 +210,7 @@ export function repriceCart<T extends PricedLine>(
       return { ...item, previousUnitPrice: null, rateChange: null, missingTierPrice: false };
     }
     const direction = price < item.unitPrice ? 'down' : 'up';
-    changed.set(item.category, direction);
+    changed.set(mockupKey(teamOf(item), item.category), direction);
     return {
       ...item,
       previousUnitPrice: direction === 'down' ? item.unitPrice : null,
@@ -209,29 +223,38 @@ export function repriceCart<T extends PricedLine>(
   return { items: out, changed };
 }
 
-// 1-4 pcs in the category and at least one non-dye piece (dye pays x2 instead).
-export const needsMockup = (items: PricedLine[], categories: CustomerCategoryGrouped[], category: string) => {
-  const pieces = piecesOfCategory(items, category);
-  return pieces > 0 && pieces <= MOCKUP_MAX_PIECES && pieces > dyePiecesOfCategory(items, categories, category);
+// 1-4 pcs of the category in the team and at least one non-dye piece (dye pays x2 instead).
+export const needsMockup = (items: PricedLine[], categories: CustomerCategoryGrouped[], category: string, team = '') => {
+  const pieces = piecesOfCategory(items, category, team);
+  return pieces > 0 && pieces <= MOCKUP_MAX_PIECES && pieces > dyePiecesOfCategory(items, categories, category, team);
 };
 
 export interface MockupLine {
+  team: string;     // '' = lines without a team
   category: string;
+  key: string;      // mockupKey(team, category) - the key in `amounts`
   pieces: number;
   amount: number;
 }
 
-// One mockup charge per category with 1-4 pcs (not dye-only), skipping categories whose
-// own charge is 0. `amounts` holds per-order edits; a category without an edit gets `defaultFor`.
+// One mockup charge per team and category with 1-4 pcs (not dye-only), skipping
+// categories whose own charge is 0. `amounts` holds per-order edits by mockupKey; one
+// without an edit gets `defaultFor`.
 export function mockupLines(
   items: PricedLine[],
   categories: CustomerCategoryGrouped[],
   amounts: Record<string, number>,
   defaultFor: (category: string) => number
 ): MockupLine[] {
-  return categoriesIn(items)
-    .filter(c => needsMockup(items, categories, c) && defaultFor(c) > 0)
-    .map(c => ({ category: c, pieces: piecesOfCategory(items, c), amount: amounts[c] ?? defaultFor(c) }));
+  return teamsIn(items).flatMap(team => {
+    const teamLines = items.filter(i => teamOf(i) === team);
+    return categoriesIn(teamLines)
+      .filter(c => needsMockup(items, categories, c, team) && defaultFor(c) > 0)
+      .map(c => {
+        const key = mockupKey(team, c);
+        return { team, category: c, key, pieces: piecesOfCategory(items, c, team), amount: amounts[key] ?? defaultFor(c) };
+      });
+  });
 }
 
 // For the card above the cart: what each item in the cart would cost per piece at the
@@ -254,15 +277,18 @@ export interface CategoryTierSummary {
   next: { need: number; label: string; rates: NextTierRate[]; tierPriceMissing: boolean } | null;
 }
 
+// One summary per category of one team ('' = lines without a team).
 export function categoryTierSummaries(
-  items: PricedLine[],
+  allItems: PricedLine[],
   categories: CustomerCategoryGrouped[],
   mockupAmountFor: (category: string) => number,
-  hasMockupCharge: (category: string) => boolean
+  hasMockupCharge: (category: string) => boolean,
+  team = ''
 ): CategoryTierSummary[] {
+  const items = allItems.filter(i => teamOf(i) === team);
   return categoriesIn(items).map(category => {
-    const pieces = piecesOfCategory(items, category);
-    const dyePieces = dyePiecesOfCategory(items, categories, category);
+    const pieces = piecesOfCategory(items, category, team);
+    const dyePieces = dyePiecesOfCategory(items, categories, category, team);
     const next = nextTierFor(pieces);
     let nextInfo: CategoryTierSummary['next'] = null;
     if (next) {
@@ -298,7 +324,7 @@ export function categoryTierSummaries(
       pieces,
       tierLabel: tierForQuantity(pieces).label,
       isQty: isQtyTier(pieces),
-      mockupAmount: needsMockup(items, categories, category) && hasMockupCharge(category) ? mockupAmountFor(category) : null,
+      mockupAmount: needsMockup(items, categories, category, team) && hasMockupCharge(category) ? mockupAmountFor(category) : null,
       dyePieces,
       dyeMultiplier: dyeMultiplier(categories.find(c => c.main_category === category), dyePieces),
       next: nextInfo,

@@ -5,6 +5,9 @@ import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import PageHeader from '@/components/ui/PageHeader';
 import { fetchCurrentBranch } from '@/lib/branch';
+import { PAYMENT_METHODS, PaymentProof, isOnlineMethod, uploadProofImages } from '@/lib/paymentMethods';
+import ProofImagePicker from '@/components/ProofImagePicker';
+import PaymentProofCell from '@/components/PaymentProofCell';
 
 // Print styles - only print modal content
 const printStyles = `
@@ -63,6 +66,7 @@ interface Invoice {
 }
 
 interface PaymentHistory {
+  id?: string; // newer payments only - links the payment to its screenshot proof
   amount: number;
   payment_method: string;
   date: string;
@@ -81,6 +85,8 @@ const CustomerPaymentPage: React.FC = () => {
   const [showPaymentHistoryPDF, setShowPaymentHistoryPDF] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
+  const [proofsByPayment, setProofsByPayment] = useState<Record<string, PaymentProof>>({});
+  const [proofFiles, setProofFiles] = useState<File[]>([]); // screenshots of the payment being entered
   const [totalBalance, setTotalBalance] = useState<number>(0);
   const [filterStatus, setFilterStatus] = useState<'all' | 'unpaid' | 'paid'>('unpaid');
 
@@ -105,15 +111,7 @@ const CustomerPaymentPage: React.FC = () => {
   ];
 
   // Payment method options
-  const paymentMethodOptions = [
-    'Cash',
-    'Easypaisa Zohaib',
-    'Easypaisa Yasir',
-    'Faysal Bank',
-    'Islami Bank',
-    "Credit",
-    "Other"
-  ];
+  const paymentMethodOptions = PAYMENT_METHODS;
 
   // Fetch customers for dropdown
   const fetchCustomers = async () => {
@@ -267,6 +265,18 @@ const CustomerPaymentPage: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
 
+        // Screenshot proofs of this invoice's online payments, by payment id
+        const proofs: Record<string, PaymentProof> = {};
+        try {
+          const proofResponse = await fetch(`/api/payment-proofs/by-invoice/${invoiceId}`, { credentials: 'include' });
+          if (proofResponse.ok) {
+            ((await proofResponse.json()).data || []).forEach((p: PaymentProof) => { proofs[p.payment_id] = p; });
+          }
+        } catch (error) {
+          console.error('Error fetching pay slips:', error);
+        }
+        setProofsByPayment(proofs);
+
         // Parse payment history (it might be a JSON string or array)
         let history = [];
         if (typeof data.payments_history === 'string') {
@@ -325,6 +335,7 @@ const CustomerPaymentPage: React.FC = () => {
       invoice_no: '',
       description: ''
     });
+    setProofFiles([]);
     setSelectedInvoice(null);
   };
 
@@ -374,14 +385,37 @@ const CustomerPaymentPage: React.FC = () => {
       });
 
       if (response.ok) {
-        Swal.fire({
-          title: 'Payment Recorded!',
-          text: 'Customer payment has been recorded successfully.',
-          icon: 'success',
-          timer: 2000,
-          timerProgressBar: true,
-          showConfirmButton: false
-        });
+        const result = await response.json();
+
+        // Online payment: upload the screenshots to its proof. The payment is already
+        // saved, so a failed upload only leaves the proof "missing" (upload later).
+        let uploadError = '';
+        if (result.proof_id && proofFiles.length > 0) {
+          try {
+            await uploadProofImages(result.proof_id, proofFiles);
+          } catch (error) {
+            uploadError = error instanceof Error ? error.message : 'Pay slip upload failed';
+          }
+        }
+
+        if (uploadError) {
+          Swal.fire({
+            title: 'Payment Recorded',
+            text: `Payment is saved, but the pay slip did not upload (${uploadError}). Attach it later from History or Payments Record.`,
+            icon: 'warning',
+          });
+        } else {
+          Swal.fire({
+            title: 'Payment Recorded!',
+            text: result.proof_id && proofFiles.length === 0
+              ? 'Payment saved. Pay slip not attached - attach it later from History or Payments Record.'
+              : 'Customer payment has been recorded successfully.',
+            icon: 'success',
+            timer: 2500,
+            timerProgressBar: true,
+            showConfirmButton: false
+          });
+        }
 
         // Refresh invoices
         await fetchInvoices();
@@ -542,6 +576,16 @@ const CustomerPaymentPage: React.FC = () => {
                   ))}
                 </select>
               </div>
+
+              {/* Screenshot of an online payment (optional - can be added later) */}
+              {isOnlineMethod(formData.payment_method) && (
+                <ProofImagePicker
+                  files={proofFiles}
+                  onChange={setProofFiles}
+                  onError={(message) => showToast(message, 'error')}
+                  disabled={submitting}
+                />
+              )}
 
               {/* Date */}
               <div>
@@ -785,6 +829,7 @@ const CustomerPaymentPage: React.FC = () => {
                           <th className="border border-gray-300 px-4 py-2 text-right">Amount</th>
                           <th className="border border-gray-300 px-4 py-2 text-left">Method</th>
                           <th className="border border-gray-300 px-4 py-2 text-left">Description</th>
+                          <th className="border border-gray-300 px-4 py-2 text-left">Pay Slip</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -797,6 +842,15 @@ const CustomerPaymentPage: React.FC = () => {
                             </td>
                             <td className="border border-gray-300 px-4 py-2 capitalize">{payment.payment_method}</td>
                             <td className="border border-gray-300 px-4 py-2">{payment.description || '-'}</td>
+                            <td className="border border-gray-300 px-4 py-2">
+                              {payment.id && proofsByPayment[payment.id] ? (
+                                <PaymentProofCell
+                                  proof={proofsByPayment[payment.id]}
+                                  onChanged={(proof) => setProofsByPayment(prev => ({ ...prev, [proof.payment_id]: proof }))}
+                                  onError={(message) => showToast(message, 'error')}
+                                />
+                              ) : '-'}
+                            </td>
                           </tr>
                         ))}
                       </tbody>

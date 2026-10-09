@@ -103,6 +103,10 @@ const DashboardPage: React.FC = () => {
   const [pendingDeposits, setPendingDeposits] = useState(0);
   // Oldest few pending deposits (deposit no + Cash Of) shown in the banner
   const [pendingDepositItems, setPendingDepositItems] = useState<{ deposit_no: string; cash_from: string; cash_to: string }[]>([]);
+  // Online payments (Easypaisa / bank) waiting for a screenshot check, oldest first
+  const [pendingProofs, setPendingProofs] = useState(0);
+  const [missingProofs, setMissingProofs] = useState(0);
+  const [pendingProofItems, setPendingProofItems] = useState<{ invoice_no: string; customer_name: string | null; amount: number; payment_method: string }[]>([]);
   const isCashierLike = userRole === 'Cashier' || userRole === 'Order Booker' || userRole === 'Production' || userRole === 'Sales';
   const [showShopReportModal, setShowShopReportModal] = useState(false);
   const [upcomingTournaments, setUpcomingTournaments] = useState<UpcomingTournament[]>([]);
@@ -192,6 +196,14 @@ const DashboardPage: React.FC = () => {
                   setPendingDepositItems(counts?.items || []);
                 })
                 .catch((error) => console.error('Error fetching pending deposits:', error));
+              fetch('/api/payments-record/pending-count', { credentials: 'include' })
+                .then((res) => (res.ok ? res.json() : null))
+                .then((counts) => {
+                  setPendingProofs(counts?.proofs_pending || 0);
+                  setMissingProofs(counts?.proofs_missing || 0);
+                  setPendingProofItems(counts?.proof_items || []);
+                })
+                .catch((error) => console.error('Error fetching pending pay slips:', error));
             }
 
             // Tournaments card is hidden for Production/Sales - skip the call
@@ -615,6 +627,41 @@ const DashboardPage: React.FC = () => {
                   <p className="text-xs text-gray-500">+{pendingDeposits - pendingDepositItems.length} more</p>
                 )}
                 <p className="text-xs md:text-sm text-gray-600">Check the bank slips and approve or reject.</p>
+              </div>
+            </div>
+            <Link href="/cash-deposits" className="regal-btn bg-regal-yellow text-regal-black text-center whitespace-nowrap">
+              Review
+            </Link>
+          </div>
+        )}
+
+        {/* Online payments waiting for a screenshot check - sales/admin only */}
+        {(pendingProofs > 0 || missingProofs > 0) && (
+          <div className="regal-card p-3 md:p-4 mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-l-4 border-regal-yellow">
+            <div className="flex items-center gap-3">
+              <div className="text-3xl">📱</div>
+              <div>
+                {pendingProofs > 0 && (
+                  <p className="text-base md:text-lg font-semibold text-gray-900">
+                    {pendingProofs} online payment{pendingProofs === 1 ? '' : 's'} pending verification
+                  </p>
+                )}
+                {pendingProofItems.map((p, i) => (
+                  <p key={`${p.invoice_no}-${i}`} className="text-xs md:text-sm text-gray-700">
+                    <span className="font-medium">{p.invoice_no}</span>
+                    {p.customer_name ? ` · ${p.customer_name}` : ''} · Rs. {p.amount.toLocaleString('en-PK')} ·{' '}
+                    <span className="capitalize">{p.payment_method}</span>
+                  </p>
+                ))}
+                {pendingProofs > pendingProofItems.length && pendingProofItems.length > 0 && (
+                  <p className="text-xs text-gray-500">+{pendingProofs - pendingProofItems.length} more</p>
+                )}
+                {missingProofs > 0 && (
+                  <p className="text-xs md:text-sm text-orange-700">
+                    {missingProofs} online payment{missingProofs === 1 ? '' : 's'} without pay slip
+                  </p>
+                )}
+                <p className="text-xs md:text-sm text-gray-600">Verify each pay slip against the account and approve or reject.</p>
               </div>
             </div>
             <Link href="/cash-deposits" className="regal-btn bg-regal-yellow text-regal-black text-center whitespace-nowrap">

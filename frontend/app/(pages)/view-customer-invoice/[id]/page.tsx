@@ -21,7 +21,24 @@ interface InvoiceItem {
   imgfile2?: string;
   imgfile3?: string;
   dtf?: DtfBlock; // DTF logos + the saved roll layout the designer follows
+  team?: string;       // team of the line (orders from the team cart)
+  similar_of?: number; // 1-based line it was added "+ Similar" from - shown under it
 }
+
+interface FlatCharge { category: string; pieces: number; amount: number; team?: string }
+
+// Lines with their 1-based number, grouped by team in saved order (lines are saved
+// grouped). An order without teams is one group with no heading.
+const teamGroups = (items: InvoiceItem[]) => {
+  const groups: { team: string; rows: { line: number; item: InvoiceItem }[] }[] = [];
+  items.forEach((item, index) => {
+    const team = (item.team || '').trim();
+    const last = groups[groups.length - 1];
+    if (last && last.team === team) last.rows.push({ line: index + 1, item });
+    else groups.push({ team, rows: [{ line: index + 1, item }] });
+  });
+  return groups;
+};
 
 interface Invoice {
   id: string;
@@ -30,7 +47,7 @@ interface Invoice {
   team_name?: string;
   subtotal: number;
   rush_charge: number;
-  mockup_charges: { category: string; pieces: number; amount: number }[];
+  mockup_charges: FlatCharge[];
   dtf_charges: { line: number; category: string; meters: number; amount: number }[];
   total_amount: number;
   amount_paid: number;
@@ -205,6 +222,16 @@ const ViewCustomerInvoicePage: React.FC = () => {
     );
   }
 
+  // Team order: lines grouped by team with each team's flat charges, DTF and total.
+  const groups = teamGroups(invoice.items);
+  const teamOrder = groups.some(g => g.team);
+  const flatsOf = (team: string) => (invoice.mockup_charges || []).filter(mc => (mc.team || '').trim() === team);
+  type Group = ReturnType<typeof teamGroups>[number];
+  const groupPieces = (group: Group) => group.rows.reduce((sum, r) => sum + r.item.quantity, 0);
+  const groupTotal = (group: Group) =>
+    group.rows.reduce((sum, r) => sum + r.item.total_price + (r.item.dtf?.amount || 0), 0)
+    + flatsOf(group.team).reduce((sum, mc) => sum + Number(mc.amount), 0);
+
   return (
     <div className="p-2 py-5 bg-white">
       <PageHeader title="Invoice Details" />
@@ -243,17 +270,28 @@ const ViewCustomerInvoicePage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {invoice.items.map((item, index) => {
+              {groups.map(group => (
+              <React.Fragment key={group.team || 'all'}>
+              {teamOrder && (
+                <tr className="bg-regal-yellow">
+                  <td colSpan={9} className="px-4 py-2 text-sm font-bold text-regal-black uppercase tracking-wide">{group.team}</td>
+                </tr>
+              )}
+              {group.rows.map(({ line, item }) => {
+                const index = line - 1;
                 const categoryFields = parseCategoryFields(item.category_fields);
                 const itemImages: string[] = [item.imgfile, item.imgfile2, item.imgfile3].filter((img): img is string => !!img);
                 
                 return (
-                  <tr key={index} className="hover:bg-gray-50">
+                  <tr key={index} className={item.similar_of ? 'bg-gray-50' : 'hover:bg-gray-50'}>
                     <td className="px-4 py-4 text-sm">
                       <div className="font-bold text-gray-900">{invoice.invoice_no}</div>
                     </td>
-                    <td className="px-4 py-4 text-sm">
-                      <div className="font-medium text-gray-900">{item.product_name}</div>
+                    <td className={`py-4 pr-4 text-sm ${item.similar_of ? 'pl-8' : 'pl-4'}`}>
+                      <div className="font-medium text-gray-900">
+                        {item.similar_of && <span className="text-gray-400 mr-1" aria-hidden="true">↳</span>}
+                        {item.product_name}
+                      </div>
                       {item.custom_description && (
                         <div className="text-xs text-gray-500 mt-1">
                           <span className="font-medium">Custom:</span> {item.custom_description}
@@ -313,6 +351,35 @@ const ViewCustomerInvoicePage: React.FC = () => {
                   </tr>
                 );
               })}
+              {teamOrder && (
+                <>
+                  {flatsOf(group.team).map(mc => (
+                    <tr key={`flat-${mc.category}`} className="text-gray-900">
+                      <td colSpan={8} className="px-4 py-2 text-sm font-medium">
+                        Flat Charges - {mc.category}
+                        <span className="ml-2 text-xs font-normal">{mc.pieces} pcs (under 5) in this team · once, not per piece</span>
+                      </td>
+                      <td className="px-4 py-2 text-sm font-semibold">Rs. {Number(mc.amount).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                  {group.rows.filter(r => r.item.dtf?.amount).map(({ line, item }) => (
+                    <tr key={`dtf-${line}`} className="bg-teal-50 text-teal-700">
+                      <td colSpan={8} className="px-4 py-2 text-sm font-medium">
+                        DTF printing - {item.cat_name || item.product_name} (item {line}, {metersLabel(item.dtf!.half_meters)})
+                      </td>
+                      <td className="px-4 py-2 text-sm font-semibold">Rs. {Number(item.dtf!.amount).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-yellow-100 font-semibold text-regal-black">
+                    <td colSpan={5} className="px-4 py-2.5 text-sm">{group.team} total</td>
+                    <td className="px-4 py-2.5 text-sm">{groupPieces(group)} pcs</td>
+                    <td colSpan={2}></td>
+                    <td className="px-4 py-2.5 text-sm whitespace-nowrap">Rs. {groupTotal(group).toFixed(2)}</td>
+                  </tr>
+                </>
+              )}
+              </React.Fragment>
+              ))}
             </tbody>
           </table>
         </div>
@@ -350,23 +417,37 @@ const ViewCustomerInvoicePage: React.FC = () => {
         {/* Totals - items subtotal + rush + mockup + DTF add up to the order total */}
         <div className="flex justify-end mt-6">
           <div className="w-full sm:w-96 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm">
-            <div className="flex justify-between text-gray-600 mb-2">
-              <span>Subtotal ({invoice.items.reduce((sum, item) => sum + item.quantity, 0)} pcs)</span>
-              <span>Rs. {(invoice.subtotal || invoice.items.reduce((sum, item) => sum + item.total_price, 0)).toFixed(2)}</span>
-            </div>
+            {/* A team order: Subtotal is just a heading with each team's total under it
+                (lines + flat + DTF, shown in each team's block). */}
+            {teamOrder ? (
+              <>
+                <div className="text-base font-semibold text-gray-800 mb-1">Subtotal ({invoice.items.reduce((sum, item) => sum + item.quantity, 0)} pcs)</div>
+                {groups.map(group => (
+                  <div key={group.team} className="flex justify-between text-base text-gray-700 mb-1 pl-3">
+                    <span>{group.team} ({groupPieces(group)} pcs)</span>
+                    <span>Rs. {groupTotal(group).toFixed(2)}</span>
+                  </div>
+                ))}
+              </>
+            ) : (
+              <div className="flex justify-between text-gray-600 mb-2">
+                <span>Subtotal ({invoice.items.reduce((sum, item) => sum + item.quantity, 0)} pcs)</span>
+                <span>Rs. {(invoice.subtotal || invoice.items.reduce((sum, item) => sum + item.total_price, 0)).toFixed(2)}</span>
+              </div>
+            )}
             {invoice.rush_charge > 0 && (
               <div className="flex justify-between text-orange-700 font-medium mb-2">
                 <span>Rush Charge</span>
                 <span>+ Rs. {invoice.rush_charge.toFixed(2)}</span>
               </div>
             )}
-            {invoice.mockup_charges.map(mc => (
+            {!teamOrder && invoice.mockup_charges.map(mc => (
               <div key={mc.category} className="flex justify-between text-purple-700 font-medium mb-2">
                 <span>Flat Charges ({mc.category})</span>
                 <span>+ Rs. {Number(mc.amount).toFixed(2)}</span>
               </div>
             ))}
-            {(invoice.dtf_charges || []).map(dc => (
+            {!teamOrder && (invoice.dtf_charges || []).map(dc => (
               <div key={dc.line} className="flex justify-between text-teal-700 font-medium mb-2">
                 <span>DTF ({dc.category}, {dc.meters} m)</span>
                 <span>+ Rs. {Number(dc.amount).toFixed(2)}</span>

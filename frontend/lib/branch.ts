@@ -7,6 +7,14 @@ export interface Branch {
   name: string;
 }
 
+// Static list for the login dropdown / branch switcher, so it shows even while
+// the backend or a branch database is still waking up. Must match BRANCHES in
+// backend config/branches.py (code + name).
+export const BRANCHES: Branch[] = [
+  { code: 'lighthouse', name: 'European Sports Light House' },
+  { code: 'karimabad', name: 'European Sports Karim Abad' },
+];
+
 // Light House keeps the original Firestore signal ids; other branches get
 // their own doc (mirrors branch_signal_id() in backend utils/firestore_signals.py).
 const DEFAULT_BRANCH = 'lighthouse';

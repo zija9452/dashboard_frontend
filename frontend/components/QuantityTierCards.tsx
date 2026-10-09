@@ -66,17 +66,18 @@ export const QuantityTierCards: React.FC<{ summaries: CategoryTierSummary[] }> =
 };
 
 // Totals-box rows: one editable "Flat Charges - T-shirt (3 pcs)" row per category.
+// onAmountChange gets the line's key (= the category for lines without a team).
 export const MockupChargeRows: React.FC<{
   lines: MockupLine[];
-  onAmountChange: (category: string, amount: number) => void;
+  onAmountChange: (key: string, amount: number) => void;
 }> = ({ lines, onAmountChange }) => (
   <>
     {lines.map(m => (
       <div
-        key={m.category}
+        key={m.key}
         className="flex flex-wrap justify-between items-center gap-2 text-sm text-purple-700 font-medium mb-2 px-2 py-1.5 bg-purple-50 border border-purple-200 rounded-md"
       >
-        <label htmlFor={`mockup-${m.category}`}>
+        <label htmlFor={`mockup-${m.key}`}>
           Flat Charges - {m.category} ({m.pieces} pcs)
           <span className="block text-xs font-normal text-gray-500">
             One-time charge for orders 1-{MOCKUP_MAX_PIECES} pcs. Removed at {MOCKUP_MAX_PIECES + 1}+ pcs.
@@ -85,12 +86,12 @@ export const MockupChargeRows: React.FC<{
         <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
           + Rs.
           <input
-            id={`mockup-${m.category}`}
+            id={`mockup-${m.key}`}
             type="number"
             min="0"
             step="1"
             value={m.amount}
-            onChange={(e) => onAmountChange(m.category, e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)))}
+            onChange={(e) => onAmountChange(m.key, e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)))}
             className="w-24 px-2 py-1 text-right border border-purple-200 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-300"
           />
         </span>
@@ -101,7 +102,9 @@ export const MockupChargeRows: React.FC<{
 
 // Under the Line Total in the item form: what adding this item does to the mockup.
 // Only non-dye pieces bring the flat charge (dye lines pay x2 / x1.5 in the rate).
+// With a team (Quotation page) all counts are that team's, and the text names it.
 export const MockupLinePreview: React.FC<{
+  team?: string;
   category: string;
   tierPieces: number;      // pieces of this category incl. this item
   alreadyInCart: number;   // pieces of this category already in the cart
@@ -109,20 +112,21 @@ export const MockupLinePreview: React.FC<{
   isDye: boolean;          // the item being entered is dye
   lineTotal: number;
   amount: number;
-}> = ({ category, tierPieces, alreadyInCart, nonDyeInCart, isDye, lineTotal, amount }) => {
+}> = ({ team, category, tierPieces, alreadyInCart, nonDyeInCart, isDye, lineTotal, amount }) => {
   if (!category || tierPieces <= 0) return null;
+  const name = team ? `${team} · ${category}` : category;
   let text: React.ReactNode = null;
   if (tierPieces <= MOCKUP_MAX_PIECES) {
     if (nonDyeInCart > 0) {
-      text = <>{category} flat charges (Rs. {amount.toLocaleString()}) are already in the total, not added again.</>;
+      text = <>{name} flat charges (Rs. {amount.toLocaleString()}) are already in the total, not added again.</>;
     } else if (isDye) {
       text = <>Dye: no flat charges - the dye rate applies instead.</>;
     } else {
-      text = <>+ Flat Charges ({category}, under {MOCKUP_MAX_PIECES + 1} pcs): Rs. {amount.toLocaleString()} → <b className="text-gray-900">Rs. {(lineTotal + amount).toLocaleString()}</b> with flat charges. Added once to the total, not per piece.</>;
+      text = <>+ Flat Charges ({name}, under {MOCKUP_MAX_PIECES + 1} pcs): Rs. {amount.toLocaleString()} → <b className="text-gray-900">Rs. {(lineTotal + amount).toLocaleString()}</b> with flat charges. Added once{team ? ' for this team' : ' to the total'}, not per piece.</>;
     }
   } else if (nonDyeInCart > 0 && alreadyInCart <= MOCKUP_MAX_PIECES) {
-    text = <>{category} reaches {tierPieces} pcs, so the Rs. {amount.toLocaleString()} flat charges will be removed.</>;
+    text = <>{name} has {alreadyInCart} pcs now, so Rs. {amount.toLocaleString()} flat charges are in the total. With this item it reaches {tierPieces} pcs, so the flat charges will be removed.</>;
   }
   if (!text) return null;
-  return <p className="text-xs mt-1.5 px-2 py-1.5 rounded-md bg-purple-50 text-purple-700">{text}</p>;
+  return <p className="text-sm font-medium mt-1.5 px-2.5 py-2 rounded-md bg-purple-50 text-purple-700">{text}</p>;
 };

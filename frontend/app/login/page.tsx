@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useSession } from '@/auth/session-provider';
+import { BRANCHES } from '@/lib/branch';
 import { useRouter } from 'next/navigation';
 import { BuildingStorefrontIcon, EyeIcon, EyeSlashIcon, LockClosedIcon, UserCircleIcon, UserGroupIcon } from '@heroicons/react/24/outline';
 
 const LoginPage: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<'admin' | 'cashier' | 'production' | 'sales' | 'warehouse' | 'order_booker'>('admin'); // Default to admin
-  const [branches, setBranches] = useState<{ code: string; name: string }[]>([]);
+  const branches = BRANCHES;
   const [selectedBranch, setSelectedBranch] = useState(''); // User must pick a branch
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -16,22 +17,6 @@ const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { signIn } = useSession();
   const router = useRouter();
-
-  // Load available branches for the dropdown
-  useEffect(() => {
-    const fetchBranches = async () => {
-      try {
-        const response = await fetch('/api/auth/branches');
-        if (response.ok) {
-          setBranches(await response.json());
-        }
-      } catch (err) {
-        console.error('Failed to load branches:', err);
-      }
-    };
-
-    fetchBranches();
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

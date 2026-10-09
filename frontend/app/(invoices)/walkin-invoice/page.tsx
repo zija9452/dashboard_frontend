@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { useToast } from '@/components/ui/Toast';
+import ProofImagePicker from '@/components/ProofImagePicker';
+import { isOnlineMethod, uploadProofImages } from '@/lib/paymentMethods';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import { Product as ProductAPI } from '@/lib/api/products';
@@ -145,6 +147,7 @@ const WalkInInvoicePage: React.FC = () => {
   const [amountPaid, setAmountPaid] = useState<string>('');
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [submitting, setSubmitting] = useState(false);
+  const [proofFiles, setProofFiles] = useState<File[]>([]); // screenshots of an online payment
   const [manualDiscount, setManualDiscount] = useState<number>(0); // Manual discount at payment time
 
   // Idempotency: identifies one checkout attempt so a lost-response retry (or a
@@ -781,6 +784,18 @@ const WalkInInvoicePage: React.FC = () => {
           showConfirmButton: false
         });
 
+        // Online payment: upload its screenshots while the receipt loads. The bill is
+        // already saved, so a failed upload only leaves the proof "missing".
+        const screenshots = proofFiles;
+        setProofFiles([]);
+        const proofUpload = data.proof_id && screenshots.length > 0
+          ? uploadProofImages(data.proof_id, screenshots).then(() => '', (error: unknown) =>
+              error instanceof Error ? error.message : 'Pay slip upload failed')
+          : null;
+        if (data.proof_id && screenshots.length === 0) {
+          showToast(`Pay slip not attached for ${data.invoice_no} - attach it later from Payments Record.`, 'warning');
+        }
+
         // Reset form
         clearAll();
         setShowPaymentModal(false);
@@ -799,6 +814,10 @@ const WalkInInvoicePage: React.FC = () => {
         // Fetch and show the receipt — a plain read, separate from the create step
         // above, so it's always safe to retry on its own if this part fails.
         const shown = await fetchAndShowReceipt(data.invoice_id, 'SALE RECEIPT');
+        const uploadError = proofUpload ? await proofUpload : '';
+        if (uploadError) {
+          showToast(`Invoice ${data.invoice_no} saved, but the pay slip did not upload (${uploadError}). Attach it later from Payments Record.`, 'error');
+        }
         if (shown) {
           try { localStorage.removeItem(WALKIN_LAST_CREATED_STORAGE); } catch { /* ignore */ }
         } else {
@@ -1424,6 +1443,17 @@ const WalkInInvoicePage: React.FC = () => {
                   <option value="Easypaisa Yasir">Easypaisa Yasir</option>
                   <option value="Faysal Bank">Faysal Bank</option>
                 </select>
+                {/* Screenshot of an online payment (optional - can be added later) */}
+                {isOnlineMethod(paymentMethod) && (
+                  <div className="mt-3">
+                    <ProofImagePicker
+                      files={proofFiles}
+                      onChange={setProofFiles}
+                      onError={(message) => showToast(message, 'error')}
+                      disabled={submitting}
+                    />
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Total Amount</label>

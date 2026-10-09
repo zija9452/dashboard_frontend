@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { BuildingStorefrontIcon } from '@heroicons/react/24/outline';
-import { Branch, useBranch } from '@/lib/branch';
+import { Branch, BRANCHES, useBranch } from '@/lib/branch';
 
 interface BranchSwitcherProps {
   userRole: string | null;
@@ -12,29 +12,13 @@ interface BranchSwitcherProps {
 // ml-14 keeps it clear of the fixed PageHamburgerButton.
 const BranchSwitcher: React.FC<BranchSwitcherProps> = ({ userRole }) => {
   const branch = useBranch();
-  const [branches, setBranches] = useState<Branch[]>([]);
+  const branches = BRANCHES;
   // Branch being switched to - shows the loading overlay until the page reloads
   const [switchingTo, setSwitchingTo] = useState<Branch | null>(null);
   const switching = switchingTo !== null;
   const [error, setError] = useState('');
 
   const isAdmin = userRole === 'admin';
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    const fetchBranches = async () => {
-      try {
-        const response = await fetch('/api/auth/branches');
-        if (response.ok) {
-          setBranches(await response.json());
-        }
-      } catch (err) {
-        console.error('Failed to load branches:', err);
-      }
-    };
-
-    fetchBranches();
-  }, [isAdmin]);
 
   const handleSwitch = async (target: string) => {
     if (!branch || target === branch.code || switching) return;

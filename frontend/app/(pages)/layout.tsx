@@ -69,15 +69,15 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
               sidebarOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
           >
-            <div className="flex flex-col flex-grow pt-5 pb-3">
+            <div className="flex flex-col flex-grow min-h-0 pt-5 pb-3">
               <Link href={"/"}>
               <div className="flex-shrink-0 px-6">
                 <Image width={240} height={240} src="/european-logo.svg" alt="European Sports Dashboard Logo" className="h-28 w-auto" />
           
               </div></Link>
 
-              <div className="mt-5 flex-1 flex flex-col overflow-hidden">
-                <nav className="h-[60%] overflow-y-auto px-2">
+              <div className="mt-5 flex-1 flex flex-col overflow-hidden min-h-0">
+                <nav className="flex-1 min-h-0 overflow-y-auto px-2">
                   {userRole !== 'order_booker' && (
                     <SidebarLink href="/dashboard" className="text-base py-3 border-b border-gray-200">
                       Dashboard
@@ -139,7 +139,7 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
                   {(userRole === 'admin' || userRole === 'cashier' || userRole === 'sales') && (
                     <SidebarLink href="/cash-deposits" className="text-base py-3 border-b border-gray-200">
                       <span className="flex items-center">
-                        Cash Deposits
+                        Payments Record
                         <CashDepositBadge role={userRole} />
                       </span>
                     </SidebarLink>
@@ -204,7 +204,7 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
                 <SalesmanAttendanceWidget />
               )}
             </header>
-            <main className="flex-1 md:p-6 bg-white">
+            <main className="flex-1 md:px-6 md:pb-6 md:pt-2 bg-white">
               {children}
             </main>
           </div>

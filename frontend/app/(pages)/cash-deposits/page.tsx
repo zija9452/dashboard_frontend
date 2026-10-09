@@ -7,9 +7,24 @@ import Pagination from '@/components/ui/Pagination';
 import PageHeader from '@/components/ui/PageHeader';
 import ImageZoomViewer from '@/components/ui/ImageZoomViewer';
 import { CASH_DEPOSITS_CHANGED } from '@/components/CashDepositBadge';
+import {
+  MAX_PROOF_IMAGES, PAYMENT_PROOFS_CHANGED, PaymentProof, proofFilesError, uploadProofImages,
+} from '@/lib/paymentMethods';
 import { ArrowDownTrayIcon, MagnifyingGlassPlusIcon } from '@heroicons/react/24/outline';
 
 type DepositStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+// Pay slips also have MISSING (online payment saved, no screenshot yet)
+type RecordStatus = DepositStatus | 'MISSING';
+type RecordType = '' | 'DEPOSIT' | 'CUSTOMIZED' | 'WALKIN';
+type StatusFilter = '' | RecordStatus;
+// Online payments without proof show under both Pending (to verify) and Rejected (cashier to-do)
+const STATUS_QUERY: Record<StatusFilter, string> = {
+  '': '',
+  PENDING: 'PENDING,MISSING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED,MISSING',
+  MISSING: 'MISSING',
+};
 
 interface Slip {
   id: string;
@@ -19,6 +34,7 @@ interface Slip {
 }
 
 interface Deposit {
+  type: 'DEPOSIT';
   id: string;
   deposit_no: string;
   cash_from: string;
@@ -48,15 +64,51 @@ interface SlipRow {
   amount: string;
 }
 
-const STATUS_OPTIONS: { label: string; value: '' | DepositStatus }[] = [
+// One row of the Payments Record list: a bank deposit or an online pay slip
+type RecordRow = Deposit | PaymentProof;
+const isDeposit = (r: RecordRow): r is Deposit => r.type === 'DEPOSIT';
+
+const STATUS_OPTIONS: { label: string; value: StatusFilter }[] = [
   { label: 'Pending', value: 'PENDING' },
   { label: 'Approved', value: 'APPROVED' },
   { label: 'Rejected', value: 'REJECTED' },
+  { label: 'Pay Slip Not Attached', value: 'MISSING' },
   { label: 'All', value: '' },
 ];
 
-const STATUS_BADGE: Record<DepositStatus, string> = {
+const TYPE_OPTIONS: { label: string; value: RecordType }[] = [
+  { label: 'All', value: '' },
+  { label: 'Cash Deposit', value: 'DEPOSIT' },
+  { label: 'Customized', value: 'CUSTOMIZED' },
+  { label: 'Walk-in', value: 'WALKIN' },
+];
+
+// Period filter (Google "Any time" style): records from this day on
+type Period = 'month' | '1m' | '2m' | '3m' | '6m' | '1y' | 'all';
+const PERIOD_OPTIONS: { label: string; value: Period }[] = [
+  { label: 'This Month', value: 'month' },
+  { label: 'Last 1 Month', value: '1m' },
+  { label: 'Last 2 Months', value: '2m' },
+  { label: 'Last 3 Months', value: '3m' },
+  { label: 'Last 6 Months', value: '6m' },
+  { label: 'Last 1 Year', value: '1y' },
+  { label: 'All Time', value: 'all' },
+];
+const PERIOD_MONTHS: Record<Period, number> = { month: 0, '1m': 1, '2m': 2, '3m': 3, '6m': 6, '1y': 12, all: 0 };
+const periodStart = (period: Period): string | null => {
+  if (period === 'all') return null;
+  const now = new Date();
+  const start = period === 'month'
+    ? new Date(now.getFullYear(), now.getMonth(), 1)
+    : new Date(now.getFullYear(), now.getMonth() - PERIOD_MONTHS[period], now.getDate());
+  return start.toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
+};
+
+const TYPE_LABEL: Record<string, string> = { DEPOSIT: 'Cash Deposit', CUSTOMIZED: 'Customized', WALKIN: 'Walk-in' };
+
+const STATUS_BADGE: Record<RecordStatus, string> = {
   PENDING: 'bg-yellow-100 text-yellow-800',
+  MISSING: 'bg-orange-100 text-orange-800',
   APPROVED: 'bg-green-100 text-green-800',
   REJECTED: 'bg-red-100 text-red-800',
 };
@@ -89,15 +141,18 @@ const CashDepositsPage: React.FC = () => {
   const { showToast } = useToast();
 
   const [role, setRole] = useState('');
-  const [userId, setUserId] = useState('');
+  const [userLoaded, setUserLoaded] = useState(false); // list waits for the role (default filter)
 
-  const [deposits, setDeposits] = useState<Deposit[]>([]);
+  const [deposits, setDeposits] = useState<RecordRow[]>([]);
   const [loading, setLoading] = useState(false);
   // Filter inputs; applied on Fetch (like Sales View)
-  const [statusFilter, setStatusFilter] = useState<'' | DepositStatus>('PENDING');
-  // Smart search: a date (dd/mm or dd/mm/yyyy) or deposit no / bank / submitted by / amount
+  const [typeFilter, setTypeFilter] = useState<RecordType>('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('PENDING');
+  // Smart search: a date (dd/mm or dd/mm/yyyy) or deposit / invoice no, bank, customer, name, amount
   const [search, setSearch] = useState('');
-  const [applied, setApplied] = useState<{ status: '' | DepositStatus; search: string }>({
+  const [period, setPeriod] = useState<Period>('month'); // applies at once, like Google
+  const [applied, setApplied] = useState<{ type: RecordType; status: StatusFilter; search: string }>({
+    type: '',
     status: 'PENDING',
     search: '',
   });
@@ -117,7 +172,10 @@ const CashDepositsPage: React.FC = () => {
 
   // Review / detail
   // Right-side review panel (Shop Order Approval style)
-  const [selected, setSelected] = useState<Deposit | null>(null);
+  const [selected, setSelected] = useState<RecordRow | null>(null);
+  const [proofUploading, setProofUploading] = useState(false);
+  // Pay slips picked in the panel: previewed first, uploaded on "Upload Pay Slip"
+  const [newSlips, setNewSlips] = useState<{ file: File; url: string }[]>([]);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectBox, setShowRejectBox] = useState(false);
@@ -127,8 +185,8 @@ const CashDepositsPage: React.FC = () => {
   const isAdmin = role === 'admin';
   const canSubmit = role === 'admin' || role === 'cashier';
   const canReview = role === 'admin' || role === 'sales';
-  const canEdit = (d: Deposit) =>
-    d.status !== 'APPROVED' && (isAdmin || (role === 'cashier' && d.submitted_by === userId));
+  // Cashier can fix any deposit of the branch, also one made by admin (2026-10-09)
+  const canEdit = (d: Deposit) => d.status !== 'APPROVED' && (isAdmin || role === 'cashier');
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -137,10 +195,17 @@ const CashDepositsPage: React.FC = () => {
         if (response.ok) {
           const data = await response.json();
           setRole(data.user?.role || '');
-          setUserId(data.user?.id || '');
+          // Default view: sales/admin see what waits for their approval (Pending),
+          // the cashier sees what came back to them (Rejected, with payments missing proof)
+          if (data.user?.role === 'cashier') {
+            setStatusFilter('REJECTED');
+            setApplied((prev) => ({ ...prev, status: 'REJECTED' }));
+          }
         }
       } catch (error) {
         console.error('Error fetching user role:', error);
+      } finally {
+        setUserLoaded(true);
       }
     };
     fetchUser();
@@ -148,13 +213,16 @@ const CashDepositsPage: React.FC = () => {
 
   const buildFilterParams = useCallback(() => {
     const params = new URLSearchParams();
-    if (applied.status) params.append('status_filter', applied.status);
+    if (applied.type) params.append('type_filter', applied.type);
+    if (applied.status) params.append('status_filter', STATUS_QUERY[applied.status]);
     if (applied.search) params.append('search', applied.search);
+    const fromDate = periodStart(period);
+    if (fromDate) params.append('from_date', fromDate);
     return params;
-  }, [applied]);
+  }, [applied, period]);
 
   const applyFilters = () => {
-    setApplied({ status: statusFilter, search: search.trim() });
+    setApplied({ type: typeFilter, status: statusFilter, search: search.trim() });
     setCurrentPage(1);
   };
 
@@ -164,26 +232,26 @@ const CashDepositsPage: React.FC = () => {
       const params = buildFilterParams();
       params.append('page', currentPage.toString());
       params.append('limit', PAGE_SIZE.toString());
-      const response = await fetch(`/api/cash-deposits?${params.toString()}`, { credentials: 'include' });
+      const response = await fetch(`/api/payments-record?${params.toString()}`, { credentials: 'include' });
       const data = await response.json();
       if (!response.ok) {
-        showToast(data.error || 'Failed to fetch deposits', 'error');
+        showToast(data.error || 'Failed to fetch payments record', 'error');
         return;
       }
       setDeposits(data.data || []);
       setTotalItems(data.total || 0);
       setTotalPages(data.totalPages || 0);
     } catch (error) {
-      console.error('Error fetching deposits:', error);
-      showToast('Failed to fetch deposits', 'error');
+      console.error('Error fetching payments record:', error);
+      showToast('Failed to fetch payments record', 'error');
     } finally {
       setLoading(false);
     }
   }, [buildFilterParams, currentPage, showToast]);
 
   useEffect(() => {
-    fetchDeposits();
-  }, [fetchDeposits]);
+    if (userLoaded) fetchDeposits();
+  }, [fetchDeposits, userLoaded]);
 
   const formTotal = useMemo(
     () => slipRows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0),
@@ -347,12 +415,14 @@ const CashDepositsPage: React.FC = () => {
       setShowForm(false);
       setEditing(null);
       // Show all pending (clear search) so the saved deposit is visible
+      const keepType = applied.type === 'CUSTOMIZED' ? '' : applied.type;
+      setTypeFilter(keepType);
       setStatusFilter('PENDING');
       setSearch('');
-      if (applied.status === 'PENDING' && !applied.search && currentPage === 1) {
+      if (applied.status === 'PENDING' && !applied.search && applied.type === keepType && currentPage === 1) {
         fetchDeposits();
       } else {
-        setApplied({ status: 'PENDING', search: '' });
+        setApplied({ type: keepType, status: 'PENDING', search: '' });
         setCurrentPage(1);
       }
       window.dispatchEvent(new Event(CASH_DEPOSITS_CHANGED));
@@ -366,7 +436,15 @@ const CashDepositsPage: React.FC = () => {
 
   // ---------- review ----------
 
-  const openDetail = (d: Deposit) => {
+  const clearNewSlips = () => {
+    setNewSlips((slips) => {
+      slips.forEach((s) => URL.revokeObjectURL(s.url));
+      return [];
+    });
+  };
+
+  const openDetail = (d: RecordRow) => {
+    clearNewSlips();
     setSelected(d);
     setIsPanelOpen(true);
     setRejectReason('');
@@ -374,7 +452,8 @@ const CashDepositsPage: React.FC = () => {
   };
 
   const closePanel = () => {
-    if (reviewing) return;
+    if (reviewing || proofUploading) return;
+    clearNewSlips();
     setIsPanelOpen(false);
     // Unmount after the slide-out transition, otherwise the invisible
     // fullscreen wrapper keeps blocking clicks on the page
@@ -387,9 +466,11 @@ const CashDepositsPage: React.FC = () => {
       showToast('Write the reject reason', 'error');
       return;
     }
+    const deposit = isDeposit(selected);
+    const label = deposit ? selected.deposit_no : `${selected.invoice_no} payment`;
     try {
       setReviewing(true);
-      const response = await fetch(`/api/cash-deposits/${selected.id}/${action}`, {
+      const response = await fetch(`/api/${deposit ? 'cash-deposits' : 'payment-proofs'}/${selected.id}/${action}`, {
         method: 'POST',
         credentials: 'include',
         ...(action === 'reject'
@@ -398,19 +479,84 @@ const CashDepositsPage: React.FC = () => {
       });
       const data = await response.json();
       if (!response.ok) {
-        showToast(data.error || `Failed to ${action} deposit`, 'error');
+        showToast(data.error || `Failed to ${action} ${label}`, 'error');
         return;
       }
-      showToast(`${data.deposit_no} ${action === 'approve' ? 'approved' : 'rejected'}`, 'success');
+      showToast(
+        action === 'approve'
+          ? `${label} approved`
+          : deposit ? `${label} rejected` : `${label} rejected - follow up with the customer`,
+        'success'
+      );
       setIsPanelOpen(false);
       setTimeout(() => setSelected(null), 300);
       fetchDeposits();
-      window.dispatchEvent(new Event(CASH_DEPOSITS_CHANGED));
+      window.dispatchEvent(new Event(deposit ? CASH_DEPOSITS_CHANGED : PAYMENT_PROOFS_CHANGED));
     } catch (error) {
       console.error(`Error on ${action}:`, error);
-      showToast(`Failed to ${action} deposit`, 'error');
+      showToast(`Failed to ${action} ${label}`, 'error');
     } finally {
       setReviewing(false);
+    }
+  };
+
+  // Pick pay slips: preview only, nothing is uploaded yet
+  const pickSlips = (proof: PaymentProof, e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+    const error = proofFilesError([...newSlips.map((s) => s.file), ...files], proof.images.length);
+    if (error) {
+      showToast(error, 'error');
+      return;
+    }
+    setNewSlips((slips) => [...slips, ...files.map((file) => ({ file, url: URL.createObjectURL(file) }))]);
+  };
+
+  const removeNewSlip = (index: number) => {
+    setNewSlips((slips) => {
+      URL.revokeObjectURL(slips[index].url);
+      return slips.filter((_, i) => i !== index);
+    });
+  };
+
+  // "Upload Pay Slip": send the picked pay slips (missing / pending / rejected -> pending)
+  const uploadProof = async (proof: PaymentProof) => {
+    if (!newSlips.length || proofUploading) return;
+    try {
+      setProofUploading(true);
+      const updated = await uploadProofImages(proof.id, newSlips.map((s) => s.file));
+      clearNewSlips();
+      setSelected(updated);
+      setDeposits((rows) => rows.map((r) => (r.id === updated.id ? updated : r)));
+      showToast('Pay slip attached', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Pay slip upload failed', 'error');
+    } finally {
+      setProofUploading(false);
+    }
+  };
+
+  // Remove one screenshot (while missing / pending), confirmed first
+  const removeProofImage = async (proof: PaymentProof, imageId: string) => {
+    const result = await Swal.fire({
+      title: 'Remove this pay slip?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, remove it!',
+    });
+    if (!result.isConfirmed) return;
+    try {
+      setProofUploading(true);
+      const updated = await uploadProofImages(proof.id, [], proof.images.filter((i) => i.id !== imageId).map((i) => i.id));
+      setSelected(updated);
+      setDeposits((rows) => rows.map((r) => (r.id === updated.id ? updated : r)));
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to remove pay slip', 'error');
+    } finally {
+      setProofUploading(false);
     }
   };
 
@@ -421,7 +567,27 @@ const CashDepositsPage: React.FC = () => {
 
   return (
     <div className="p-2 py-5">
-      <PageHeader title="Cash Deposits" />
+      <PageHeader title="Payments Record" />
+
+      {/* Period: right under the heading, above everything else, separate from the search filters (Google "Any time" style) */}
+      <div className="flex justify-end mb-2">
+        <select
+          value={period}
+          onChange={(e) => {
+            setPeriod(e.target.value as Period);
+            setCurrentPage(1);
+          }}
+          className="regal-input w-auto py-1.5 text-sm font-medium"
+          aria-label="Period"
+          title="Show records of this period"
+        >
+          {PERIOD_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {/* Line 1: action button */}
       {canSubmit && (
@@ -445,15 +611,29 @@ const CashDepositsPage: React.FC = () => {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
-              placeholder="Date (03/10), Deposit No, Bank, Name, Amount"
+              placeholder="Date (03/10), Deposit / Invoice No, Bank, Customer, Amount"
               className="regal-input w-full"
             />
           </div>
-          <div className="col-span-2 md:w-40">
+          <div className="md:w-40">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as RecordType)}
+              className="regal-input w-full"
+            >
+              {TYPE_OPTIONS.map((option) => (
+                <option key={option.label} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="md:w-48">
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as '' | DepositStatus)}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
               className="regal-input w-full"
             >
               {STATUS_OPTIONS.map((option) => (
@@ -668,11 +848,12 @@ const CashDepositsPage: React.FC = () => {
               <thead className="bg-gray-100 sticky top-0 z-10">
                 <tr className="text-black font-semibold text-xs uppercase">
                   <th className="px-3 py-5 text-left w-12">S.No</th>
-                  <th className="px-2 py-5 text-left w-28">Deposit No</th>
-                  <th className="px-2 py-5 text-left w-28">Deposit Date</th>
-                  <th className="px-2 py-5 text-left w-44">Cash Of</th>
-                  <th className="px-2 py-5 text-left w-28">Total</th>
-                  <th className="px-2 py-5 text-left w-32">Submitted By</th>
+                  <th className="px-2 py-5 text-left w-28">Type</th>
+                  <th className="px-2 py-5 text-left w-28">No</th>
+                  <th className="px-2 py-5 text-left w-28">Date</th>
+                  <th className="px-2 py-5 text-left w-52">Details</th>
+                  <th className="px-2 py-5 text-left w-28">Amount</th>
+                  <th className="px-2 py-5 text-left w-32">By</th>
                   <th className="px-2 py-5 text-left w-28">Status</th>
                 </tr>
               </thead>
@@ -685,13 +866,30 @@ const CashDepositsPage: React.FC = () => {
                     title="Click to view details"
                   >
                     <td className="px-3 py-4 whitespace-nowrap">{(currentPage - 1) * PAGE_SIZE + index + 1}</td>
-                    <td className="px-2 py-4 whitespace-nowrap">{d.deposit_no}</td>
-                    <td className="px-2 py-4 whitespace-nowrap">{formatDate(d.deposit_date)}</td>
-                    <td className="px-2 py-4 whitespace-nowrap">{cashOf(d)}</td>
-                    <td className="px-2 py-4 whitespace-nowrap">{formatAmount(d.total_amount)}</td>
-                    <td className="px-2 py-4">{d.submitted_by_name || 'N/A'}</td>
+                    <td className="px-2 py-4 whitespace-nowrap">{TYPE_LABEL[d.type] || d.type}</td>
+                    {isDeposit(d) ? (
+                      <>
+                        <td className="px-2 py-4 whitespace-nowrap">{d.deposit_no}</td>
+                        <td className="px-2 py-4 whitespace-nowrap">{formatDate(d.deposit_date)}</td>
+                        <td className="px-2 py-4">Cash of {cashOf(d)}</td>
+                        <td className="px-2 py-4 whitespace-nowrap">{formatAmount(d.total_amount)}</td>
+                        <td className="px-2 py-4">{d.submitted_by_name || 'N/A'}</td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-2 py-4 whitespace-nowrap">{d.invoice_no}</td>
+                        <td className="px-2 py-4 whitespace-nowrap">{d.payment_date ? formatDate(d.payment_date) : '-'}</td>
+                        <td className="px-2 py-4">
+                          {d.customer_name || '-'} · <span className="capitalize">{d.payment_method}</span>
+                        </td>
+                        <td className="px-2 py-4 whitespace-nowrap">{formatAmount(d.amount)}</td>
+                        <td className="px-2 py-4">{d.recorded_by_name || 'N/A'}</td>
+                      </>
+                    )}
                     <td className="px-2 py-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${STATUS_BADGE[d.status]}`}>{d.status}</span>
+                      <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${STATUS_BADGE[d.status]}`}>
+                        {d.status === 'MISSING' ? 'PAY SLIP NOT ATTACHED' : d.status}
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -699,7 +897,7 @@ const CashDepositsPage: React.FC = () => {
             </table>
 
             {deposits.length === 0 && !loading && (
-              <div className="text-center py-12 text-gray-500">No deposits found.</div>
+              <div className="text-center py-12 text-gray-500">No records found.</div>
             )}
           </div>
         )}
@@ -735,12 +933,13 @@ const CashDepositsPage: React.FC = () => {
             }`}
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h2 className="text-2xl font-semibold text-gray-900">Deposit Details</h2>
+              <h2 className="text-2xl font-semibold text-gray-900">{isDeposit(selected) ? 'Deposit Details' : 'Online Payment'}</h2>
               <button onClick={closePanel} className="text-gray-400 hover:text-gray-700 text-2xl leading-none" aria-label="Close">
                 &times;
               </button>
             </div>
 
+            {isDeposit(selected) ? (
             <div className="p-6 space-y-4">
               <div className="flex justify-between border-b border-gray-100 pb-3">
                 <span className="text-sm text-gray-500">Deposit No</span>
@@ -903,11 +1102,238 @@ const CashDepositsPage: React.FC = () => {
                 </div>
               )}
             </div>
+            ) : (
+            <div className="p-6 space-y-4">
+              {([
+                ['Invoice No', selected.invoice_no],
+                ['Customer', selected.customer_name || '-'],
+                ['Method', <span key="m" className="capitalize">{selected.payment_method}</span>],
+                ['Payment Date', selected.payment_date ? formatDate(selected.payment_date) : '-'],
+              ] as [string, React.ReactNode][]).map(([label, value]) => (
+                <div key={label} className="flex justify-between border-b border-gray-100 pb-3">
+                  <span className="text-sm text-gray-500">{label}</span>
+                  <span className="text-sm font-medium text-gray-900 text-right ml-4">{value}</span>
+                </div>
+              ))}
+              <div className="flex justify-between border-b border-gray-100 pb-3">
+                <span className="text-sm text-gray-500">Amount</span>
+                <span className="text-sm font-semibold text-gray-900">Rs. {formatAmount(selected.amount)}</span>
+              </div>
+              <div className="flex justify-between border-b border-gray-100 pb-3">
+                <span className="text-sm text-gray-500">Status</span>
+                <span className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${STATUS_BADGE[selected.status]}`}>
+                  {selected.status === 'MISSING' ? 'PAY SLIP NOT ATTACHED' : selected.status}
+                </span>
+              </div>
+              <div className="flex justify-between border-b border-gray-100 pb-3">
+                <span className="text-sm text-gray-500">Payment Taken By</span>
+                <span className="text-sm font-medium text-gray-900 text-right">
+                  {selected.recorded_by_name || '-'}
+                  {selected.recorded_at && (
+                    <span className="block text-xs font-normal text-gray-500">{formatDateTime(selected.recorded_at)}</span>
+                  )}
+                </span>
+              </div>
+              {selected.uploaded_by_name && (
+                <div className="flex justify-between border-b border-gray-100 pb-3">
+                  <span className="text-sm text-gray-500">Pay Slip Attached By</span>
+                  <span className="text-sm font-medium text-gray-900 text-right">
+                    {selected.uploaded_by_name}
+                    {selected.uploaded_at && (
+                      <span className="block text-xs font-normal text-gray-500">{formatDateTime(selected.uploaded_at)}</span>
+                    )}
+                  </span>
+                </div>
+              )}
+              {(selected.status === 'APPROVED' || selected.status === 'REJECTED') && selected.reviewed_by_name && (
+                <div className="flex justify-between border-b border-gray-100 pb-3">
+                  <span className="text-sm text-gray-500">{selected.status === 'APPROVED' ? 'Approved By' : 'Rejected By'}</span>
+                  <span className="text-sm font-medium text-gray-900 text-right">
+                    {selected.reviewed_by_name}
+                    {selected.reviewed_at && (
+                      <span className="block text-xs font-normal text-gray-500">{formatDateTime(selected.reviewed_at)}</span>
+                    )}
+                  </span>
+                </div>
+              )}
+              {selected.reject_reason && (
+                <div className="flex justify-between border-b border-gray-100 pb-3">
+                  <span className="text-sm text-gray-500">Reject Reason</span>
+                  <span className="text-sm font-medium text-red-600 text-right ml-4">{selected.reject_reason}</span>
+                </div>
+              )}
+              {selected.status === 'REJECTED' && (
+                <p className="text-xs text-gray-500">
+                  Follow up with the customer for this payment.
+                </p>
+              )}
+
+              {/* Screenshots: original URL (sharp text), click to zoom */}
+              <div>
+                <p className="text-sm text-gray-500 mb-2">Pay Slip ({selected.images.length})</p>
+                {selected.images.length === 0 && (
+                  <p className="text-sm text-orange-700 mb-2">Pay slip not attached yet. Request it from the customer and attach it here.</p>
+                )}
+                <div className="space-y-3">
+                  {selected.images.map((img, index) => (
+                    <div key={img.id} className="rounded-lg border border-gray-200 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setZoomSrc(img.file_url)}
+                        className="group relative block w-full bg-gray-50"
+                        title="Click to zoom"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={img.file_url} alt={`Pay slip ${index + 1}`} className="h-56 w-full object-contain" />
+                        <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-xs text-white md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                          <MagnifyingGlassPlusIcon className="h-3.5 w-3.5" />
+                          Zoom
+                        </span>
+                      </button>
+                      <div className="flex items-center justify-between gap-3 border-t border-gray-200 px-3 py-2">
+                        <p className="text-xs text-gray-500">
+                          Pay Slip {index + 1} of {selected.images.length}
+                        </p>
+                        <div className="flex gap-2">
+                          {selected.status !== 'APPROVED' && (
+                            <button
+                              type="button"
+                              onClick={() => removeProofImage(selected, img.id)}
+                              disabled={proofUploading || reviewing}
+                              className="rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
+                            >
+                              Delete
+                            </button>
+                          )}
+                          <a
+                            href={downloadUrl(img.file_url, `${selected.invoice_no}_payment_${index + 1}`)}
+                            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:border-regal-yellow hover:bg-regal-yellow hover:text-regal-black"
+                            title={`Download ${selected.invoice_no} pay slip ${index + 1}`}
+                          >
+                            <ArrowDownTrayIcon className="h-4 w-4" />
+                            Download
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {selected.status !== 'APPROVED' && selected.images.length < MAX_PROOF_IMAGES && (
+                  <div className="mt-3 space-y-3">
+                    {/* Picked pay slips: preview before upload (✕ removes; none left = back to Attach) */}
+                    {newSlips.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {newSlips.map((slip, index) => (
+                          <div key={slip.url} className="relative h-24 w-24 rounded-lg border-2 border-regal-yellow overflow-hidden bg-gray-50">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={slip.url}
+                              alt={`New pay slip ${index + 1}`}
+                              onClick={() => setZoomSrc(slip.url)}
+                              className="h-full w-full object-cover cursor-pointer"
+                            />
+                            {!proofUploading && (
+                              <button
+                                type="button"
+                                onClick={() => removeNewSlip(index)}
+                                className="absolute top-0 right-0 bg-black/70 text-white text-xs leading-none px-1.5 py-1"
+                                title="Remove"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {newSlips.length === 0 ? (
+                      // Same button as before; picking only previews the slip
+                      <label className="inline-flex items-center gap-2 regal-btn bg-regal-yellow text-regal-black cursor-pointer">
+                        + Attach Pay Slip
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => pickSlips(selected, e)}
+                        />
+                      </label>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => uploadProof(selected)}
+                        disabled={proofUploading}
+                        className="inline-flex items-center gap-2 regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {proofUploading ? (<><Spinner /> Uploading...</>) : 'Upload Pay Slip'}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {canReview && (selected.status === 'PENDING' || selected.status === 'MISSING') && showRejectBox && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Reject Reason *</label>
+                  <textarea
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    className="regal-input w-full"
+                    rows={2}
+                    maxLength={500}
+                    placeholder="e.g. Amount not received in Easypaisa"
+                    autoFocus
+                  />
+                </div>
+              )}
+
+              {canReview && (selected.status === 'PENDING' || selected.status === 'MISSING') && (
+                <div className="pt-4 flex gap-2">
+                  {showRejectBox ? (
+                    <>
+                      <button
+                        onClick={() => setShowRejectBox(false)}
+                        disabled={reviewing}
+                        className="regal-btn bg-gray-300 text-black flex-1 py-2 disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => review('reject')}
+                        disabled={reviewing}
+                        className="regal-btn bg-red-500 text-white flex-1 py-2 disabled:opacity-50"
+                      >
+                        {reviewing ? 'Please wait...' : 'Confirm Reject'}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => review('approve')}
+                        disabled={reviewing || proofUploading || selected.status !== 'PENDING'}
+                        title={selected.status === 'MISSING' ? 'Attach the pay slip first' : undefined}
+                        className="regal-btn bg-green-500 text-white flex-1 py-2 disabled:opacity-50"
+                      >
+                        {reviewing ? 'Please wait...' : 'Approve'}
+                      </button>
+                      <button
+                        onClick={() => setShowRejectBox(true)}
+                        disabled={reviewing || proofUploading}
+                        className="regal-btn bg-red-500 text-white flex-1 py-2 disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+            )}
           </div>
         </div>
       )}
 
-      {zoomSrc && <ImageZoomViewer src={zoomSrc} alt="Bank slip" onClose={() => setZoomSrc(null)} />}
+      {zoomSrc && <ImageZoomViewer src={zoomSrc} alt="Pay slip" onClose={() => setZoomSrc(null)} />}
     </div>
   );
 };

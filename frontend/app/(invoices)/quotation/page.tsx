@@ -21,10 +21,14 @@ import {
   dyePiecesOfCategory,
   formDyePieces,
   lineDyeMultiplier,
+  teamsIn,
+  mockupKey,
+  MockupLine,
+  MOCKUP_MAX_PIECES,
 } from '@/lib/quantityPricing';
-import { QuantityTierCards, MockupChargeRows, MockupLinePreview } from '@/components/QuantityTierCards';
+import { QuantityTierCards, MockupLinePreview } from '@/components/QuantityTierCards';
 import { DtfSettings, DtfLogo, computeDtf, dtfLogosLabel, dtfTotalOf, metersLabel } from '@/lib/dtfLayout';
-import { DtfLogoBox, DtfChargeRows } from '@/components/DtfLogos';
+import { DtfLogoBox } from '@/components/DtfLogos';
 import AddCustomerModal from '@/components/AddCustomerModal';
 
 interface Customer {
@@ -33,7 +37,26 @@ interface Customer {
   cus_phone: string;
 }
 
-type CartItem = PricedLine;
+// Every line has a team (typed in Team Name above the item form). `group` = id of the
+// line it was added from with "+ Similar" - it is listed right under that line.
+type CartItem = PricedLine & { team: string; group?: string | null };
+
+// Cart filter: all teams together (default) or one team.
+const ALL_TEAMS = '__all_teams__';
+
+// Trimmed, single-spaced, no "|" (used in the flat charge keys); 100 chars like the backend.
+const cleanTeamName = (value: string) => value.replace(/\|/g, ' ').trim().replace(/\s+/g, ' ').slice(0, 100);
+
+// Cart lines in display/save order: teams in the order they were first added; in each
+// team the lines in order, with each line's "+ Similar" lines right under it.
+const orderedLines = (cart: CartItem[]): CartItem[] => {
+  const ids = new Set(cart.map(i => i.id));
+  return teamsIn(cart).flatMap(team => {
+    const lines = cart.filter(i => i.team === team);
+    const firsts = lines.filter(i => !i.group || !ids.has(i.group));
+    return firsts.flatMap(first => [first, ...lines.filter(i => i.group === first.id)]);
+  });
+};
 
 // DRAFT / SENT / REJECTED can be revised; APPROVED and CONVERTED are locked (backend checks too).
 const REVISABLE = ['DRAFT', 'SENT', 'REJECTED'];
@@ -56,7 +79,7 @@ interface SavedQuotation {
   required_by_date: string | null;
   discounts: number;
   rush_rate_snapshot: number | null;
-  totals: { mockup_charges?: { category: string; amount: number }[] };
+  totals: { mockup_charges?: { category: string; amount: number; team?: string }[] };
   items: {
     product_name: string;
     cat_name: string;
@@ -64,6 +87,8 @@ interface SavedQuotation {
     quantity: number;
     category_fields?: string;
     dtf?: { logos: { w: number; h: number }[]; charge: number; amount: number };
+    team?: string;
+    similar_of?: number; // 1-based line number of the line it was added "+ Similar" from
   }[];
 }
 
@@ -77,8 +102,17 @@ const QuotationPage: React.FC = () => {
 
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
-  const [teamName, setTeamName] = useState('');
   const [requiredByDate, setRequiredByDate] = useState('');
+
+  // Team Name box at the top of the item form. Emptied after every Add; "+ Similar"
+  // fills it with that line's team.
+  const [teamInput, setTeamInput] = useState('');
+  // Cart filter - ALL_TEAMS or one team name.
+  const [cartView, setCartView] = useState(ALL_TEAMS);
+  // Id of the line "+ Similar" was clicked on - the next Add goes right under it.
+  const [similarOf, setSimilarOf] = useState<string | null>(null);
+  const quantityInputRef = useRef<HTMLInputElement>(null);
+  const itemFormRef = useRef<HTMLDivElement>(null);
 
   const [selectedCategory, setSelectedCategory] = useState('');
   const [dynamicCategoryFields, setDynamicCategoryFields] = useState<Record<string, string>>({});
@@ -120,25 +154,34 @@ const QuotationPage: React.FC = () => {
   // Per-piece rush rate actually charged - pre-filled with the default above, but
   // editable by the cashier (like the item Rate field). Sent to the backend on save.
   const [rushRate, setRushRate] = useState<number | ''>('');
-  // Designing / mockup charge per category with 1-4 pcs - each category's own amount
-  // (customer_categories.mockup_charge), editable per order in the totals box.
+  // Designing / mockup ("flat") charge per team and category with 1-4 pcs - each
+  // category's own amount (customer_categories.mockup_charge), editable per order in the
+  // cart. Keyed by mockupKey(team, category).
   const [mockupAmounts, setMockupAmounts] = useState<Record<string, number>>({});
   // Category's own charge (e.g. Jacket 1000); not set or 0 = no mockup for it.
   const mockupDefaultFor = (category: string) => categoryMockupDefault(customerCategories, category);
   const hasMockupCharge = (category: string) => mockupDefaultFor(category) > 0;
-  const mockupAmountFor = (category: string) => mockupAmounts[category] ?? mockupDefaultFor(category);
+  const mockupAmountOf = (team: string, category: string) => mockupAmounts[mockupKey(team, category)] ?? mockupDefaultFor(category);
+
+  // Teams in the order they were first added; a team leaves when its last line is removed.
+  const teams = teamsIn(cart);
+  // The typed name, matched to a team already in the cart regardless of case/spaces.
+  const typedTeam = cleanTeamName(teamInput);
+  const activeTeam = teams.find(t => t.toLowerCase() === typedTeam.toLowerCase()) ?? typedTeam;
+  const similarLine = similarOf ? cart.find(i => i.id === similarOf) ?? null : null;
 
   const categoryData = customerCategories.find(cat => cat.main_category === selectedCategory);
   const allOptionsSelected = !!categoryData && categoryData.sub_categories.length > 0 &&
     categoryData.sub_categories.filter(sc => !sc.is_optional).every(sc => !!dynamicCategoryFields[sc.sub_category]);
-  // The tier comes from every piece of this category in the quotation: what's already
-  // in the cart + the quantity being entered.
-  const piecesAlreadyInCart = selectedCategory ? piecesOfCategory(cart, selectedCategory) : 0;
+  // The tier comes from every piece of this category in this team: what's already in
+  // the cart for the team + the quantity being entered.
+  const piecesAlreadyInCart = selectedCategory ? piecesOfCategory(cart, selectedCategory, activeTeam) : 0;
   const tierPieces: number | '' = quantity === '' ? '' : quantity + piecesAlreadyInCart;
   const entryIsDye = isDyeLine(customerCategories.find(c => c.main_category === selectedCategory), dynamicCategoryFields);
-  const nonDyeInCart = selectedCategory ? piecesAlreadyInCart - dyePiecesOfCategory(cart, customerCategories, selectedCategory) : 0;
+  const nonDyeInCart = selectedCategory ? piecesAlreadyInCart - dyePiecesOfCategory(cart, customerCategories, selectedCategory, activeTeam) : 0;
   const matchedIdealPrice = lookupIdealPrice(
-    categoryData, dynamicCategoryFields, tierPieces, formDyePieces(cart, customerCategories, selectedCategory, dynamicCategoryFields, quantity)
+    categoryData, dynamicCategoryFields, tierPieces,
+    formDyePieces(cart, customerCategories, selectedCategory, dynamicCategoryFields, quantity, activeTeam)
   );
   // Roll layout + charge for the logos being entered, re-worked on every keystroke.
   const dtfResult = useMemo(
@@ -282,6 +325,10 @@ const QuotationPage: React.FC = () => {
       // auto-priced (moves with the qty tier); any other rate is kept as a manual rate.
       // DTF is worked out again with the current DTF rule.
       const droppedDtf: number[] = [];
+      // A quotation saved before teams has no team per line - its lines all go to its
+      // Team Name.
+      const oldTeam = cleanTeamName(data.team_name || '') || 'Team 1';
+      const stamp = Date.now();
       const lines: CartItem[] = data.items.map((item, index) => {
         let fields: Record<string, string> = {};
         try { fields = JSON.parse(item.category_fields || '{}'); } catch { fields = {}; }
@@ -297,7 +344,7 @@ const QuotationPage: React.FC = () => {
           }
         }
         return {
-          id: `${Date.now()}-${index}`,
+          id: `${stamp}-${index}`,
           category: item.cat_name || item.product_name,
           unitPrice: item.unit_price,
           quantity: item.quantity,
@@ -305,29 +352,35 @@ const QuotationPage: React.FC = () => {
           category_fields: fields,
           autoPriced: false,
           dtf,
+          team: cleanTeamName(item.team || '') || oldTeam,
+          group: item.similar_of ? `${stamp}-${item.similar_of - 1}` : null,
         };
       });
       const priced = lines.map(line => {
         const categoryForLine = customerCategories.find(c => c.main_category === line.category);
         const listRate = lookupIdealPrice(
-          categoryForLine, line.category_fields || {}, piecesOfCategory(lines, line.category), dyePiecesOfCategory(lines, customerCategories, line.category)
+          categoryForLine, line.category_fields || {},
+          piecesOfCategory(lines, line.category, line.team), dyePiecesOfCategory(lines, customerCategories, line.category, line.team)
         );
         return { ...line, autoPriced: listRate !== null && listRate === line.unitPrice };
       });
       updateCart(priced);
 
-      // Mockup amounts as saved. A category that needed a mockup but isn't in the saved
-      // list had it waived (0 rows aren't saved), so it stays 0.
+      // Mockup amounts as saved (an entry without a team belongs to oldTeam). A team +
+      // category that needed a mockup but isn't in the saved list had it waived (0 rows
+      // aren't saved), so it stays 0.
       const amounts: Record<string, number> = Object.fromEntries(
-        (data.totals.mockup_charges || []).map(m => [m.category, Number(m.amount)])
+        (data.totals.mockup_charges || []).map(m => [mockupKey(cleanTeamName(m.team || '') || oldTeam, m.category), Number(m.amount)])
       );
-      for (const category of Array.from(new Set(priced.map(l => l.category)))) {
-        if (!(category in amounts) && needsMockup(priced, customerCategories, category) && mockupDefaultFor(category) > 0) amounts[category] = 0;
+      for (const team of teamsIn(priced)) {
+        for (const category of Array.from(new Set(priced.filter(l => l.team === team).map(l => l.category)))) {
+          const key = mockupKey(team, category);
+          if (!(key in amounts) && needsMockup(priced, customerCategories, category, team) && mockupDefaultFor(category) > 0) amounts[key] = 0;
+        }
       }
       setMockupAmounts(amounts);
 
       setSelectedCustomer(data.customer_id || '');
-      setTeamName(data.team_name || '');
       setRequiredByDate(data.required_by_date || '');
       setDiscount(data.discounts ? data.discounts : '');
       if (data.rush_rate_snapshot !== null) setRushRate(data.rush_rate_snapshot);
@@ -349,7 +402,9 @@ const QuotationPage: React.FC = () => {
     setRevising(null);
     setCart([]);
     setSelectedCustomer('');
-    setTeamName('');
+    setTeamInput('');
+    setCartView(ALL_TEAMS);
+    setSimilarOf(null);
     setRequiredByDate('');
     setDiscount('');
     setRushRate(rushRatePerPiece ?? '');
@@ -369,6 +424,10 @@ const QuotationPage: React.FC = () => {
   };
 
   const addToCart = () => {
+    if (!activeTeam) {
+      showToast('Please enter team name', 'error');
+      return;
+    }
     if (!selectedCategory) {
       showToast('Please select a category', 'error');
       return;
@@ -409,23 +468,56 @@ const QuotationPage: React.FC = () => {
       // staff typed stays as typed.
       autoPriced: priceWasAutoFilled && matchedIdealPrice !== null && unitPrice === matchedIdealPrice,
       dtf: dtfResult.status === 'ok' ? dtfResult.block : null,
+      team: activeTeam,
+      // Listed under the "+ Similar" line only while it's still the same team and category.
+      group: similarLine && similarLine.team === activeTeam && similarLine.category === selectedCategory ? similarLine.id : null,
     };
 
     updateCart([...cart, newItem]);
     clearItemForm();
+    // Team Name empties after every Add - "+ Similar" or typing the name adds more to a team.
+    setTeamInput('');
+    setSimilarOf(null);
   };
 
-  // Every add/remove re-prices the auto-priced lines from their category's new total.
-  // No toast - the change shows in the cart itself (tier cards, rate tags, mockup rows).
+  // Every add/remove re-prices the auto-priced lines from their team + category's new
+  // total. No toast - the change shows in the cart itself (tier cards, rate tags, mockup rows).
   const updateCart = (next: CartItem[]) => {
     const { items } = repriceCart(next, customerCategories);
-    // A category that left the cart forgets its edited mockup amount.
-    setMockupAmounts(prev => Object.fromEntries(Object.entries(prev).filter(([c]) => items.some(i => i.category === c))));
+    // A team + category that left the cart forgets its edited mockup amount.
+    setMockupAmounts(prev => Object.fromEntries(Object.entries(prev).filter(([key]) => items.some(i => mockupKey(i.team, i.category) === key))));
     setCart(items);
+    // A team whose last line was removed leaves the filter.
+    if (cartView !== ALL_TEAMS && !items.some(i => i.team === cartView)) setCartView(ALL_TEAMS);
   };
 
   const removeFromCart = (id: string) => {
-    updateCart(cart.filter(item => item.id !== id));
+    // A first line removed: its first "+ Similar" line takes its place and the rest of
+    // the group moves under that one.
+    const heir = cart.find(item => item.group === id);
+    const next = cart.flatMap(item =>
+      item.id === id ? (heir ? [{ ...heir, group: null }] : [])
+      : heir && item.id === heir.id ? []
+      : [item.group === id && heir ? { ...item, group: heir.id } : item]);
+    if (similarOf === id) setSimilarOf(heir ? heir.id : null);
+    updateCart(next);
+  };
+
+  // "+ Similar": the line's team, category and options go into the form; only the
+  // quantity is left to enter. The new line is listed right under this one.
+  const addSimilar = (line: CartItem) => {
+    setTeamInput(line.team);
+    setSimilarOf(line.group || line.id);
+    setSelectedCategory(line.category);
+    setDynamicCategoryFields({ ...(line.category_fields || {}) });
+    const lineCategory = customerCategories.find(c => c.main_category === line.category);
+    setShowOptionalFields(!!lineCategory?.sub_categories.some(sc => sc.is_optional && line.category_fields?.[sc.sub_category]));
+    setDtfLogos([]);
+    setUnitPrice('');
+    setPriceWasAutoFilled(false);
+    setQuantity('');
+    itemFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => quantityInputRef.current?.focus({ preventScroll: true }), 0);
   };
 
   // For a line whose tier has no price in the list: the rate typed here makes it a
@@ -436,7 +528,7 @@ const QuotationPage: React.FC = () => {
       : item));
   };
 
-  // DTF amount of one line, edited in the totals box (like the mockup amount).
+  // DTF amount of one line, edited in its team's block in the cart (like the mockup amount).
   const setDtfAmount = (id: string, amount: number) => {
     setCart(cart.map(item => (item.id === id && item.dtf ? { ...item, dtf: { ...item.dtf, amount } } : item)));
   };
@@ -446,8 +538,24 @@ const QuotationPage: React.FC = () => {
   const totalPieces = cart.reduce((sum, item) => sum + item.quantity, 0);
   const mockups = mockupLines(cart, customerCategories, mockupAmounts, mockupDefaultFor);
   const mockupTotal = mockups.reduce((sum, m) => sum + m.amount, 0);
-  const tierSummaries = categoryTierSummaries(cart, customerCategories, mockupAmountFor, hasMockupCharge);
   const linesMissingPrice = cart.filter(item => item.missingTierPrice);
+
+  // Per team: its lines (display order), pieces, flat charges and total (lines + flat + DTF).
+  const teamBlocks = teams.map(team => {
+    const lines = orderedLines(cart).filter(i => i.team === team);
+    const flats: MockupLine[] = mockups.filter(m => m.team === team);
+    const flatTotal = flats.reduce((sum, m) => sum + m.amount, 0);
+    return {
+      team,
+      lines,
+      flats,
+      flatTotal,
+      pieces: lines.reduce((sum, i) => sum + i.quantity, 0),
+      total: lines.reduce((sum, i) => sum + i.totalPrice, 0) + flatTotal + dtfTotalOf(lines),
+      tierSummaries: categoryTierSummaries(cart, customerCategories, c => mockupAmountOf(team, c), hasMockupCharge, team),
+    };
+  });
+  const shownBlocks = cartView === ALL_TEAMS ? teamBlocks : teamBlocks.filter(b => b.team === cartView);
 
   // Live preview of what the backend will compute on submit: rush applies when the
   // deadline falls within threshold_days of today (inclusive), charged per piece
@@ -479,10 +587,6 @@ const QuotationPage: React.FC = () => {
       showToast('Please select a customer', 'error');
       return;
     }
-    if (!teamName.trim()) {
-      showToast('Please enter team name', 'error');
-      return;
-    }
     if (!requiredByDate) {
       showToast('Please enter the deadline (Required By date)', 'error');
       return;
@@ -496,7 +600,11 @@ const QuotationPage: React.FC = () => {
     try {
       const customer = customers.find(c => c.cus_id === selectedCustomer);
 
-      const items = cart.map(item => ({
+      // Saved in display order (grouped by team, "+ Similar" lines under their line), so
+      // the PDF and bills list them the same way; similar_of = that line's number.
+      const ordered = orderedLines(cart);
+      const lineNo = new Map(ordered.map((item, index) => [item.id, index + 1]));
+      const items = ordered.map(item => ({
         pro_name: item.category,
         cat_name: item.category,
         unit_price: item.unitPrice,
@@ -504,18 +612,20 @@ const QuotationPage: React.FC = () => {
         total_price: item.totalPrice,
         category_fields: JSON.stringify(item.category_fields || {}),
         ...(item.dtf ? { dtf: item.dtf } : {}),
+        team: item.team,
+        ...(item.group && lineNo.has(item.group) ? { similar_of: lineNo.get(item.group) } : {}),
       }));
 
       const payload = {
         customer_id: selectedCustomer || null,
         customer_name: customer?.cus_name || null,
-        team_name: teamName || null,
+        team_name: teams.join(', ') || null, // the backend saves the same from the items
         items: JSON.stringify(items),
         required_by_date: requiredByDate,
         discounts: discount || 0,
         rush_rate_per_piece: rushRateValue,
         rush_threshold_days: rushThresholdDays,
-        mockup_charges: mockups.map(m => ({ category: m.category, amount: m.amount })),
+        mockup_charges: mockups.map(m => ({ team: m.team, category: m.category, amount: m.amount })),
       };
 
       // A revision is saved against the old quotation (it becomes REVISED, this is Rev.N+1).
@@ -541,7 +651,9 @@ const QuotationPage: React.FC = () => {
         });
         setCart([]);
         setSelectedCustomer('');
-        setTeamName('');
+        setTeamInput('');
+        setCartView(ALL_TEAMS);
+        setSimilarOf(null);
         setRequiredByDate('');
         setDiscount('');
         setRushRate(rushRatePerPiece ?? '');
@@ -628,10 +740,34 @@ const QuotationPage: React.FC = () => {
 
         {/* Left Side - Add Item Form */}
         <div className="lg:col-span-1">
-          <div className="regal-card p-3 md:p-6 sticky lg:top-16">
+          <div ref={itemFormRef} className="regal-card p-3 md:p-6 sticky lg:top-16 scroll-mt-20">
             <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Add Item</h2>
 
             <div className="space-y-3 md:space-y-4">
+              {/* Team first: every line belongs to a team; flat charges and rate tiers are per team. */}
+              <div>
+                <label htmlFor="quotation-team" className="block text-sm font-medium mb-1">Team Name *</label>
+                <input
+                  id="quotation-team"
+                  type="text"
+                  value={teamInput}
+                  onChange={(e) => setTeamInput(e.target.value)}
+                  // Leaving the box fixes the spelling to the team already in the cart ("royal fc" -> "Royal FC").
+                  onBlur={() => { if (teams.includes(activeTeam)) setTeamInput(activeTeam); }}
+                  className="regal-input w-full font-semibold"
+                  placeholder="e.g. City Warriors FC"
+                  autoComplete="off"
+                  maxLength={100}
+                />
+                <p className="text-xs text-gray-600 mt-1">
+                  {!activeTeam
+                    ? 'Type the team name. A name already in this quotation adds to that team.'
+                    : teams.includes(activeTeam)
+                      ? <>Items go to <b>{activeTeam}</b> ({teamBlocks.find(b => b.team === activeTeam)?.pieces ?? 0} pcs so far).</>
+                      : <>New team. <b>{activeTeam}</b> joins this quotation with its first item.</>}
+                </p>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1">Category</label>
                 {loadingCategories ? (
@@ -639,7 +775,7 @@ const QuotationPage: React.FC = () => {
                 ) : (
                   <select
                     value={selectedCategory}
-                    onChange={(e) => { setSelectedCategory(e.target.value); setDynamicCategoryFields({}); setUnitPrice(''); setPriceWasAutoFilled(false); setShowOptionalFields(false); setDtfLogos([]); }}
+                    onChange={(e) => { setSelectedCategory(e.target.value); setSimilarOf(null); setDynamicCategoryFields({}); setUnitPrice(''); setPriceWasAutoFilled(false); setShowOptionalFields(false); setDtfLogos([]); }}
                     className="regal-input w-full"
                   >
                     <option value="">-- Select Category --</option>
@@ -653,6 +789,12 @@ const QuotationPage: React.FC = () => {
               {selectedCategory && categoryData && (
                 <div className="p-4 bg-regal-yellow rounded">
                   <h3 className="text-sm font-semibold text-regal-black border-b-2 border-regal-black pb-2 mb-3">{selectedCategory}</h3>
+                  {similarLine && (
+                    <div className="mb-3 -mt-1 flex flex-wrap items-baseline justify-between gap-2 rounded-md bg-white px-3 py-1.5 text-sm text-gray-800">
+                      <span>+ Similar of {similarLine.team} · {similarLine.category} ({similarLine.quantity} pcs). Will be listed under it.</span>
+                      <button type="button" onClick={() => setSimilarOf(null)} className="text-xs text-red-600 hover:underline">Not similar</button>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                   {categoryData.sub_categories.filter(subCat => !subCat.is_optional).map((subCat, index) => (
                     <div key={index}>
@@ -730,8 +872,8 @@ const QuotationPage: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium mb-1">Quantity</label>
-                <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value === '' ? '' : Number(e.target.value))} className="regal-input w-full" min="1" step="1" placeholder="0" />
-                <p className="text-xs text-gray-500 mt-1">Enter quantity - pieces of this category already in the cart are counted too for the rate tier (1-4, 5-15, 16-99 or 100+ pcs).</p>
+                <input ref={quantityInputRef} type="number" value={quantity} onChange={(e) => setQuantity(e.target.value === '' ? '' : Number(e.target.value))} className="regal-input w-full" min="1" step="1" placeholder="0" />
+                <p className="text-xs text-gray-500 mt-1">Enter quantity - pieces of this category already in this team are counted too for the rate tier (1-4, 5-15, 16-99 or 100+ pcs). Other teams are not counted.</p>
               </div>
 
               <div>
@@ -757,7 +899,7 @@ const QuotationPage: React.FC = () => {
                 {tierPieces !== '' && tierPieces > 0 && (
                   <p className={`text-xs mt-1 font-medium ${isQtyTier(tierPieces) ? 'text-purple-700' : 'text-gray-500'}`}>
                     {tierForQuantity(tierPieces).label}
-                    {piecesAlreadyInCart > 0 && ` - ${tierPieces} ${selectedCategory} pcs in this quotation (${piecesAlreadyInCart} already added + ${quantity})`}
+                    {piecesAlreadyInCart > 0 && ` - ${tierPieces} ${selectedCategory} pcs in ${activeTeam} (${piecesAlreadyInCart} already added + ${quantity})`}
                   </p>
                 )}
               </div>
@@ -767,19 +909,20 @@ const QuotationPage: React.FC = () => {
                 <input type="text" value={price} disabled className="regal-input w-full bg-gray-100 font-semibold" />
                 {tierPieces !== '' && hasMockupCharge(selectedCategory) && (
                   <MockupLinePreview
+                    team={activeTeam}
                     category={selectedCategory}
                     tierPieces={tierPieces}
                     alreadyInCart={piecesAlreadyInCart}
                     nonDyeInCart={nonDyeInCart}
                     isDye={entryIsDye}
                     lineTotal={price}
-                    amount={mockupAmountFor(selectedCategory)}
+                    amount={mockupAmountOf(activeTeam, selectedCategory)}
                   />
                 )}
                 {dtfResult.status === 'ok' && (
                   <p className="text-xs mt-1.5 px-2 py-1.5 rounded-md bg-teal-50 text-teal-700">
                     + DTF: {metersLabel(dtfResult.block.half_meters)} roll = <b className="text-gray-900">Rs. {dtfResult.block.charge.toLocaleString()}</b> →{' '}
-                    <b className="text-gray-900">Rs. {(price + dtfResult.block.charge).toLocaleString()}</b> for this {selectedCategory} with DTF. Added to the total, editable there.
+                    <b className="text-gray-900">Rs. {(price + dtfResult.block.charge).toLocaleString()}</b> for this {selectedCategory} with DTF. Added to the team total, editable in the cart.
                   </p>
                 )}
               </div>
@@ -795,81 +938,194 @@ const QuotationPage: React.FC = () => {
         <div className="lg:col-span-2 space-y-4 md:space-y-6">
 
           <div className="regal-card p-3 md:p-6" style={{ minHeight: '220px' }}>
-            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Items ({cart.length})</h2>
-            <QuantityTierCards summaries={tierSummaries} />
-            {cart.length === 0 ? (
-              <div className="text-center py-10 text-gray-400 text-sm">No items added yet - build the order on the left.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-100">
-                    <tr className="text-left text-xs font-medium text-gray-500 uppercase">
-                      <th className="px-4 py-3">Category</th>
-                      <th className="px-4 py-3 text-right">Rate</th>
-                      <th className="px-4 py-3 text-right">Qty</th>
-                      <th className="px-4 py-3 text-right">Total</th>
-                      <th className="px-4 py-3"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 bg-white">
-                    {cart.map((item) => (
-                      <tr key={item.id}>
-                        <td className="px-4 py-3">
-                          <div className="font-medium">{item.category}</div>
-                          {item.category_fields && Object.keys(item.category_fields).length > 0 && (
-                            <div className="text-xs text-gray-500 mt-0.5">
-                              {Object.entries(item.category_fields).map(([k, v]) => `${k}: ${v}`).join(' · ')}
-                            </div>
-                          )}
-                          {item.dtf && (
-                            <div className="text-xs text-teal-700 mt-0.5">
-                              DTF: {dtfLogosLabel(item.dtf)} · {metersLabel(item.dtf.half_meters)} roll · Rs. {item.dtf.amount.toLocaleString()} (in total)
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {item.previousUnitPrice != null && (
-                            <span className="block text-xs text-gray-400 line-through">{item.previousUnitPrice}</span>
-                          )}
-                          {item.missingTierPrice ? (
-                            <input
-                              type="number"
-                              defaultValue={item.unitPrice}
-                              min="1"
-                              step="1"
-                              aria-label={`Rate for ${item.category}`}
-                              onBlur={(e) => { const v = Number(e.target.value); if (v > 0) setLineRate(item.id, v); }}
-                              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                              className="w-24 px-2 py-1 text-right border border-amber-400 rounded-md"
-                            />
-                          ) : (
-                            <span className={item.rateChange === 'down' ? 'text-green-700 font-medium' : ''}>{item.unitPrice}</span>
-                          )}
-                          {item.rateChange === 'down' && (
-                            <span className="block text-[10px] text-green-700">qty rate · {piecesOfCategory(cart, item.category)} pcs</span>
-                          )}
-                          {item.rateChange === 'up' && (
-                            <span className="block text-[10px] text-amber-600">
-                              {isQtyTier(piecesOfCategory(cart, item.category)) ? 'qty' : 'single'} rate · {piecesOfCategory(cart, item.category)} pcs
-                            </span>
-                          )}
-                          {item.autoPriced && lineDyeMultiplier(cart, customerCategories, item) > 1 && (
-                            <span className="block text-[10px] text-pink-700">dye ×{lineDyeMultiplier(cart, customerCategories, item)}</span>
-                          )}
-                          {!item.autoPriced && <span className="block text-[10px] text-gray-400">manual</span>}
-                          {item.missingTierPrice && (
-                            <span className="block text-[10px] text-amber-600">no price for this tier - enter rate</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">{item.quantity}</td>
-                        <td className="px-4 py-3 text-right font-medium">{item.totalPrice}</td>
-                        <td className="px-4 py-3 text-right">
-                          <button onClick={() => removeFromCart(item.id)} className="text-red-600 hover:underline text-xs">Remove</button>
-                        </td>
-                      </tr>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3 md:mb-4">
+              <h2 className="text-lg md:text-xl font-semibold">Items ({cart.length})</h2>
+              {/* All teams by default; pick one team to see only its lines. */}
+              {teams.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <label htmlFor="quotation-team-filter" className="text-sm font-medium">Show</label>
+                  <select
+                    id="quotation-team-filter"
+                    value={cartView}
+                    onChange={(e) => setCartView(e.target.value)}
+                    className="regal-input py-1.5 font-semibold"
+                  >
+                    <option value={ALL_TEAMS}>All teams ({teams.length} · {totalPieces} pcs)</option>
+                    {teamBlocks.map(b => (
+                      <option key={b.team} value={b.team}>{b.team} ({b.pieces} pcs)</option>
                     ))}
-                  </tbody>
-                </table>
+                  </select>
+                </div>
+              )}
+            </div>
+            {cart.length === 0 ? (
+              <div className="text-center py-10 text-gray-400 text-sm">No items added yet - type a Team Name on the left and add the first item.</div>
+            ) : (
+              <div className="space-y-4">
+                {shownBlocks.map(block => (
+                  <div key={block.team}>
+                    <div className="flex flex-wrap justify-between items-baseline gap-2 px-3 py-2 bg-regal-yellow border border-regal-yellow rounded-t-lg">
+                      <span className="font-bold text-regal-black">{block.team}</span>
+                      <span className="text-sm font-medium text-regal-black">{block.pieces} pcs · Rs. {block.total.toLocaleString()}</span>
+                    </div>
+                    <div className="border border-t-0 border-gray-200 rounded-b-lg p-2 md:p-3">
+                      <QuantityTierCards summaries={block.tierSummaries} />
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-100">
+                            <tr className="text-left text-xs font-medium text-gray-500 uppercase">
+                              <th className="px-4 py-3">Category</th>
+                              <th className="px-4 py-3 text-right">Rate</th>
+                              <th className="px-4 py-3 text-right">Qty</th>
+                              <th className="px-4 py-3 text-right">Total</th>
+                              <th className="px-4 py-3"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200 bg-white">
+                            {block.lines.map((item) => {
+                              const isSimilar = !!item.group && block.lines.some(l => l.id === item.group);
+                              const tierPcs = piecesOfCategory(cart, item.category, item.team);
+                              return (
+                                <tr key={item.id} className={isSimilar ? 'bg-gray-50' : ''}>
+                                  <td className={`py-3 pr-4 ${isSimilar ? 'pl-8' : 'pl-4'}`}>
+                                    <div className="font-medium">
+                                      {isSimilar && <span className="text-gray-400 mr-1" aria-hidden="true">↳</span>}
+                                      {item.category}
+                                    </div>
+                                    {item.category_fields && Object.keys(item.category_fields).length > 0 && (
+                                      <div className="text-xs text-gray-500 mt-0.5">
+                                        {Object.entries(item.category_fields).map(([k, v]) => `${k}: ${v}`).join(' · ')}
+                                      </div>
+                                    )}
+                                    {item.dtf && (
+                                      <div className="text-xs text-teal-700 mt-0.5">
+                                        DTF: {dtfLogosLabel(item.dtf)} · {metersLabel(item.dtf.half_meters)} roll
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 text-right">
+                                    {item.previousUnitPrice != null && (
+                                      <span className="block text-xs text-gray-400 line-through">{item.previousUnitPrice}</span>
+                                    )}
+                                    {item.missingTierPrice ? (
+                                      <input
+                                        type="number"
+                                        defaultValue={item.unitPrice}
+                                        min="1"
+                                        step="1"
+                                        aria-label={`Rate for ${item.category}`}
+                                        onBlur={(e) => { const v = Number(e.target.value); if (v > 0) setLineRate(item.id, v); }}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                                        className="w-24 px-2 py-1 text-right border border-amber-400 rounded-md"
+                                      />
+                                    ) : (
+                                      <span className={item.rateChange === 'down' ? 'text-green-700 font-medium' : ''}>{item.unitPrice}</span>
+                                    )}
+                                    {item.rateChange === 'down' && (
+                                      <span className="block text-[10px] text-green-700">qty rate · {tierPcs} pcs</span>
+                                    )}
+                                    {item.rateChange === 'up' && (
+                                      <span className="block text-[10px] text-amber-600">
+                                        {isQtyTier(tierPcs) ? 'qty' : 'single'} rate · {tierPcs} pcs
+                                      </span>
+                                    )}
+                                    {item.autoPriced && lineDyeMultiplier(cart, customerCategories, item) > 1 && (
+                                      <span className="block text-[10px] text-pink-700">dye ×{lineDyeMultiplier(cart, customerCategories, item)}</span>
+                                    )}
+                                    {!item.autoPriced && <span className="block text-[10px] text-gray-400">manual</span>}
+                                    {item.missingTierPrice && (
+                                      <span className="block text-[10px] text-amber-600">no price for this tier - enter rate</span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 text-right">{item.quantity}</td>
+                                  <td className="px-4 py-3 text-right font-medium">{item.totalPrice}</td>
+                                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                                    {/* "+ Similar" only on a first line; its similar lines sit under it. */}
+                                    {!isSimilar && (
+                                      <button
+                                        type="button"
+                                        onClick={() => addSimilar(item)}
+                                        className="mr-3 px-2 py-0.5 text-xs font-semibold rounded-md border border-regal-black bg-regal-yellow text-regal-black hover:bg-yellow-400"
+                                        title="Copy this item's team and options into the form"
+                                      >
+                                        + Similar
+                                      </button>
+                                    )}
+                                    <button type="button" onClick={() => removeFromCart(item.id)} className="text-red-600 hover:underline text-xs">Remove</button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            {/* Flat charges of this team - editable, 0 = waived. */}
+                            {block.flats.map(m => (
+                              <tr key={m.key}>
+                                <td className="px-4 py-2 text-gray-900" colSpan={3}>
+                                  <label htmlFor={`mockup-${m.key}`} className="font-medium">
+                                    Flat Charges - {m.category}
+                                  </label>
+                                  <span className="block text-xs text-gray-500">
+                                    {m.pieces} pcs (under {MOCKUP_MAX_PIECES + 1}) in this team. Once, not per piece.
+                                  </span>
+                                </td>
+                                {/* Amount in the Total column, under the line totals */}
+                                <td className="px-4 py-2 text-right whitespace-nowrap">
+                                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-gray-900 font-medium">
+                                    Rs.
+                                    <input
+                                      id={`mockup-${m.key}`}
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      value={m.amount}
+                                      onChange={(e) => setMockupAmounts(prev => ({ ...prev, [m.key]: e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)) }))}
+                                      className="w-24 px-2 py-1 text-right border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-regal-yellow"
+                                    />
+                                  </span>
+                                </td>
+                                <td></td>
+                              </tr>
+                            ))}
+                            {/* DTF of this team's lines - editable like before. */}
+                            {block.lines.filter(l => l.dtf).map(l => (
+                              <tr key={`dtf-${l.id}`} className="bg-teal-50">
+                                <td className="px-4 py-2 text-teal-700" colSpan={3}>
+                                  <label htmlFor={`dtf-amount-${l.id}`} className="font-medium">
+                                    DTF printing - {l.category} ({metersLabel(l.dtf!.half_meters)})
+                                  </label>
+                                  <span className="block text-xs text-gray-500">Roll length charge Rs. {l.dtf!.charge.toLocaleString()}.</span>
+                                </td>
+                                <td className="px-4 py-2 text-right whitespace-nowrap">
+                                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-teal-700 font-medium">
+                                    Rs.
+                                    <input
+                                      id={`dtf-amount-${l.id}`}
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      value={l.dtf!.amount}
+                                      onChange={(e) => setDtfAmount(l.id, e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)))}
+                                      className="w-24 px-2 py-1 text-right border border-teal-200 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-300"
+                                    />
+                                  </span>
+                                </td>
+                                <td></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-yellow-100 font-semibold text-regal-black border-t-2 border-gray-300">
+                              <td className="px-4 py-2.5">{block.team} total</td>
+                              <td></td>
+                              <td className="px-4 py-2.5 text-right whitespace-nowrap">{block.pieces} pcs</td>
+                              <td className="px-4 py-2.5 text-right whitespace-nowrap">Rs. {block.total.toLocaleString()}</td>
+                              <td></td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -898,8 +1154,16 @@ const QuotationPage: React.FC = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Team Name *</label>
-                  <input type="text" value={teamName} onChange={(e) => setTeamName(e.target.value)} className="regal-input w-full" placeholder="e.g. City Warriors FC" required />
+                  <span className="block text-sm font-medium mb-1">Teams in this quotation</span>
+                  <div className="flex flex-wrap gap-1.5 min-h-[42px] items-center">
+                    {teamBlocks.length === 0
+                      ? <span className="text-xs text-gray-500">Typed in Team Name on the Add Item form.</span>
+                      : teamBlocks.map(b => (
+                        <span key={b.team} className="text-xs font-semibold px-2.5 py-1 rounded-full border border-regal-yellow bg-yellow-100">
+                          {b.team} · {b.pieces} pcs
+                        </span>
+                      ))}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">
@@ -968,21 +1232,25 @@ const QuotationPage: React.FC = () => {
               )}
 
               <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 mb-4">
-                <div className="flex justify-between items-center text-sm text-gray-600 mb-2">
-                  <span>Subtotal ({totalPieces} pcs)</span>
-                  <span>Rs. {cartSubtotal}</span>
-                </div>
+                {/* Subtotal is just a heading; under it each team's total (its lines + flat
+                    charges + DTF, edited in the team's block in the cart), then the total. */}
+                <div className="text-base font-semibold text-gray-800 mb-1">Subtotal ({totalPieces} pcs)</div>
+                {teamBlocks.length > 0 && (
+                  <div className="mb-2 pl-3 space-y-1">
+                    {teamBlocks.map(b => (
+                      <div key={b.team} className="flex justify-between items-center gap-2 text-base text-gray-700">
+                        <span>{b.team} ({b.pieces} pcs)</span>
+                        <span className="whitespace-nowrap">Rs. {b.total.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {estimatedIsRush && (
                   <div className="flex justify-between items-center gap-2 text-sm text-orange-700 font-medium mb-2">
                     <span>Rush Charge (Rs. {rushRateValue.toLocaleString()} × {totalPieces} pcs)</span>
                     <span className="whitespace-nowrap">+ Rs. {estimatedRushCharge.toLocaleString()}</span>
                   </div>
                 )}
-                <MockupChargeRows
-                  lines={mockups}
-                  onAmountChange={(category, amount) => setMockupAmounts(prev => ({ ...prev, [category]: amount }))}
-                />
-                <DtfChargeRows lines={cart} onAmountChange={setDtfAmount} />
                 {/* Discount UI hidden for now - state/calc/payload still wired, just not shown.
                 <div className="flex justify-between items-center text-sm mb-2">
                   <label htmlFor="quotation-discount" className="text-gray-600">Discount</label>
@@ -1003,7 +1271,7 @@ const QuotationPage: React.FC = () => {
                 </div>
                 */}
                 <div className="flex justify-between font-bold text-lg mt-2 pt-2 border-t border-gray-200">
-                  <span>Estimated Total</span>
+                  <span>Total</span>
                   <span>Rs. {estimatedTotal}</span>
                 </div>
               </div>

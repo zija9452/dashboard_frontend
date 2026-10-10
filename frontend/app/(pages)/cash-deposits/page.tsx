@@ -135,7 +135,7 @@ const downloadUrl = (url: string, name: string) =>
 // "European Sports Karim Abad" -> "Karim Abad"
 const shortBranchName = (name: string) => name.replace(/^European Sports\s+/i, '').trim();
 
-// Download a slip with a green "<BRANCH> BRANCH" band added under the photo (2026-10-10),
+// Download a slip with a yellow "<BRANCH> BRANCH" band added under the photo (2026-10-10),
 // so HR can tell which shop it came from. The photo keeps its full size; the band is
 // extra height, nothing is covered. Saved as e.g. LightHouse_DEP-0002_slip_1.jpg.
 // Branch unknown or the image can't be read -> plain download as before.
@@ -163,10 +163,11 @@ const downloadWithBranchBand = async (url: string, name: string, branchName: str
 
     ctx.drawImage(photo, 0, 0);
     photo.close();
-    ctx.fillStyle = '#0f5c3a';
+    ctx.fillStyle = '#FFD01F'; // theme yellow (regal-yellow)
     ctx.fillRect(0, height, width, bandHeight);
 
-    const label = `${branch.replace(/\s+/g, '').toUpperCase()} BRANCH`; // KARIMABAD BRANCH
+    // LIGHT HOUSE BRANCH / KARIMABAD BRANCH (Karimabad is written as one word)
+    const label = `${branch.toUpperCase().replace(/\s+/g, ' ').replace('KARIM ABAD', 'KARIMABAD')} BRANCH`;
     let fontSize = Math.round(bandHeight * 0.5);
     ctx.font = `bold ${fontSize}px Arial, sans-serif`;
     // Shrink to fit narrow (portrait) photos
@@ -174,7 +175,7 @@ const downloadWithBranchBand = async (url: string, name: string, branchName: str
       fontSize -= 2;
       ctx.font = `bold ${fontSize}px Arial, sans-serif`;
     }
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = '#000000'; // black text, like the yellow buttons (regal-black)
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(label, width / 2, height + bandHeight / 2);

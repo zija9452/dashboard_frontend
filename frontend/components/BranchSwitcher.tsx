@@ -8,7 +8,8 @@ interface BranchSwitcherProps {
   userRole: string | null;
 }
 
-// Top bar: shows the logged-in branch; admin can switch to another branch.
+// Top bar: shows the logged-in branch; admin, sales and production can switch
+// to another branch (must match BRANCH_SWITCH_ROLES in backend routers/auth.py).
 // ml-14 keeps it clear of the fixed PageHamburgerButton.
 const BranchSwitcher: React.FC<BranchSwitcherProps> = ({ userRole }) => {
   const branch = useBranch();
@@ -18,7 +19,7 @@ const BranchSwitcher: React.FC<BranchSwitcherProps> = ({ userRole }) => {
   const switching = switchingTo !== null;
   const [error, setError] = useState('');
 
-  const isAdmin = userRole === 'admin';
+  const canSwitch = userRole === 'admin' || userRole === 'sales' || userRole === 'production';
 
   const handleSwitch = async (target: string) => {
     if (!branch || target === branch.code || switching) return;
@@ -52,7 +53,7 @@ const BranchSwitcher: React.FC<BranchSwitcherProps> = ({ userRole }) => {
   return (
     <div className="flex items-center gap-2 mr-auto ml-14">
       <BuildingStorefrontIcon className="h-5 w-5 text-regal-orange" />
-      {isAdmin && branches.length > 1 ? (
+      {canSwitch && branches.length > 1 ? (
         <select
           className="py-1.5 pl-2 pr-8 text-sm font-semibold text-regal-black border border-regal-yellow/30 rounded-lg shadow-sm focus:ring-2 focus:ring-regal-yellow focus:border-regal-yellow bg-white cursor-pointer"
           value={switchingTo?.code ?? branch.code}

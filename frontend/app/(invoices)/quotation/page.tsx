@@ -15,7 +15,9 @@ import {
   repriceCart,
   mockupLines,
   categoryTierSummaries,
-  categoryMockupDefault,
+  kitFlatDefault,
+  findArticle,
+  ReadyArticle,
   needsMockup,
   isDyeLine,
   dyePiecesOfCategory,
@@ -26,7 +28,9 @@ import {
   MockupLine,
   MOCKUP_MAX_PIECES,
 } from '@/lib/quantityPricing';
-import { QuantityTierCards, MockupLinePreview } from '@/components/QuantityTierCards';
+import { QuantityTierCards } from '@/components/QuantityTierCards';
+import TeamSearchInput, { KitKindChips } from '@/components/TeamSearchInput';
+import { AmountInput, QtyInput } from '@/components/CartNumberInputs';
 import { DtfSettings, DtfLogo, computeDtf, dtfLogosLabel, dtfTotalOf, metersLabel } from '@/lib/dtfLayout';
 import { DtfLogoBox } from '@/components/DtfLogos';
 import AddCustomerModal from '@/components/AddCustomerModal';
@@ -158,16 +162,23 @@ const QuotationPage: React.FC = () => {
   // category's own amount (customer_categories.mockup_charge), editable per order in the
   // cart. Keyed by mockupKey(team, category).
   const [mockupAmounts, setMockupAmounts] = useState<Record<string, number>>({});
-  // Category's own charge (e.g. Jacket 1000); not set or 0 = no mockup for it.
-  const mockupDefaultFor = (category: string) => categoryMockupDefault(customerCategories, category);
-  const hasMockupCharge = (category: string) => mockupDefaultFor(category) > 0;
-  const mockupAmountOf = (team: string, category: string) => mockupAmounts[mockupKey(team, category)] ?? mockupDefaultFor(category);
+  // Our ready articles (products without size) for the Team Name search and the kit flat.
+  const [articles, setArticles] = useState<ReadyArticle[]>([]);
+  const [articlesLoaded, setArticlesLoaded] = useState(false);
+  // Default flat of a team + category: the category's own charge (e.g. Jacket 1000; not
+  // set or 0 = none), or the kit flat / 0 for our ready article - see kitFlatDefault.
+  const flatDefault = (category: string, team: string, items: PricedLine[] = cart) =>
+    kitFlatDefault(items, customerCategories, articles, category, team);
+  const mockupDefaultFor = (category: string, team: string, items: PricedLine[] = cart) => flatDefault(category, team, items).amount;
+  const mockupAmountOf = (team: string, category: string) => mockupAmounts[mockupKey(team, category)] ?? mockupDefaultFor(category, team);
 
   // Teams in the order they were first added; a team leaves when its last line is removed.
   const teams = teamsIn(cart);
-  // The typed name, matched to a team already in the cart regardless of case/spaces.
+  // The typed name, matched to a team already in the cart (or one of our articles)
+  // regardless of case/spaces.
   const typedTeam = cleanTeamName(teamInput);
-  const activeTeam = teams.find(t => t.toLowerCase() === typedTeam.toLowerCase()) ?? typedTeam;
+  const activeTeam = teams.find(t => t.toLowerCase() === typedTeam.toLowerCase()) ?? findArticle(articles, typedTeam)?.name ?? typedTeam;
+  const activeArticle = findArticle(articles, activeTeam);
   const similarLine = similarOf ? cart.find(i => i.id === similarOf) ?? null : null;
 
   const categoryData = customerCategories.find(cat => cat.main_category === selectedCategory);
@@ -178,7 +189,6 @@ const QuotationPage: React.FC = () => {
   const piecesAlreadyInCart = selectedCategory ? piecesOfCategory(cart, selectedCategory, activeTeam) : 0;
   const tierPieces: number | '' = quantity === '' ? '' : quantity + piecesAlreadyInCart;
   const entryIsDye = isDyeLine(customerCategories.find(c => c.main_category === selectedCategory), dynamicCategoryFields);
-  const nonDyeInCart = selectedCategory ? piecesAlreadyInCart - dyePiecesOfCategory(cart, customerCategories, selectedCategory, activeTeam) : 0;
   const matchedIdealPrice = lookupIdealPrice(
     categoryData, dynamicCategoryFields, tierPieces,
     formDyePieces(cart, customerCategories, selectedCategory, dynamicCategoryFields, quantity, activeTeam)
@@ -212,6 +222,7 @@ const QuotationPage: React.FC = () => {
     fetchCustomerCategories();
     fetchRushSettings();
     fetchDtfSettings();
+    fetchArticles();
   }, []);
 
   useEffect(() => {
@@ -289,6 +300,21 @@ const QuotationPage: React.FC = () => {
     }
   };
 
+  // Our ready articles - new products show up here by themselves.
+  const fetchArticles = async () => {
+    try {
+      const response = await fetch('/api/ready-articles', { method: 'GET', credentials: 'include' });
+      if (response.ok) {
+        const data = await response.json();
+        setArticles(Array.isArray(data.data) ? data.data : []);
+      }
+    } catch (error) {
+      console.error('Error fetching ready articles:', error);
+    } finally {
+      setArticlesLoaded(true);
+    }
+  };
+
   // ?revise=<id>: show the loader straight away, so the page never looks like an empty
   // New Quotation while the price list, DTF rule and the quotation itself load.
   useEffect(() => {
@@ -297,13 +323,13 @@ const QuotationPage: React.FC = () => {
 
   // ...and fill it in once the price list and DTF rule have answered.
   useEffect(() => {
-    if (revisionRequested.current || !categoriesLoaded || !dtfSettingsLoaded) return;
+    if (revisionRequested.current || !categoriesLoaded || !dtfSettingsLoaded || !articlesLoaded) return;
     const reviseId = new URLSearchParams(window.location.search).get('revise');
     if (!reviseId) return;
     revisionRequested.current = true;
     loadRevision(reviseId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoriesLoaded, dtfSettingsLoaded]);
+  }, [categoriesLoaded, dtfSettingsLoaded, articlesLoaded]);
 
   const loadRevision = async (id: string) => {
     setLoadingRevision(true);
@@ -375,7 +401,7 @@ const QuotationPage: React.FC = () => {
       for (const team of teamsIn(priced)) {
         for (const category of Array.from(new Set(priced.filter(l => l.team === team).map(l => l.category)))) {
           const key = mockupKey(team, category);
-          if (!(key in amounts) && needsMockup(priced, customerCategories, category, team) && mockupDefaultFor(category) > 0) amounts[key] = 0;
+          if (!(key in amounts) && needsMockup(priced, customerCategories, category, team) && mockupDefaultFor(category, team, priced) > 0) amounts[key] = 0;
         }
       }
       setMockupAmounts(amounts);
@@ -475,8 +501,9 @@ const QuotationPage: React.FC = () => {
 
     updateCart([...cart, newItem]);
     clearItemForm();
-    // Team Name empties after every Add - "+ Similar" or typing the name adds more to a team.
-    setTeamInput('');
+    // Team Name stays (shown with its spelling), so the rest of the kit - Short, Trouser -
+    // goes to the same team; clicking into the box selects it to type another team.
+    setTeamInput(activeTeam);
     setSimilarOf(null);
   };
 
@@ -528,6 +555,26 @@ const QuotationPage: React.FC = () => {
       : item));
   };
 
+  // Qty edited in the cart: the line total, its team + category's rate tier (repriceCart),
+  // MOQ and DTF all follow. False = not taken (bad qty, or a DTF that doesn't fit it).
+  const setLineQty = (id: string, qty: number): boolean => {
+    const item = cart.find(i => i.id === id);
+    if (!item || !Number.isInteger(qty) || qty <= 0) return false;
+    if (qty === item.quantity) return true;
+    let dtf = item.dtf;
+    if (dtf) {
+      const result = computeDtf(dtf.logos, qty, dtfSettings);
+      if (result.status !== 'ok') {
+        showToast(`DTF: ${result.status === 'error' ? result.message : 'cannot work out the DTF for this qty'}`, 'error');
+        return false;
+      }
+      const edited = dtf.amount !== dtf.charge;
+      dtf = { ...result.block, amount: edited ? dtf.amount : result.block.charge };
+    }
+    updateCart(cart.map(i => (i.id === id ? { ...i, quantity: qty, totalPrice: i.unitPrice * qty, dtf } : i)));
+    return true;
+  };
+
   // DTF amount of one line, edited in its team's block in the cart (like the mockup amount).
   const setDtfAmount = (id: string, amount: number) => {
     setCart(cart.map(item => (item.id === id && item.dtf ? { ...item, dtf: { ...item.dtf, amount } } : item)));
@@ -539,6 +586,25 @@ const QuotationPage: React.FC = () => {
   const mockups = mockupLines(cart, customerCategories, mockupAmounts, mockupDefaultFor);
   const mockupTotal = mockups.reduce((sum, m) => sum + m.amount, 0);
   const linesMissingPrice = cart.filter(item => item.missingTierPrice);
+
+  // MOQ Charges of the line being entered = what it adds to its team + category's flat
+  // (0 when that flat is already in the cart, or for a free kit line). Line Total adds it.
+  const moq = (() => {
+    if (!activeTeam || !selectedCategory || quantity === '' || quantity <= 0) return { amount: 0, reason: '' };
+    const key = mockupKey(activeTeam, selectedCategory);
+    const before = mockups.find(m => m.key === key);
+    const withLine: CartItem[] = [...cart, {
+      id: '__new__', category: selectedCategory, unitPrice: unitPrice || 0, quantity, totalPrice: price,
+      category_fields: { ...dynamicCategoryFields }, autoPriced: false, team: activeTeam,
+    }];
+    const after = mockupLines(withLine, customerCategories, mockupAmounts, mockupDefaultFor).find(m => m.key === key);
+    if (before) return { amount: 0, reason: `Already added for ${activeTeam} · ${selectedCategory} (Rs. ${before.amount})` };
+    if (after) return { amount: after.amount, reason: flatDefault(selectedCategory, activeTeam, withLine).reason };
+    if (tierPieces !== '' && tierPieces > MOCKUP_MAX_PIECES) return { amount: 0, reason: `${tierPieces} pcs (${MOCKUP_MAX_PIECES + 1}+) - no MOQ charges` };
+    if (entryIsDye) return { amount: 0, reason: 'Dye - the dye rate applies instead' };
+    const kit = flatDefault(selectedCategory, activeTeam, withLine);
+    return { amount: 0, reason: kit.amount === 0 && findArticle(articles, activeTeam) ? kit.reason : '' };
+  })();
 
   // Per team: its lines (display order), pieces, flat charges and total (lines + flat + DTF).
   const teamBlocks = teams.map(team => {
@@ -552,7 +618,7 @@ const QuotationPage: React.FC = () => {
       flatTotal,
       pieces: lines.reduce((sum, i) => sum + i.quantity, 0),
       total: lines.reduce((sum, i) => sum + i.totalPrice, 0) + flatTotal + dtfTotalOf(lines),
-      tierSummaries: categoryTierSummaries(cart, customerCategories, c => mockupAmountOf(team, c), hasMockupCharge, team),
+      tierSummaries: categoryTierSummaries(cart, customerCategories, c => mockupAmountOf(team, c), c => mockupDefaultFor(c, team) > 0, team),
     };
   });
   const shownBlocks = cartView === ALL_TEAMS ? teamBlocks : teamBlocks.filter(b => b.team === cartView);
@@ -644,7 +710,7 @@ const QuotationPage: React.FC = () => {
           html: `<p><strong>${result.quotation_no}${result.revision > 1 ? ` (Rev.${result.revision})` : ''}</strong></p>` +
                 (revising ? `<p style="color:#6B7280;">Rev.${revising.revision} is now REVISED (PDF only).</p>` : '') +
                 (result.is_rush ? `<p style="color:#EA580C;font-weight:bold;">RUSH ORDER - Rs. ${result.rush_charge} rush charge (Rs. ${result.rush_rate_per_piece ?? 0} per piece × ${result.total_pieces ?? totalPieces} pcs)</p>` : '<p>Normal order (not rush)</p>') +
-                (result.mockup_charge > 0 ? `<p style="color:#7E22CE;">Flat Charges - Rs. ${result.mockup_charge}</p>` : '') +
+                (result.mockup_charge > 0 ? `<p style="color:#7E22CE;">MOQ Charges - Rs. ${result.mockup_charge}</p>` : '') +
                 (result.dtf_charge > 0 ? `<p style="color:#0F766E;">DTF printing - Rs. ${result.dtf_charge}</p>` : '') +
                 `<p>Total: Rs. ${result.total_amount}</p>`,
           icon: 'success',
@@ -747,25 +813,30 @@ const QuotationPage: React.FC = () => {
               {/* Team first: every line belongs to a team; flat charges and rate tiers are per team. */}
               <div>
                 <label htmlFor="quotation-team" className="block text-sm font-medium mb-1">Team Name *</label>
-                <input
+                <TeamSearchInput
                   id="quotation-team"
-                  type="text"
                   value={teamInput}
-                  onChange={(e) => setTeamInput(e.target.value)}
-                  // Leaving the box fixes the spelling to the team already in the cart ("royal fc" -> "Royal FC").
-                  onBlur={() => { if (teams.includes(activeTeam)) setTeamInput(activeTeam); }}
-                  className="regal-input w-full font-semibold"
-                  placeholder="e.g. City Warriors FC"
-                  autoComplete="off"
-                  maxLength={100}
+                  onChange={setTeamInput}
+                  // Leaving the box fixes the spelling to the team / article ("royal fc" -> "Royal FC").
+                  onBlur={() => { if (teams.includes(activeTeam) || activeArticle) setTeamInput(activeTeam); }}
+                  teams={teamBlocks.map(b => ({ name: b.team, pieces: b.pieces }))}
+                  articles={articles}
+                  orderLabel="quotation"
                 />
                 <p className="text-xs text-gray-600 mt-1">
                   {!activeTeam
-                    ? 'Type the team name. A name already in this quotation adds to that team.'
+                    ? 'Search our articles, or type a new team name.'
                     : teams.includes(activeTeam)
                       ? <>Items go to <b>{activeTeam}</b> ({teamBlocks.find(b => b.team === activeTeam)?.pieces ?? 0} pcs so far).</>
                       : <>New team. <b>{activeTeam}</b> joins this quotation with its first item.</>}
                 </p>
+                {activeArticle ? (
+                  <div className="mt-2 rounded-lg border border-green-600 bg-green-50 px-3 py-2 text-xs text-gray-800">
+                    <div className="flex flex-wrap items-center gap-2 font-bold text-green-700 text-[13px]">✓ Our article <KitKindChips article={activeArticle} /></div>
+                  </div>
+                ) : activeTeam && articles.length > 0 ? (
+                  <p className="text-xs text-gray-500 mt-1">Custom team (not our article) - normal MOQ charges.</p>
+                ) : null}
               </div>
 
               <div>
@@ -873,7 +944,7 @@ const QuotationPage: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium mb-1">Quantity</label>
                 <input ref={quantityInputRef} type="number" value={quantity} onChange={(e) => setQuantity(e.target.value === '' ? '' : Number(e.target.value))} className="regal-input w-full" min="1" step="1" placeholder="0" />
-                <p className="text-xs text-gray-500 mt-1">Enter quantity - pieces of this category already in this team are counted too for the rate tier (1-4, 5-15, 16-99 or 100+ pcs). Other teams are not counted.</p>
+                <p className="text-xs text-gray-500 mt-1">Rate tier counts this team&apos;s pieces of this category too.</p>
               </div>
 
               <div>
@@ -904,25 +975,21 @@ const QuotationPage: React.FC = () => {
                 )}
               </div>
 
+              {/* Flat charge this line brings (once per team + category, 1-4 pcs; kit rule) -
+                  editable later in the cart. */}
+              <div>
+                <label htmlFor="quotation-moq" className="block text-xs font-medium text-gray-600 mb-1">MOQ Charges</label>
+                <input id="quotation-moq" type="text" value={moq.amount ? `Rs. ${moq.amount}` : '0'} disabled className="regal-input w-full bg-gray-100 text-gray-700" />
+                {moq.reason && <p className="text-[11px] text-gray-500 mt-1">{moq.reason}</p>}
+              </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1">Line Total</label>
-                <input type="text" value={price} disabled className="regal-input w-full bg-gray-100 font-semibold" />
-                {tierPieces !== '' && hasMockupCharge(selectedCategory) && (
-                  <MockupLinePreview
-                    team={activeTeam}
-                    category={selectedCategory}
-                    tierPieces={tierPieces}
-                    alreadyInCart={piecesAlreadyInCart}
-                    nonDyeInCart={nonDyeInCart}
-                    isDye={entryIsDye}
-                    lineTotal={price}
-                    amount={mockupAmountOf(activeTeam, selectedCategory)}
-                  />
-                )}
+                <input type="text" value={(price + moq.amount)} disabled className="regal-input w-full bg-gray-100 font-semibold" />
                 {dtfResult.status === 'ok' && (
                   <p className="text-xs mt-1.5 px-2 py-1.5 rounded-md bg-teal-50 text-teal-700">
-                    + DTF: {metersLabel(dtfResult.block.half_meters)} roll = <b className="text-gray-900">Rs. {dtfResult.block.charge.toLocaleString()}</b> →{' '}
-                    <b className="text-gray-900">Rs. {(price + dtfResult.block.charge).toLocaleString()}</b> for this {selectedCategory} with DTF. Added to the team total, editable in the cart.
+                    + DTF: {metersLabel(dtfResult.block.half_meters)} roll = <b className="text-gray-900">Rs. {dtfResult.block.charge}</b> →{' '}
+                    <b className="text-gray-900">Rs. {(price + moq.amount + dtfResult.block.charge)}</b> for this {selectedCategory} with DTF. Added to the team total, editable in the cart.
                   </p>
                 )}
               </div>
@@ -966,7 +1033,7 @@ const QuotationPage: React.FC = () => {
                   <div key={block.team}>
                     <div className="flex flex-wrap justify-between items-baseline gap-2 px-3 py-2 bg-regal-yellow border border-regal-yellow rounded-t-lg">
                       <span className="font-bold text-regal-black">{block.team}</span>
-                      <span className="text-sm font-medium text-regal-black">{block.pieces} pcs · Rs. {block.total.toLocaleString()}</span>
+                      <span className="text-sm font-medium text-regal-black">{block.pieces} pcs · Rs. {block.total}</span>
                     </div>
                     <div className="border border-t-0 border-gray-200 rounded-b-lg p-2 md:p-3">
                       <QuantityTierCards summaries={block.tierSummaries} />
@@ -1037,7 +1104,9 @@ const QuotationPage: React.FC = () => {
                                       <span className="block text-[10px] text-amber-600">no price for this tier - enter rate</span>
                                     )}
                                   </td>
-                                  <td className="px-4 py-3 text-right">{item.quantity}</td>
+                                  <td className="px-4 py-2 text-right">
+                                    <QtyInput value={item.quantity} label={item.category} onChange={(qty) => setLineQty(item.id, qty)} />
+                                  </td>
                                   <td className="px-4 py-3 text-right font-medium">{item.totalPrice}</td>
                                   <td className="px-4 py-3 text-right whitespace-nowrap">
                                     {/* "+ Similar" only on a first line; its similar lines sit under it. */}
@@ -1056,57 +1125,31 @@ const QuotationPage: React.FC = () => {
                                 </tr>
                               );
                             })}
-                            {/* Flat charges of this team - editable, 0 = waived. */}
+                            {/* MOQ charges of this team - editable, 0 = waived. A free kit line isn't listed. */}
                             {block.flats.map(m => (
                               <tr key={m.key}>
                                 <td className="px-4 py-2 text-gray-900" colSpan={3}>
-                                  <label htmlFor={`mockup-${m.key}`} className="font-medium">
-                                    Flat Charges - {m.category}
-                                  </label>
-                                  <span className="block text-xs text-gray-500">
-                                    {m.pieces} pcs (under {MOCKUP_MAX_PIECES + 1}) in this team. Once, not per piece.
-                                  </span>
+                                  <label htmlFor={`mockup-${m.key}`} className="font-medium">MOQ Charges - {m.category}</label>
                                 </td>
                                 {/* Amount in the Total column, under the line totals */}
-                                <td className="px-4 py-2 text-right whitespace-nowrap">
-                                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-gray-900 font-medium">
-                                    Rs.
-                                    <input
-                                      id={`mockup-${m.key}`}
-                                      type="number"
-                                      min="0"
-                                      step="1"
-                                      value={m.amount}
-                                      onChange={(e) => setMockupAmounts(prev => ({ ...prev, [m.key]: e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)) }))}
-                                      className="w-24 px-2 py-1 text-right border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-regal-yellow"
-                                    />
-                                  </span>
+                                {/* pr-[7px] + the box's padding = px-4, so the number sits under the line totals */}
+                                <td className="py-2 pl-4 pr-[7px] text-right whitespace-nowrap">
+                                  <AmountInput id={`mockup-${m.key}`} value={m.amount} label={`MOQ Charges - ${m.category}`} onChange={(v) => setMockupAmounts(prev => ({ ...prev, [m.key]: v }))} />
                                 </td>
                                 <td></td>
                               </tr>
                             ))}
-                            {/* DTF of this team's lines - editable like before. */}
+                            {/* DTF of this team's lines - editable like MOQ. */}
                             {block.lines.filter(l => l.dtf).map(l => (
                               <tr key={`dtf-${l.id}`} className="bg-teal-50">
                                 <td className="px-4 py-2 text-teal-700" colSpan={3}>
                                   <label htmlFor={`dtf-amount-${l.id}`} className="font-medium">
                                     DTF printing - {l.category} ({metersLabel(l.dtf!.half_meters)})
                                   </label>
-                                  <span className="block text-xs text-gray-500">Roll length charge Rs. {l.dtf!.charge.toLocaleString()}.</span>
+                                  <span className="block text-xs text-gray-500">Roll length charge Rs. {l.dtf!.charge}.</span>
                                 </td>
-                                <td className="px-4 py-2 text-right whitespace-nowrap">
-                                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-teal-700 font-medium">
-                                    Rs.
-                                    <input
-                                      id={`dtf-amount-${l.id}`}
-                                      type="number"
-                                      min="0"
-                                      step="1"
-                                      value={l.dtf!.amount}
-                                      onChange={(e) => setDtfAmount(l.id, e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)))}
-                                      className="w-24 px-2 py-1 text-right border border-teal-200 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-300"
-                                    />
-                                  </span>
+                                <td className="py-2 pl-4 pr-[7px] text-right whitespace-nowrap">
+                                  <AmountInput id={`dtf-amount-${l.id}`} value={l.dtf!.amount} label={`DTF printing - ${l.category}`} onChange={(v) => setDtfAmount(l.id, v)} />
                                 </td>
                                 <td></td>
                               </tr>
@@ -1117,7 +1160,7 @@ const QuotationPage: React.FC = () => {
                               <td className="px-4 py-2.5">{block.team} total</td>
                               <td></td>
                               <td className="px-4 py-2.5 text-right whitespace-nowrap">{block.pieces} pcs</td>
-                              <td className="px-4 py-2.5 text-right whitespace-nowrap">Rs. {block.total.toLocaleString()}</td>
+                              <td className="px-4 py-2.5 text-right whitespace-nowrap">Rs. {block.total}</td>
                               <td></td>
                             </tr>
                           </tfoot>
@@ -1181,7 +1224,7 @@ const QuotationPage: React.FC = () => {
                 </div>
               </div>
               <p className="text-xs text-gray-500 mb-4">
-                Rush status and rush charge are decided automatically from the deadline above - there is no manual "Rush" toggle.
+                Rush status and rush charge are decided automatically from the deadline above - there is no manual &quot;Rush&quot; toggle.
                 {rushThresholdDays !== null && ` A deadline within ${rushThresholdDays} day(s) of today makes it a rush order.`}
               </p>
 
@@ -1218,13 +1261,13 @@ const QuotationPage: React.FC = () => {
                     <div className="text-sm text-gray-800">
                       <div className="text-xs font-semibold mb-1">Calculation</div>
                       <div className="px-3 py-2 rounded-lg bg-white border border-orange-100">
-                        Rs. {rushRateValue.toLocaleString()} × {totalPieces} pcs
+                        Rs. {rushRateValue} × {totalPieces} pcs
                       </div>
                     </div>
                     <div className="text-sm text-gray-800">
                       <div className="text-xs font-semibold mb-1">Rush charge (added to total)</div>
                       <div className="px-3 py-2 rounded-lg bg-orange-50 border border-orange-200 text-orange-800 font-bold text-right">
-                        + Rs. {estimatedRushCharge.toLocaleString()}
+                        + Rs. {estimatedRushCharge}
                       </div>
                     </div>
                   </div>
@@ -1240,15 +1283,15 @@ const QuotationPage: React.FC = () => {
                     {teamBlocks.map(b => (
                       <div key={b.team} className="flex justify-between items-center gap-2 text-base text-gray-700">
                         <span>{b.team} ({b.pieces} pcs)</span>
-                        <span className="whitespace-nowrap">Rs. {b.total.toLocaleString()}</span>
+                        <span className="whitespace-nowrap">Rs. {b.total}</span>
                       </div>
                     ))}
                   </div>
                 )}
                 {estimatedIsRush && (
                   <div className="flex justify-between items-center gap-2 text-sm text-orange-700 font-medium mb-2">
-                    <span>Rush Charge (Rs. {rushRateValue.toLocaleString()} × {totalPieces} pcs)</span>
-                    <span className="whitespace-nowrap">+ Rs. {estimatedRushCharge.toLocaleString()}</span>
+                    <span>Rush Charge (Rs. {rushRateValue} × {totalPieces} pcs)</span>
+                    <span className="whitespace-nowrap">+ Rs. {estimatedRushCharge}</span>
                   </div>
                 )}
                 {/* Discount UI hidden for now - state/calc/payload still wired, just not shown.

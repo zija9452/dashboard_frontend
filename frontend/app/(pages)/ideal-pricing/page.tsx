@@ -6,6 +6,7 @@ import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/ui/PageHeader';
 import { useBranch } from '@/lib/branch';
+import { KitRole, kitRoleOf } from '@/lib/quantityPricing';
 
 interface SubCategoryOption {
   sub_category: string;
@@ -25,7 +26,9 @@ interface CustomerCategoryGrouped {
   sub_categories: SubCategoryOption[];
   ideal_prices: Record<string, Record<string, number>>;
   modifiers?: Record<string, Record<string, ModifierValue>>; // sub_category -> option -> { type, value }
-  mockup_charge?: number | null; // this category's designing / mockup charge; null = none
+  mockup_charge?: number | null; // this category's MOQ charges (1-4 pcs); null = none
+  kit_role?: KitRole | null;     // what it is in a team kit of our articles - see kitFlatDefault
+  kit_flat_charge?: number | null; // Our article MOQ (Jersey / Short only)
   dye_rate_single?: number;      // dye line rate multiplier at 1-4 dye pcs (default 2)
   dye_rate_qty?: number;         // dye line rate multiplier at 5-15 dye pcs (default 1.5)
 }
@@ -237,7 +240,25 @@ const IdealPricingPage: React.FC = () => {
     fetchCategories();
   }, []);
 
-  // Selected category's designing / mockup charge, as typed ('' = no mockup charge).
+  const validAmount = (v: string) => v === '' || (!isNaN(Number(v)) && Number(v) >= 0);
+
+  // Saves some fields of the selected category and keeps the page's copy in step.
+  const saveCategoryFields = async (fields: Partial<CustomerCategoryGrouped>) => {
+    if (!selectedCategory) return false;
+    const response = await fetch(`/api/customer-category/${selectedCategory.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(fields),
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const updated = { ...selectedCategory, ...fields };
+    setSelectedCategory(updated);
+    setCategories(prev => prev.map(c => c.id === updated.id ? updated : c));
+    return true;
+  };
+
+  // Selected category's MOQ charges (1-4 pcs), as typed ('' = none).
   const [categoryMockupInput, setCategoryMockupInput] = useState<string>('');
   const [savingCategoryMockup, setSavingCategoryMockup] = useState(false);
   const savedCategoryMockup = selectedCategory?.mockup_charge != null ? String(selectedCategory.mockup_charge) : '';
@@ -245,30 +266,52 @@ const IdealPricingPage: React.FC = () => {
   const handleSaveCategoryMockup = async () => {
     if (!selectedCategory) return;
     const value = categoryMockupInput.trim();
-    if (value !== '' && (isNaN(Number(value)) || Number(value) < 0)) {
-      showToast('Please enter a valid flat charges amount, or leave it empty for no flat charges', 'error');
+    if (!validAmount(value)) {
+      showToast('Please enter a valid MOQ amount, or leave it empty for no MOQ', 'error');
       return;
     }
     setSavingCategoryMockup(true);
     try {
-      const response = await fetch(`/api/customer-category/${selectedCategory.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ mockup_charge: value === '' ? null : Number(value) }),
-      });
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const saved = value === '' ? null : Number(value);
-      const updated = { ...selectedCategory, mockup_charge: saved };
-      setSelectedCategory(updated);
-      setCategories(prev => prev.map(c => c.id === updated.id ? updated : c));
+      await saveCategoryFields({ mockup_charge: saved });
       setCategoryMockupInput(saved === null ? '' : String(saved));
-      showToast(`${selectedCategory.main_category} flat charges updated`, 'success');
+      showToast(`${selectedCategory.main_category} MOQ updated`, 'success');
     } catch (error) {
-      console.error('Error saving category mockup charge:', error);
-      showToast('Failed to update flat charges', 'error');
+      console.error('Error saving category MOQ:', error);
+      showToast('Failed to update MOQ', 'error');
     } finally {
       setSavingCategoryMockup(false);
+    }
+  };
+
+  // Selected category's Our article MOQ: what a team of our articles pays once for its
+  // Jersey + Short (kitFlatDefault). A Trouser category needs none - it is Rs. 0 with the
+  // team's Jersey - so it gets no box.
+  const [kitFlatInput, setKitFlatInput] = useState<string>('');
+  const [savingKitFlat, setSavingKitFlat] = useState(false);
+  const savedKitFlat = selectedCategory?.kit_flat_charge != null ? String(selectedCategory.kit_flat_charge) : '';
+  const selectedIsTrouser = kitRoleOf(selectedCategory) === 'trouser';
+
+  const handleSaveKitFlat = async () => {
+    if (!selectedCategory) return;
+    const value = kitFlatInput.trim();
+    if (!validAmount(value)) {
+      showToast('Please enter a valid Our article MOQ, or leave it empty for none', 'error');
+      return;
+    }
+    setSavingKitFlat(true);
+    try {
+      const saved = value === '' ? null : Number(value);
+      // Short by its name, any other category with an Our article MOQ is the kit's Jersey.
+      const role: KitRole | null = saved === null ? null : /short/i.test(selectedCategory.main_category) ? 'short' : 'jersey';
+      await saveCategoryFields({ kit_role: role, kit_flat_charge: saved });
+      setKitFlatInput(saved === null ? '' : String(saved));
+      showToast(`${selectedCategory.main_category} Our article MOQ updated`, 'success');
+    } catch (error) {
+      console.error('Error saving Our article MOQ:', error);
+      showToast('Failed to update Our article MOQ', 'error');
+    } finally {
+      setSavingKitFlat(false);
     }
   };
 
@@ -318,6 +361,7 @@ const IdealPricingPage: React.FC = () => {
     const category = categories.find(cat => cat.id === categoryId);
     setSelectedCategory(category || null);
     setCategoryMockupInput(category?.mockup_charge != null ? String(category.mockup_charge) : '');
+    setKitFlatInput(category?.kit_flat_charge != null ? String(category.kit_flat_charge) : '');
     setDyeSingleInput(String(category?.dye_rate_single ?? 2));
     setDyeQtyInput(String(category?.dye_rate_qty ?? 1.5));
 
@@ -763,12 +807,12 @@ const IdealPricingPage: React.FC = () => {
           </div>
         )}
 
-        {/* This category's designing / mockup charge (e.g. T-shirt 500, Jacket 1000) — empty = none */}
+        {/* This category's MOQ charges (1-4 pcs, e.g. T-shirt 500) — empty = none */}
         {selectedCategory && (
           <div className="flex flex-wrap items-end gap-3 p-4 bg-gray-50 rounded border">
             <div>
               <label htmlFor="category-mockup" className="block text-sm font-medium mb-1">
-                {selectedCategory.main_category} — flat charges (Rs.)
+                {selectedCategory.main_category} — MOQ (Rs.)
               </label>
               <input
                 id="category-mockup"
@@ -776,7 +820,7 @@ const IdealPricingPage: React.FC = () => {
                 value={categoryMockupInput}
                 onChange={(e) => setCategoryMockupInput(e.target.value)}
                 className="regal-input w-40"
-                placeholder="No flat charges"
+                placeholder="No MOQ"
                 min="0"
                 step="1"
               />
@@ -790,16 +834,55 @@ const IdealPricingPage: React.FC = () => {
             </button>
             <p className="text-xs text-gray-500 w-full">
               {selectedCategory.mockup_charge == null || Number(selectedCategory.mockup_charge) === 0
-                ? `No flat charges for ${selectedCategory.main_category}.`
+                ? `No MOQ for ${selectedCategory.main_category}.`
                 : `Rs. ${Number(selectedCategory.mockup_charge).toLocaleString()} once when ${selectedCategory.main_category} has 1-4 pcs in a Quotation or Customer Invoice — not per piece, and none at 5+ pcs.`}
-              {' '}Leave empty for no flat charges. Staff can change or waive it on each order.
+              {' '}Leave empty for no MOQ. Staff can change or waive it on each order.
             </p>
+          </div>
+        )}
+
+        {/* Our article MOQ - for a team from our products (Jersey + Short pay it once) */}
+        {selectedCategory && (
+          <div className="flex flex-wrap items-end gap-3 p-4 bg-gray-50 rounded border">
+            {selectedIsTrouser ? (
+              <p className="text-xs text-gray-500 w-full">
+                Our article: {selectedCategory.main_category} is part of the kit when we have the team&apos;s Jersey - the kit pays the Jersey&apos;s Our article MOQ once. Nothing to set.
+              </p>
+            ) : (
+              <>
+                <div>
+                  <label htmlFor="category-kit-flat" className="block text-sm font-medium mb-1">
+                    {selectedCategory.main_category} — Our article MOQ (Rs.)
+                  </label>
+                  <input
+                    id="category-kit-flat"
+                    type="number"
+                    value={kitFlatInput}
+                    onChange={(e) => setKitFlatInput(e.target.value)}
+                    className="regal-input w-40"
+                    placeholder="Normal MOQ"
+                    min="0"
+                    step="1"
+                  />
+                </div>
+                <button
+                  onClick={handleSaveKitFlat}
+                  disabled={savingKitFlat || kitFlatInput.trim() === savedKitFlat}
+                  className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  {savingKitFlat ? 'Saving...' : 'Save'}
+                </button>
+                <p className="text-xs text-gray-500 w-full">
+                  For a team from our products (1-4 pcs): the kit (Jersey / Short / Trouser) pays this once - the first one added - and the rest Rs. 0. Custom teams pay the normal MOQ. Leave empty to use the normal MOQ.
+                </p>
+              </>
+            )}
           </div>
         )}
 
         {/* Dye rate multipliers - only for a category with options ticked "Dye" (Customer Category page) */}
         {selectedCategory && dyeOptionsOfSelected.length > 0 && (
-          <div className="flex flex-wrap items-end gap-3 p-4 bg-pink-50 rounded border border-pink-200">
+          <div className="flex flex-wrap items-end gap-3 p-4 bg-gray-50 rounded border">
             <div>
               <label htmlFor="dye-rate-single" className="block text-sm font-medium mb-1">Dye rate × (1-4 pcs)</label>
               <input
@@ -832,7 +915,7 @@ const IdealPricingPage: React.FC = () => {
               {savingDyeRates ? 'Saving...' : 'Save'}
             </button>
             <p className="text-xs text-gray-600 w-full">
-              Dye options: <b>{dyeOptionsOfSelected.join(', ')}</b>. A dye line gets no flat charges; its rate is
+              Dye options: <b>{dyeOptionsOfSelected.join(', ')}</b>. A dye line gets no MOQ charges; its rate is
               ×{savedDyeSingle} at 1-4 dye pcs, ×{savedDyeQty} at 5-15, normal at 16+ (e.g. 950 → {Math.round(950 * Number(savedDyeSingle)).toLocaleString()} / {Math.round(950 * Number(savedDyeQty)).toLocaleString()}).
             </p>
           </div>

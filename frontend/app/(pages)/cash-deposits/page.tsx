@@ -11,6 +11,7 @@ import {
   MAX_PROOF_IMAGES, PAYMENT_PROOFS_CHANGED, PaymentProof, proofFilesError, uploadProofImages,
 } from '@/lib/paymentMethods';
 import { ArrowDownTrayIcon, MagnifyingGlassPlusIcon } from '@heroicons/react/24/outline';
+import { useBranch } from '@/lib/branch';
 
 type DepositStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 // Pay slips also have MISSING (online payment saved, no screenshot yet)
@@ -78,7 +79,6 @@ const STATUS_OPTIONS: { label: string; value: StatusFilter }[] = [
 
 const TYPE_OPTIONS: { label: string; value: RecordType }[] = [
   { label: 'All', value: '' },
-  { label: 'Cash Deposit', value: 'DEPOSIT' },
   { label: 'Customized', value: 'CUSTOMIZED' },
   { label: 'Walk-in', value: 'WALKIN' },
 ];
@@ -116,6 +116,8 @@ const STATUS_BADGE: Record<RecordStatus, string> = {
 const BANKS = ['HBL', 'MCB', 'UBL', 'Meezan Bank', 'Islami Bank', 'Allied Bank', 'Bank Alfalah', 'Bank Al Habib', 'Faysal Bank', 'Askari Bank', 'National Bank'];
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 const PAGE_SIZE = 20;
+// Each column fills the screen height whatever the number of entries; more rows scroll inside it
+const COLUMN_HEIGHT = 'max(400px, calc(100vh - 190px))';
 
 const today = () => new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
 const formatDate = (value: string) => new Date(value).toLocaleDateString('en-GB');
@@ -130,6 +132,68 @@ const emptySlipRow = (): SlipRow => ({ key: newKey(), bank_name: '', amount: '' 
 const downloadUrl = (url: string, name: string) =>
   url.replace('/upload/', `/upload/fl_attachment:${name.replace(/[^A-Za-z0-9_-]/g, '_')}/`);
 
+// "European Sports Karim Abad" -> "Karim Abad"
+const shortBranchName = (name: string) => name.replace(/^European Sports\s+/i, '').trim();
+
+// Download a slip with a green "<BRANCH> BRANCH" band added under the photo (2026-10-10),
+// so HR can tell which shop it came from. The photo keeps its full size; the band is
+// extra height, nothing is covered. Saved as e.g. LightHouse_DEP-0002_slip_1.jpg.
+// Branch unknown or the image can't be read -> plain download as before.
+const downloadWithBranchBand = async (url: string, name: string, branchName: string | null) => {
+  const fallback = () => {
+    window.location.href = downloadUrl(url, name);
+  };
+  if (!branchName) {
+    fallback();
+    return;
+  }
+  const branch = shortBranchName(branchName);
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const photo = await createImageBitmap(await response.blob());
+    const { width, height } = photo;
+
+    const bandHeight = Math.max(40, Math.round(width * 0.07));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height + bandHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas not supported');
+
+    ctx.drawImage(photo, 0, 0);
+    photo.close();
+    ctx.fillStyle = '#0f5c3a';
+    ctx.fillRect(0, height, width, bandHeight);
+
+    const label = `${branch.replace(/\s+/g, '').toUpperCase()} BRANCH`; // KARIMABAD BRANCH
+    let fontSize = Math.round(bandHeight * 0.5);
+    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+    // Shrink to fit narrow (portrait) photos
+    while (fontSize > 10 && ctx.measureText(label).width > width * 0.92) {
+      fontSize -= 2;
+      ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, width / 2, height + bandHeight / 2);
+
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+    if (!blob) throw new Error('Could not create image');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${branch.replace(/[^A-Za-z0-9]/g, '')}_${name.replace(/[^A-Za-z0-9_-]/g, '_')}.jpg`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+  } catch (error) {
+    console.error('Branch band download failed, downloading original:', error);
+    fallback();
+  }
+};
+
 const Spinner = () => (
   <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
@@ -139,12 +203,18 @@ const Spinner = () => (
 
 const CashDepositsPage: React.FC = () => {
   const { showToast } = useToast();
+  const currentBranch = useBranch(); // Branch name goes on downloaded slips
 
   const [role, setRole] = useState('');
   const [userLoaded, setUserLoaded] = useState(false); // list waits for the role (default filter)
 
-  const [deposits, setDeposits] = useState<RecordRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Two columns (Sales View style): cash deposits left, online payments (customized + walk-in) right
+  const [deposits, setDeposits] = useState<Deposit[]>([]);
+  const [proofs, setProofs] = useState<PaymentProof[]>([]);
+  // Start as loading: the lists wait for the user role first, so no "No records" flash
+  const [depositsLoading, setDepositsLoading] = useState(true);
+  const [proofsLoading, setProofsLoading] = useState(true);
+  const loading = depositsLoading || proofsLoading;
   // Filter inputs; applied on Fetch (like Sales View)
   const [typeFilter, setTypeFilter] = useState<RecordType>('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('PENDING');
@@ -156,9 +226,10 @@ const CashDepositsPage: React.FC = () => {
     status: 'PENDING',
     search: '',
   });
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalItems, setTotalItems] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
+  const [depositPage, setDepositPage] = useState(1);
+  const [depositTotal, setDepositTotal] = useState({ items: 0, pages: 0 });
+  const [proofPage, setProofPage] = useState(1);
+  const [proofTotal, setProofTotal] = useState({ items: 0, pages: 0 });
 
   // New / Edit form
   const [showForm, setShowForm] = useState(false);
@@ -213,7 +284,6 @@ const CashDepositsPage: React.FC = () => {
 
   const buildFilterParams = useCallback(() => {
     const params = new URLSearchParams();
-    if (applied.type) params.append('type_filter', applied.type);
     if (applied.status) params.append('status_filter', STATUS_QUERY[applied.status]);
     if (applied.search) params.append('search', applied.search);
     const fromDate = periodStart(period);
@@ -223,35 +293,58 @@ const CashDepositsPage: React.FC = () => {
 
   const applyFilters = () => {
     setApplied({ type: typeFilter, status: statusFilter, search: search.trim() });
-    setCurrentPage(1);
+    setDepositPage(1);
+    setProofPage(1);
   };
 
-  const fetchDeposits = useCallback(async () => {
+  // One column's page: DEPOSIT, or PROOF (customized + walk-in) / one of them
+  const fetchRecords = useCallback(async (type: string, page: number) => {
     try {
-      setLoading(true);
       const params = buildFilterParams();
-      params.append('page', currentPage.toString());
+      params.append('type_filter', type);
+      params.append('page', page.toString());
       params.append('limit', PAGE_SIZE.toString());
       const response = await fetch(`/api/payments-record?${params.toString()}`, { credentials: 'include' });
       const data = await response.json();
       if (!response.ok) {
         showToast(data.error || 'Failed to fetch payments record', 'error');
-        return;
+        return null;
       }
-      setDeposits(data.data || []);
-      setTotalItems(data.total || 0);
-      setTotalPages(data.totalPages || 0);
+      return { rows: (data.data || []) as RecordRow[], items: data.total || 0, pages: data.totalPages || 0 };
     } catch (error) {
       console.error('Error fetching payments record:', error);
       showToast('Failed to fetch payments record', 'error');
-    } finally {
-      setLoading(false);
+      return null;
     }
-  }, [buildFilterParams, currentPage, showToast]);
+  }, [buildFilterParams, showToast]);
+
+  const fetchDepositList = useCallback(async () => {
+    setDepositsLoading(true);
+    const result = await fetchRecords('DEPOSIT', depositPage);
+    if (result) {
+      setDeposits(result.rows.filter(isDeposit));
+      setDepositTotal({ items: result.items, pages: result.pages });
+    }
+    setDepositsLoading(false);
+  }, [fetchRecords, depositPage]);
+
+  const fetchProofList = useCallback(async () => {
+    setProofsLoading(true);
+    const result = await fetchRecords(applied.type || 'PROOF', proofPage);
+    if (result) {
+      setProofs(result.rows.filter((r): r is PaymentProof => !isDeposit(r)));
+      setProofTotal({ items: result.items, pages: result.pages });
+    }
+    setProofsLoading(false);
+  }, [fetchRecords, applied.type, proofPage]);
 
   useEffect(() => {
-    if (userLoaded) fetchDeposits();
-  }, [fetchDeposits, userLoaded]);
+    if (userLoaded) fetchDepositList();
+  }, [fetchDepositList, userLoaded]);
+
+  useEffect(() => {
+    if (userLoaded) fetchProofList();
+  }, [fetchProofList, userLoaded]);
 
   const formTotal = useMemo(
     () => slipRows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0),
@@ -415,15 +508,14 @@ const CashDepositsPage: React.FC = () => {
       setShowForm(false);
       setEditing(null);
       // Show all pending (clear search) so the saved deposit is visible
-      const keepType = applied.type === 'CUSTOMIZED' ? '' : applied.type;
-      setTypeFilter(keepType);
       setStatusFilter('PENDING');
       setSearch('');
-      if (applied.status === 'PENDING' && !applied.search && applied.type === keepType && currentPage === 1) {
-        fetchDeposits();
+      if (applied.status === 'PENDING' && !applied.search && depositPage === 1) {
+        fetchDepositList();
       } else {
-        setApplied({ type: keepType, status: 'PENDING', search: '' });
-        setCurrentPage(1);
+        setApplied((prev) => ({ ...prev, status: 'PENDING', search: '' }));
+        setDepositPage(1);
+        setProofPage(1);
       }
       window.dispatchEvent(new Event(CASH_DEPOSITS_CHANGED));
     } catch (error) {
@@ -490,7 +582,8 @@ const CashDepositsPage: React.FC = () => {
       );
       setIsPanelOpen(false);
       setTimeout(() => setSelected(null), 300);
-      fetchDeposits();
+      if (deposit) fetchDepositList();
+      else fetchProofList();
       window.dispatchEvent(new Event(deposit ? CASH_DEPOSITS_CHANGED : PAYMENT_PROOFS_CHANGED));
     } catch (error) {
       console.error(`Error on ${action}:`, error);
@@ -528,7 +621,7 @@ const CashDepositsPage: React.FC = () => {
       const updated = await uploadProofImages(proof.id, newSlips.map((s) => s.file));
       clearNewSlips();
       setSelected(updated);
-      setDeposits((rows) => rows.map((r) => (r.id === updated.id ? updated : r)));
+      setProofs((rows) => rows.map((r) => (r.id === updated.id ? updated : r)));
       showToast('Pay slip attached', 'success');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Pay slip upload failed', 'error');
@@ -552,7 +645,7 @@ const CashDepositsPage: React.FC = () => {
       setProofUploading(true);
       const updated = await uploadProofImages(proof.id, [], proof.images.filter((i) => i.id !== imageId).map((i) => i.id));
       setSelected(updated);
-      setDeposits((rows) => rows.map((r) => (r.id === updated.id ? updated : r)));
+      setProofs((rows) => rows.map((r) => (r.id === updated.id ? updated : r)));
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to remove pay slip', 'error');
     } finally {
@@ -575,7 +668,8 @@ const CashDepositsPage: React.FC = () => {
           value={period}
           onChange={(e) => {
             setPeriod(e.target.value as Period);
-            setCurrentPage(1);
+            setDepositPage(1);
+            setProofPage(1);
           }}
           className="regal-input w-auto py-1.5 text-sm font-medium"
           aria-label="Period"
@@ -615,20 +709,6 @@ const CashDepositsPage: React.FC = () => {
               className="regal-input w-full"
             />
           </div>
-          <div className="md:w-40">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value as RecordType)}
-              className="regal-input w-full"
-            >
-              {TYPE_OPTIONS.map((option) => (
-                <option key={option.label} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
           <div className="md:w-48">
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select
@@ -637,6 +717,20 @@ const CashDepositsPage: React.FC = () => {
               className="regal-input w-full"
             >
               {STATUS_OPTIONS.map((option) => (
+                <option key={option.label} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="md:w-40">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Online Payment</label>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as RecordType)}
+              className="regal-input w-full"
+            >
+              {TYPE_OPTIONS.map((option) => (
                 <option key={option.label} value={option.value}>
                   {option.label}
                 </option>
@@ -833,89 +927,145 @@ const CashDepositsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Deposits Table */}
-      <div className="border-0 p-0">
-        {loading ? (
-          <div className="text-center py-4">
+      {/* Two columns (Sales View style): Cash Deposits left, Customized + Walk-in right */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left - Cash Deposits */}
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold mb-2 text-gray-800">
+            Cash Deposits <span className="text-sm font-normal text-gray-500">({depositTotal.items})</span>
+          </h2>
+          {depositsLoading ? (
             <div className="animate-pulse">
               <div className="h-12 bg-gray-200 rounded mb-4"></div>
-              <div className="h-64 bg-gray-200 rounded"></div>
+              <div className="bg-gray-200 rounded" style={{ height: COLUMN_HEIGHT }}></div>
             </div>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px]">
-              <thead className="bg-gray-100 sticky top-0 z-10">
-                <tr className="text-black font-semibold text-xs uppercase">
-                  <th className="px-3 py-5 text-left w-12">S.No</th>
-                  <th className="px-2 py-5 text-left w-28">Type</th>
-                  <th className="px-2 py-5 text-left w-28">No</th>
-                  <th className="px-2 py-5 text-left w-28">Date</th>
-                  <th className="px-2 py-5 text-left w-52">Details</th>
-                  <th className="px-2 py-5 text-left w-28">Amount</th>
-                  <th className="px-2 py-5 text-left w-32">By</th>
-                  <th className="px-2 py-5 text-left w-28">Status</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {deposits.map((d, index) => (
-                  <tr
-                    key={d.id}
-                    onClick={() => openDetail(d)}
-                    className="text-sm text-gray-900 transition-colors cursor-pointer hover:bg-gray-50"
-                    title="Click to view details"
-                  >
-                    <td className="px-3 py-4 whitespace-nowrap">{(currentPage - 1) * PAGE_SIZE + index + 1}</td>
-                    <td className="px-2 py-4 whitespace-nowrap">{TYPE_LABEL[d.type] || d.type}</td>
-                    {isDeposit(d) ? (
-                      <>
-                        <td className="px-2 py-4 whitespace-nowrap">{d.deposit_no}</td>
-                        <td className="px-2 py-4 whitespace-nowrap">{formatDate(d.deposit_date)}</td>
-                        <td className="px-2 py-4">Cash of {cashOf(d)}</td>
-                        <td className="px-2 py-4 whitespace-nowrap">{formatAmount(d.total_amount)}</td>
-                        <td className="px-2 py-4">{d.submitted_by_name || 'N/A'}</td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="px-2 py-4 whitespace-nowrap">{d.invoice_no}</td>
-                        <td className="px-2 py-4 whitespace-nowrap">{d.payment_date ? formatDate(d.payment_date) : '-'}</td>
-                        <td className="px-2 py-4">
-                          {d.customer_name || '-'} · <span className="capitalize">{d.payment_method}</span>
-                        </td>
-                        <td className="px-2 py-4 whitespace-nowrap">{formatAmount(d.amount)}</td>
-                        <td className="px-2 py-4">{d.recorded_by_name || 'N/A'}</td>
-                      </>
-                    )}
-                    <td className="px-2 py-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${STATUS_BADGE[d.status]}`}>
-                        {d.status === 'MISSING' ? 'PAY SLIP NOT ATTACHED' : d.status}
-                      </span>
-                    </td>
+          ) : (
+            <div className="overflow-auto border border-gray-200 rounded" style={{ height: COLUMN_HEIGHT }}>
+              <table className="w-full min-w-[560px]">
+                <thead className="bg-gray-100 sticky top-0 z-10">
+                  <tr className="text-black font-semibold text-xs uppercase">
+                    <th className="px-3 py-5 text-left w-12">S.No</th>
+                    <th className="px-2 py-5 text-left">No</th>
+                    <th className="px-2 py-5 text-left">Status</th>
+                    <th className="px-2 py-5 text-left">Cash Of</th>
+                    <th className="px-2 py-5 text-left">Amount</th>
+                    <th className="px-2 py-5 text-left">By</th>
+                    <th className="px-2 py-5 text-left">Date</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {deposits.map((d, index) => (
+                    <tr
+                      key={d.id}
+                      onClick={() => openDetail(d)}
+                      className="text-sm text-gray-900 transition-colors cursor-pointer hover:bg-gray-50"
+                      title="Click to view details"
+                    >
+                      <td className="px-3 py-4 whitespace-nowrap">{(depositPage - 1) * PAGE_SIZE + index + 1}</td>
+                      <td className="px-2 py-4 whitespace-nowrap">{d.deposit_no}</td>
+                      <td className="px-2 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${STATUS_BADGE[d.status]}`}>
+                          {d.status}
+                        </span>
+                      </td>
+                      <td className="px-2 py-4">{cashOf(d)}</td>
+                      <td className="px-2 py-4 whitespace-nowrap">{formatAmount(d.total_amount)}</td>
+                      <td className="px-2 py-4">{d.submitted_by_name || 'N/A'}</td>
+                      <td className="px-2 py-4 whitespace-nowrap">{formatDate(d.deposit_date)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
 
-            {deposits.length === 0 && !loading && (
-              <div className="text-center py-12 text-gray-500">No records found.</div>
-            )}
-          </div>
-        )}
-      </div>
+              {deposits.length === 0 && <div className="text-center py-12 text-gray-500">No cash deposits found.</div>}
+            </div>
+          )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="mt-6">
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalItems={totalItems}
-            pageSize={PAGE_SIZE}
-            baseUrl="/cash-deposits"
-            onPageChange={setCurrentPage}
-          />
+          {depositTotal.pages > 1 && (
+            <div className="mt-6">
+              <Pagination
+                currentPage={depositPage}
+                totalPages={depositTotal.pages}
+                totalItems={depositTotal.items}
+                pageSize={PAGE_SIZE}
+                baseUrl="/cash-deposits"
+                onPageChange={setDepositPage}
+              />
+            </div>
+          )}
         </div>
-      )}
+
+        {/* Right - Online payments of Customized + Walk-in invoices */}
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold mb-2 text-gray-800">
+            Customized &amp; Walk-in <span className="text-sm font-normal text-gray-500">({proofTotal.items})</span>
+          </h2>
+          {proofsLoading ? (
+            <div className="animate-pulse">
+              <div className="h-12 bg-gray-200 rounded mb-4"></div>
+              <div className="bg-gray-200 rounded" style={{ height: COLUMN_HEIGHT }}></div>
+            </div>
+          ) : (
+            <div className="overflow-auto border border-gray-200 rounded" style={{ height: COLUMN_HEIGHT }}>
+              <table className="w-full min-w-[600px]">
+                <thead className="bg-gray-100 sticky top-0 z-10">
+                  <tr className="text-black font-semibold text-xs uppercase">
+                    <th className="px-3 py-5 text-left w-12">S.No</th>
+                    <th className="px-2 py-5 text-left">Type</th>
+                    <th className="px-2 py-5 text-left">Invoice No</th>
+                    <th className="px-2 py-5 text-left">Status</th>
+                    <th className="px-2 py-5 text-left">Payment Method</th>
+                    <th className="px-2 py-5 text-left">Amount</th>
+                    <th className="px-2 py-5 text-left">By</th>
+                    <th className="px-2 py-5 text-left">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {proofs.map((d, index) => (
+                    <tr
+                      key={d.id}
+                      onClick={() => openDetail(d)}
+                      className="text-sm text-gray-900 transition-colors cursor-pointer hover:bg-gray-50"
+                      title="Click to view details"
+                    >
+                      <td className="px-3 py-4 whitespace-nowrap">{(proofPage - 1) * PAGE_SIZE + index + 1}</td>
+                      <td className="px-2 py-4 whitespace-nowrap">{TYPE_LABEL[d.type] || d.type}</td>
+                      <td className="px-2 py-4 whitespace-nowrap">{d.invoice_no}</td>
+                      <td className="px-2 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${STATUS_BADGE[d.status]}`}>
+                          {d.status === 'MISSING' ? 'PAY SLIP NOT ATTACHED' : d.status}
+                        </span>
+                      </td>
+                      {/* Payment method pill, same as Sales View */}
+                      <td className="px-2 py-4 text-xs">
+                        <span className="inline-block px-2 py-2 bg-gray-100 rounded capitalize whitespace-nowrap">{d.payment_method}</span>
+                      </td>
+                      <td className="px-2 py-4 whitespace-nowrap">{formatAmount(d.amount)}</td>
+                      <td className="px-2 py-4">{d.recorded_by_name || 'N/A'}</td>
+                      <td className="px-2 py-4 whitespace-nowrap">{d.payment_date ? formatDate(d.payment_date) : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {proofs.length === 0 && <div className="text-center py-12 text-gray-500">No online payments found.</div>}
+            </div>
+          )}
+
+          {proofTotal.pages > 1 && (
+            <div className="mt-6">
+              <Pagination
+                currentPage={proofPage}
+                totalPages={proofTotal.pages}
+                totalItems={proofTotal.items}
+                pageSize={PAGE_SIZE}
+                baseUrl="/cash-deposits"
+                onPageChange={setProofPage}
+              />
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Right-side review panel (Shop Order Approval style) */}
       {selected && (
@@ -1021,14 +1171,15 @@ const CashDepositsPage: React.FC = () => {
                             {s.bank_name} · <span className="font-semibold">Rs. {formatAmount(s.amount)}</span>
                           </p>
                         </div>
-                        <a
-                          href={downloadUrl(s.file_url, `${selected.deposit_no}_slip_${index + 1}`)}
-                          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:border-regal-yellow hover:bg-regal-yellow hover:text-regal-black"
+                        <button
+                          type="button"
+                          onClick={() => downloadWithBranchBand(s.file_url, `${selected.deposit_no}_slip_${index + 1}`, currentBranch?.name ?? null)}
+                          className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-regal-yellow px-3 py-1.5 text-sm font-medium text-regal-black shadow-sm transition-colors hover:bg-yellow-200"
                           title={`Download ${selected.deposit_no} slip ${index + 1}`}
                         >
                           <ArrowDownTrayIcon className="h-4 w-4" />
                           Download
-                        </a>
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -1205,14 +1356,15 @@ const CashDepositsPage: React.FC = () => {
                               Delete
                             </button>
                           )}
-                          <a
-                            href={downloadUrl(img.file_url, `${selected.invoice_no}_payment_${index + 1}`)}
-                            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:border-regal-yellow hover:bg-regal-yellow hover:text-regal-black"
+                          <button
+                            type="button"
+                            onClick={() => downloadWithBranchBand(img.file_url, `${selected.invoice_no}_payment_${index + 1}`, currentBranch?.name ?? null)}
+                            className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-regal-yellow px-3 py-1.5 text-sm font-medium text-regal-black shadow-sm transition-colors hover:bg-yellow-200"
                             title={`Download ${selected.invoice_no} pay slip ${index + 1}`}
                           >
                             <ArrowDownTrayIcon className="h-4 w-4" />
                             Download
-                          </a>
+                          </button>
                         </div>
                       </div>
                     </div>

@@ -15,6 +15,9 @@
  *   charge; their rate is raised instead, by the dye pieces of the category: 1-4 pcs =
  *   dye_rate_single (default x2), 5-15 = dye_rate_qty (x1.5), 16+ = normal. Both rates
  *   are set per category on the Ideal Pricing page (see dyeMultiplier).
+ * - Kit (see kitFlatDefault): for a team that is one of our ready articles, its Jersey /
+ *   Short share ONE kit flat (the first one added pays it, the other 0), and its Trouser
+ *   is 0 when the team's Jersey is in the order. Still only at 1-4 pcs.
  */
 
 import type { DtfBlock } from './dtfLayout';
@@ -42,7 +45,24 @@ export interface CustomerCategoryGrouped {
   dtf_enabled?: boolean;         // true = the optional DTF logos box shows for this category (Hoodie, Jacket)
   dye_rate_single?: number;      // dye rate multiplier at 1-4 dye pcs (default 2)
   dye_rate_qty?: number;         // dye rate multiplier at 5-15 dye pcs (default 1.5)
+  kit_role?: KitRole | null;     // Jersey / Short once it has an Our article MOQ (Ideal Pricing page)
+  kit_flat_charge?: number | null; // Our article MOQ (Jersey / Short); null = its normal MOQ
 }
+
+export type KitRole = 'jersey' | 'short' | 'trouser';
+export const KIT_LABEL: Record<KitRole, string> = { jersey: 'Jersey', short: 'Short', trouser: 'Trouser' };
+
+// One of our ready articles: products grouped by team without size (GET /ready-articles),
+// with the kit kinds we have for it.
+export interface ReadyArticle {
+  name: string;
+  kinds: KitRole[];
+}
+
+export const findArticle = (articles: ReadyArticle[], team: string) => {
+  const name = team.trim().toLowerCase();
+  return name ? articles.find(a => a.name.toLowerCase() === name) ?? null : null;
+};
 
 // The mockup charge a category starts with, set per category on the Ideal Pricing page
 // (e.g. T-shirt 500, Jacket 1000). Not set (or 0) = this category gets no mockup charge.
@@ -163,6 +183,12 @@ export const teamsIn = (items: PricedLine[]) => Array.from(new Set(items.map(tea
 const findCategory = (categories: CustomerCategoryGrouped[], category: string) =>
   categories.find(c => c.main_category === category);
 
+// A category's part in a team kit of our articles: Trouser by its name (Rs. 0 with the
+// team's Jersey), Jersey / Short once it has an Our article MOQ (Ideal Pricing page).
+export const kitRoleOf = (c?: CustomerCategoryGrouped | null): KitRole | null =>
+  !c ? null : /trouser/i.test(c.main_category) ? 'trouser'
+    : c.kit_role === 'jersey' || c.kit_role === 'short' ? c.kit_role : null;
+
 export const dyePiecesOfCategory = (items: PricedLine[], categories: CustomerCategoryGrouped[], category: string, team = '') => {
   const categoryData = findCategory(categories, category);
   return items
@@ -229,6 +255,57 @@ export const needsMockup = (items: PricedLine[], categories: CustomerCategoryGro
   return pieces > 0 && pieces <= MOCKUP_MAX_PIECES && pieces > dyePiecesOfCategory(items, categories, category, team);
 };
 
+// The flat (MOQ) charge a team + category starts with, and why. Only used where the
+// category has a flat at all (1-4 pcs, not dye-only - see needsMockup).
+// - Custom team, or a category that isn't in the team's kit: the category's own MOQ.
+// - Our article's kit: its Jersey when we have it; its Short when we have the Short or the
+//   Jersey; its Trouser when we have the Jersey (we have the design). The first kit
+//   category added (cart order, with a MOQ) pays the Our article MOQ once, the rest 0 -
+//   e.g. only a Trouser of a team whose Jersey we have still pays 300, not 500.
+export interface FlatDefault {
+  amount: number;
+  reason: string;
+  kitPayer: boolean; // pays the kit flat for the team's whole kit
+}
+
+// Is this kit part in the team's kit? (see kitFlatDefault)
+const inKit = (article: ReadyArticle, role: KitRole) =>
+  article.kinds.includes(role) || (role !== 'jersey' && article.kinds.includes('jersey'));
+
+export function kitFlatDefault(
+  items: PricedLine[],
+  categories: CustomerCategoryGrouped[],
+  articles: ReadyArticle[],
+  category: string,
+  team: string
+): FlatDefault {
+  const categoryData = findCategory(categories, category);
+  const own = Number(categoryData?.mockup_charge ?? 0);
+  const role = kitRoleOf(categoryData);
+  const article = findArticle(articles, team);
+  const normal = (reason: string): FlatDefault => ({ amount: own, reason, kitPayer: false });
+  if (!article || !role) return normal('MOQ charges (1-4 pcs)');
+  if (role === 'trouser' && !article.kinds.includes('jersey')) return normal(`We don't have a ${team} Jersey - normal MOQ`);
+  if (!inKit(article, role)) return normal(`We don't have a ${team} ${KIT_LABEL[role]} - normal MOQ`);
+
+  // The first kit category of this team added (cart order) that has a MOQ pays it.
+  const payer = categoriesIn(items.filter(i => teamOf(i) === team)).find(c => {
+    const r = kitRoleOf(findCategory(categories, c));
+    return r !== null && inKit(article, r) && needsMockup(items, categories, c, team);
+  });
+  if (payer && payer !== category) {
+    const payerRole = kitRoleOf(findCategory(categories, payer)) as KitRole;
+    return { amount: 0, reason: `Kit: ${team} ${KIT_LABEL[payerRole]} already pays the Our article MOQ`, kitPayer: false };
+  }
+  // A Trouser has no Our article MOQ of its own - it pays the Jersey's.
+  const jerseyKit = categories.find(c => kitRoleOf(c) === 'jersey')?.kit_flat_charge;
+  return {
+    amount: Number(categoryData?.kit_flat_charge ?? jerseyKit ?? own),
+    reason: `Our article MOQ - ${team} (rest of the kit Rs. 0)`,
+    kitPayer: true,
+  };
+}
+
 export interface MockupLine {
   team: string;     // '' = lines without a team
   category: string;
@@ -237,22 +314,23 @@ export interface MockupLine {
   amount: number;
 }
 
-// One mockup charge per team and category with 1-4 pcs (not dye-only), skipping
-// categories whose own charge is 0. `amounts` holds per-order edits by mockupKey; one
-// without an edit gets `defaultFor`.
+// One mockup charge per team and category with 1-4 pcs (not dye-only), skipping the ones
+// whose default is 0 (no flat for the category, or a kit line that's free) - those
+// aren't shown at all. `amounts` holds per-order edits by mockupKey; one without an
+// edit gets `defaultFor` (worked out from `items`, so kit defaults follow the cart).
 export function mockupLines(
   items: PricedLine[],
   categories: CustomerCategoryGrouped[],
   amounts: Record<string, number>,
-  defaultFor: (category: string) => number
+  defaultFor: (category: string, team: string, items: PricedLine[]) => number
 ): MockupLine[] {
   return teamsIn(items).flatMap(team => {
     const teamLines = items.filter(i => teamOf(i) === team);
     return categoriesIn(teamLines)
-      .filter(c => needsMockup(items, categories, c, team) && defaultFor(c) > 0)
+      .filter(c => needsMockup(items, categories, c, team) && defaultFor(c, team, items) > 0)
       .map(c => {
         const key = mockupKey(team, c);
-        return { team, category: c, key, pieces: piecesOfCategory(items, c, team), amount: amounts[key] ?? defaultFor(c) };
+        return { team, category: c, key, pieces: piecesOfCategory(items, c, team), amount: amounts[key] ?? defaultFor(c, team, items) };
       });
   });
 }

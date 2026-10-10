@@ -17,7 +17,9 @@ import {
   repriceCart,
   mockupLines,
   categoryTierSummaries,
-  categoryMockupDefault,
+  kitFlatDefault,
+  findArticle,
+  ReadyArticle,
   isDyeLine,
   dyePiecesOfCategory,
   formDyePieces,
@@ -27,7 +29,9 @@ import {
   MockupLine,
   MOCKUP_MAX_PIECES,
 } from '@/lib/quantityPricing';
-import { QuantityTierCards, MockupLinePreview } from '@/components/QuantityTierCards';
+import { QuantityTierCards } from '@/components/QuantityTierCards';
+import TeamSearchInput, { KitKindChips } from '@/components/TeamSearchInput';
+import { AmountInput, QtyInput } from '@/components/CartNumberInputs';
 import { DtfSettings, DtfLogo, DtfResult, computeDtf, dtfLogosLabel, dtfTotalOf, metersLabel } from '@/lib/dtfLayout';
 import { DtfLogoBox } from '@/components/DtfLogos';
 import AddCustomerModal from '@/components/AddCustomerModal';
@@ -93,8 +97,6 @@ const DynamicCategoryFields: React.FC<{
   // Find the selected category in the categories list
   const categoryData = customerCategories.find(cat => cat.main_category === selectedCategory);
 
-  if (!categoryData) return null;
-
   // Handle change in a sub-category dropdown
   const handleSubCategoryChange = (subCategory: string, value: string) => {
     setDynamicCategoryFields(prev => ({
@@ -113,6 +115,9 @@ const DynamicCategoryFields: React.FC<{
       onIdealPriceChange(idealPrice);
     }
   }, [idealPrice, onIdealPriceChange]);
+
+  // After the hooks: hooks must run in the same order on every render.
+  if (!categoryData) return null;
 
   return (
     <div className="space-y-4 p-4 bg-regal-yellow rounded">
@@ -280,10 +285,14 @@ const CustomerInvoicePage: React.FC = () => {
   // category's own amount (customer_categories.mockup_charge), editable per order in the
   // cart. Keyed by mockupKey(team, category).
   const [mockupAmounts, setMockupAmounts] = useState<Record<string, number>>({});
-  // Category's own charge (e.g. Jacket 1000); not set or 0 = no mockup for it.
-  const mockupDefaultFor = (category: string) => categoryMockupDefault(customerCategories, category);
-  const hasMockupCharge = (category: string) => mockupDefaultFor(category) > 0;
-  const mockupAmountOf = (team: string, category: string) => mockupAmounts[mockupKey(team, category)] ?? mockupDefaultFor(category);
+  // Our ready articles (products without size) for the Team Name search and the kit flat.
+  const [articles, setArticles] = useState<ReadyArticle[]>([]);
+  // Default flat of a team + category: the category's own charge (e.g. Jacket 1000; not
+  // set or 0 = none), or the kit flat / 0 for our ready article - see kitFlatDefault.
+  const flatDefault = (category: string, team: string, items: PricedLine[] = cart) =>
+    kitFlatDefault(items, customerCategories, articles, category, team);
+  const mockupDefaultFor = (category: string, team: string, items: PricedLine[] = cart) => flatDefault(category, team, items).amount;
+  const mockupAmountOf = (team: string, category: string) => mockupAmounts[mockupKey(team, category)] ?? mockupDefaultFor(category, team);
   const [totalAmount, setTotalAmount] = useState<number>(0);
   const [amountPaid, setAmountPaid] = useState<string>('');
   const [proofFiles, setProofFiles] = useState<File[]>([]); // screenshots of an online payment
@@ -341,9 +350,11 @@ const CustomerInvoicePage: React.FC = () => {
 
   // Teams in the order they were first added; a team leaves when its last line is removed.
   const teams = teamsIn(cart);
-  // The typed name, matched to a team already in the cart regardless of case/spaces.
+  // The typed name, matched to a team already in the cart (or one of our articles)
+  // regardless of case/spaces.
   const typedTeam = cleanTeamName(teamInput);
-  const activeTeam = teams.find(t => t.toLowerCase() === typedTeam.toLowerCase()) ?? typedTeam;
+  const activeTeam = teams.find(t => t.toLowerCase() === typedTeam.toLowerCase()) ?? findArticle(articles, typedTeam)?.name ?? typedTeam;
+  const activeArticle = findArticle(articles, activeTeam);
   const similarLine = similarOf ? cart.find(i => i.id === similarOf) ?? null : null;
 
   // The tier comes from every piece of this category in this team: what's already in
@@ -352,7 +363,6 @@ const CustomerInvoicePage: React.FC = () => {
   const tierPieces: number | '' = quantity === '' ? '' : quantity + piecesAlreadyInCart;
   const selectedCategoryData = customerCategories.find(cat => cat.main_category === selectedCategory);
   const entryIsDye = isDyeLine(customerCategories.find(c => c.main_category === selectedCategory), dynamicCategoryFields);
-  const nonDyeInCart = selectedCategory ? piecesAlreadyInCart - dyePiecesOfCategory(cart, customerCategories, selectedCategory, activeTeam) : 0;
   const entryDyePieces = formDyePieces(cart, customerCategories, selectedCategory, dynamicCategoryFields, quantity, activeTeam);
   const matchedIdealPrice = lookupIdealPrice(selectedCategoryData, dynamicCategoryFields, tierPieces, entryDyePieces);
   // Roll layout + charge for the logos being entered, re-worked on every keystroke.
@@ -366,6 +376,25 @@ const CustomerInvoicePage: React.FC = () => {
   const mockupTotal = mockups.reduce((sum, m) => sum + m.amount, 0);
   const linesMissingPrice = cart.filter(item => item.missingTierPrice);
 
+  // MOQ Charges of the line being entered = what it adds to its team + category's flat
+  // (0 when that flat is already in the cart, or for a free kit line). Price (Total) adds it.
+  const moq = (() => {
+    if (!activeTeam || !selectedCategory || quantity === '' || quantity <= 0) return { amount: 0, reason: '' };
+    const key = mockupKey(activeTeam, selectedCategory);
+    const before = mockups.find(m => m.key === key);
+    const withLine: PricedLine[] = [...cart, {
+      id: '__new__', category: selectedCategory, unitPrice: unitPrice || 0, quantity, totalPrice: price,
+      category_fields: { ...dynamicCategoryFields }, autoPriced: false, team: activeTeam,
+    }];
+    const after = mockupLines(withLine, customerCategories, mockupAmounts, mockupDefaultFor).find(m => m.key === key);
+    if (before) return { amount: 0, reason: `Already added for ${activeTeam} · ${selectedCategory} (Rs. ${before.amount})` };
+    if (after) return { amount: after.amount, reason: flatDefault(selectedCategory, activeTeam, withLine).reason };
+    if (tierPieces !== '' && tierPieces > MOCKUP_MAX_PIECES) return { amount: 0, reason: `${tierPieces} pcs (${MOCKUP_MAX_PIECES + 1}+) - no MOQ charges` };
+    if (entryIsDye) return { amount: 0, reason: 'Dye - the dye rate applies instead' };
+    const kit = flatDefault(selectedCategory, activeTeam, withLine);
+    return { amount: 0, reason: kit.amount === 0 && findArticle(articles, activeTeam) ? kit.reason : '' };
+  })();
+
   // Per team: its lines (display order), pieces, flat charges and total (lines + flat + DTF).
   const teamBlocks = teams.map(team => {
     const lines = orderedLines(cart).filter(i => i.team === team);
@@ -378,7 +407,7 @@ const CustomerInvoicePage: React.FC = () => {
       flatTotal,
       pieces: lines.reduce((sum, i) => sum + i.quantity, 0),
       total: lines.reduce((sum, i) => sum + i.totalPrice, 0) + flatTotal + dtfTotalOf(lines),
-      tierSummaries: categoryTierSummaries(cart, customerCategories, c => mockupAmountOf(team, c), hasMockupCharge, team),
+      tierSummaries: categoryTierSummaries(cart, customerCategories, c => mockupAmountOf(team, c), c => mockupDefaultFor(c, team) > 0, team),
     };
   });
   const shownBlocks = cartView === ALL_TEAMS ? teamBlocks : teamBlocks.filter(b => b.team === cartView);
@@ -389,6 +418,7 @@ const CustomerInvoicePage: React.FC = () => {
     fetchCustomerCategories();
     fetchRushSettings();
     fetchDtfSettings();
+    fetchArticles();
   }, []);
 
   // Fetch a receipt PDF for an already-created invoice and show it. This is a plain
@@ -558,6 +588,19 @@ const CustomerInvoicePage: React.FC = () => {
   };
 
   // DTF rule (Rs per 0.5 m, roll width, gap), saved on the Ideal Pricing page.
+  // Our ready articles - new products show up here by themselves.
+  const fetchArticles = async () => {
+    try {
+      const response = await fetch('/api/ready-articles', { method: 'GET', credentials: 'include' });
+      if (response.ok) {
+        const data = await response.json();
+        setArticles(Array.isArray(data.data) ? data.data : []);
+      }
+    } catch (error) {
+      console.error('Error fetching ready articles:', error);
+    }
+  };
+
   const fetchDtfSettings = async () => {
     try {
       const response = await fetch('/api/dtf-pricing/', { method: 'GET', credentials: 'include' });
@@ -824,10 +867,11 @@ const CustomerInvoicePage: React.FC = () => {
 
     updateCart([...cart, newItem]);
 
-    // Clear form - Team Name empties after every Add too; "+ Similar" or typing the
-    // name adds more to a team.
+    // Clear form - Team Name stays (shown with its spelling), so the rest of the kit -
+    // Short, Trouser - goes to the same team; clicking into the box selects it to type
+    // another team.
     clearForm();
-    setTeamInput('');
+    setTeamInput(activeTeam);
     setSimilarOf(null);
   };
 
@@ -848,6 +892,26 @@ const CustomerInvoicePage: React.FC = () => {
     setCart(cart.map(item => item.id === id
       ? { ...item, unitPrice: rate, totalPrice: rate * item.quantity, autoPriced: false, missingTierPrice: false, previousUnitPrice: null, rateChange: null }
       : item));
+  };
+
+  // Qty edited in the cart: the line total, its team + category's rate tier (repriceCart),
+  // MOQ and DTF all follow. False = not taken (bad qty, or a DTF that doesn't fit it).
+  const setLineQty = (id: string, qty: number): boolean => {
+    const item = cart.find(i => i.id === id);
+    if (!item || !Number.isInteger(qty) || qty <= 0) return false;
+    if (qty === item.quantity) return true;
+    let dtf = item.dtf;
+    if (dtf) {
+      const result = computeDtf(dtf.logos, qty, dtfSettings);
+      if (result.status !== 'ok') {
+        showToast(`DTF: ${result.status === 'error' ? result.message : 'cannot work out the DTF for this qty'}`, 'error');
+        return false;
+      }
+      const edited = dtf.amount !== dtf.charge;
+      dtf = { ...result.block, amount: edited ? dtf.amount : result.block.charge };
+    }
+    updateCart(cart.map(i => (i.id === id ? { ...i, quantity: qty, totalPrice: i.unitPrice * qty, dtf } : i)));
+    return true;
   };
 
   // DTF amount of one line, edited in its team's block in the cart (like the mockup amount).
@@ -942,7 +1006,7 @@ const CustomerInvoicePage: React.FC = () => {
       // Prepare items for backend with all category-specific fields
       const items = ordered.map(item => {
         // Build product name with custom details for display in invoice
-        let displayName = item.category;
+        const displayName = item.category;
 
         return {
           pro_name: displayName,
@@ -1074,13 +1138,14 @@ const CustomerInvoicePage: React.FC = () => {
         const errorData = await response.json();
         showToast(apiErrorMessage(errorData, 'Failed to create invoice'), 'error');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error creating invoice:', error);
-      const isNetworkError = error instanceof TypeError && /fetch/i.test(error.message || '');
+      const message = error instanceof Error ? error.message : '';
+      const isNetworkError = error instanceof TypeError && /fetch/i.test(message);
       showToast(
         isNetworkError
           ? 'Internet connection problem. Please check your connection and try again.'
-          : (error.message || 'Failed to create invoice'),
+          : (message || 'Failed to create invoice'),
         'error'
       );
     } finally {
@@ -1092,7 +1157,7 @@ const CustomerInvoicePage: React.FC = () => {
     <div className=" bg-white min-h-screen">
       {pendingCheckError && (
         <div className="bg-red-100 border-b-2 border-red-400 text-red-800 px-4 py-2 flex items-center justify-between gap-3 text-sm">
-          <span>Couldn't verify your last transaction. Check your internet connection.</span>
+          <span>Couldn&apos;t verify your last transaction. Check your internet connection.</span>
           <button
             onClick={resolvePendingInvoice}
             className="regal-btn bg-red-600 text-white px-3 py-1 text-xs"
@@ -1129,25 +1194,30 @@ const CustomerInvoicePage: React.FC = () => {
                 {/* Team first: every line belongs to a team; flat charges and rate tiers are per team. */}
                 <div>
                   <label htmlFor="invoice-team" className="block text-sm font-medium mb-1">Team Name *</label>
-                  <input
+                  <TeamSearchInput
                     id="invoice-team"
-                    type="text"
                     value={teamInput}
-                    onChange={(e) => setTeamInput(e.target.value)}
-                    // Leaving the box fixes the spelling to the team already in the cart ("royal fc" -> "Royal FC").
-                    onBlur={() => { if (teams.includes(activeTeam)) setTeamInput(activeTeam); }}
-                    className="regal-input w-full font-semibold"
-                    placeholder="e.g. City Warriors FC"
-                    autoComplete="off"
-                    maxLength={100}
+                    onChange={setTeamInput}
+                    // Leaving the box fixes the spelling to the team / article ("royal fc" -> "Royal FC").
+                    onBlur={() => { if (teams.includes(activeTeam) || activeArticle) setTeamInput(activeTeam); }}
+                    teams={teamBlocks.map(b => ({ name: b.team, pieces: b.pieces }))}
+                    articles={articles}
+                    orderLabel="invoice"
                   />
                   <p className="text-xs text-gray-600 mt-1">
                     {!activeTeam
-                      ? 'Type the team name. A name already in this invoice adds to that team.'
+                      ? 'Search our articles, or type a new team name.'
                       : teams.includes(activeTeam)
                         ? <>Items go to <b>{activeTeam}</b> ({teamBlocks.find(b => b.team === activeTeam)?.pieces ?? 0} pcs so far).</>
                         : <>New team. <b>{activeTeam}</b> joins this invoice with its first item.</>}
                   </p>
+                  {activeArticle ? (
+                    <div className="mt-2 rounded-lg border border-green-600 bg-green-50 px-3 py-2 text-xs text-gray-800">
+                      <div className="flex flex-wrap items-center gap-2 font-bold text-green-700 text-[13px]">✓ Our article <KitKindChips article={activeArticle} /></div>
+                    </div>
+                  ) : activeTeam && articles.length > 0 ? (
+                    <p className="text-xs text-gray-500 mt-1">Custom team (not our article) - normal MOQ charges.</p>
+                  ) : null}
                 </div>
 
                 {/* Category - Dynamic from API - Show only main category names */}
@@ -1279,32 +1349,28 @@ const CustomerInvoicePage: React.FC = () => {
                   )}
                 </div>
 
-                {/* Price (Total) */}
+                {/* MOQ Charges - the flat charge this line brings (once per team + category,
+                    1-4 pcs; kit rule), editable later in the cart */}
+                <div>
+                  <label htmlFor="invoice-moq" className="block text-xs font-medium text-gray-600 mb-1">MOQ Charges</label>
+                  <input id="invoice-moq" type="text" value={moq.amount ? `Rs. ${moq.amount}` : '0'} readOnly className="regal-input w-full bg-gray-100 text-gray-700" />
+                  {moq.reason && <p className="text-[11px] text-gray-500 mt-1">{moq.reason}</p>}
+                </div>
+
+                {/* Price (Total) = rate x qty + MOQ */}
                 <div>
                   <label className="block text-sm font-medium mb-1">Price (Total)</label>
                   <input
                     type="number"
-                    value={price || ''}
+                    value={price + moq.amount || ''}
                     className="regal-input w-full bg-gray-100"
                     readOnly
                     placeholder="Price"
                   />
-                  {tierPieces !== '' && hasMockupCharge(selectedCategory) && (
-                    <MockupLinePreview
-                      team={activeTeam}
-                      category={selectedCategory}
-                      tierPieces={tierPieces}
-                      alreadyInCart={piecesAlreadyInCart}
-                      nonDyeInCart={nonDyeInCart}
-                      isDye={entryIsDye}
-                      lineTotal={price}
-                      amount={mockupAmountOf(activeTeam, selectedCategory)}
-                    />
-                  )}
                   {dtfResult.status === 'ok' && (
                     <p className="text-xs mt-1.5 px-2 py-1.5 rounded-md bg-teal-50 text-teal-700">
-                      + DTF: {metersLabel(dtfResult.block.half_meters)} roll = <b className="text-gray-900">Rs. {dtfResult.block.charge.toLocaleString()}</b> →{' '}
-                      <b className="text-gray-900">Rs. {(price + dtfResult.block.charge).toLocaleString()}</b> for this {selectedCategory} with DTF. Added to the team total, editable in the cart.
+                      + DTF: {metersLabel(dtfResult.block.half_meters)} roll = <b className="text-gray-900">Rs. {dtfResult.block.charge}</b> →{' '}
+                      <b className="text-gray-900">Rs. {(price + moq.amount + dtfResult.block.charge)}</b> for this {selectedCategory} with DTF. Added to the team total, editable in the cart.
                     </p>
                   )}
                 </div>
@@ -1537,7 +1603,7 @@ const CustomerInvoicePage: React.FC = () => {
                     <div key={block.team}>
                       <div className="flex flex-wrap justify-between items-baseline gap-2 px-3 py-2 bg-regal-yellow border border-regal-yellow rounded-t-lg">
                         <span className="font-bold text-regal-black">{block.team}</span>
-                        <span className="text-sm font-medium text-regal-black">{block.pieces} pcs · Rs. {block.total.toLocaleString()}</span>
+                        <span className="text-sm font-medium text-regal-black">{block.pieces} pcs · Rs. {block.total}</span>
                       </div>
                       <div className="border border-t-0 border-gray-200 rounded-b-lg p-2 md:p-3">
                         <QuantityTierCards summaries={block.tierSummaries} />
@@ -1586,7 +1652,7 @@ const CustomerInvoicePage: React.FC = () => {
                                     </td>
                                     <td className="px-4 py-4 text-sm text-gray-900">
                                       {item.previousUnitPrice != null && (
-                                        <span className="block text-xs text-gray-400 line-through">{item.previousUnitPrice.toFixed(2)}</span>
+                                        <span className="block text-xs text-gray-400 line-through">{item.previousUnitPrice}</span>
                                       )}
                                       {item.missingTierPrice ? (
                                         <input
@@ -1600,7 +1666,7 @@ const CustomerInvoicePage: React.FC = () => {
                                           className="w-24 px-2 py-1 border border-amber-400 rounded-md"
                                         />
                                       ) : (
-                                        <span className={item.rateChange === 'down' ? 'text-green-700 font-medium' : ''}>{item.unitPrice.toFixed(2)}</span>
+                                        <span className={item.rateChange === 'down' ? 'text-green-700 font-medium' : ''}>{item.unitPrice}</span>
                                       )}
                                       {item.rateChange === 'down' && (
                                         <span className="block text-[10px] text-green-700">qty rate · {tierPcs} pcs</span>
@@ -1618,8 +1684,10 @@ const CustomerInvoicePage: React.FC = () => {
                                         <span className="block text-[10px] text-amber-600">no price for this tier - enter rate</span>
                                       )}
                                     </td>
-                                    <td className="px-4 py-4 text-sm text-gray-900">{item.quantity}</td>
-                                    <td className="px-4 py-4 text-sm font-semibold text-gray-900">{item.totalPrice.toFixed(2)}</td>
+                                    <td className="px-4 py-2 text-sm text-gray-900">
+                                      <QtyInput value={item.quantity} label={item.category} onChange={(qty) => setLineQty(item.id, qty)} />
+                                    </td>
+                                    <td className="px-4 py-4 text-sm font-semibold text-gray-900">{item.totalPrice}</td>
                                     <td className="px-4 py-4 text-sm">
                                       <div className="flex gap-1 flex-wrap">
                                         {item.image1 || item.image2 || item.image3 ? (
@@ -1661,26 +1729,12 @@ const CustomerInvoicePage: React.FC = () => {
                                 <tr key={m.key}>
                                   <td className="px-4 py-2 text-sm text-gray-900" colSpan={4}>
                                     <label htmlFor={`mockup-${m.key}`} className="font-medium">
-                                      Flat Charges - {m.category}
+                                      MOQ Charges - {m.category}
                                     </label>
-                                    <span className="block text-xs text-gray-500">
-                                      {m.pieces} pcs (under {MOCKUP_MAX_PIECES + 1}) in this team. Once, not per piece.
-                                    </span>
                                   </td>
                                   {/* Amount in the Total column, under the line totals */}
                                   <td className="px-4 py-2 whitespace-nowrap">
-                                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-sm text-gray-900 font-medium">
-                                      Rs.
-                                      <input
-                                        id={`mockup-${m.key}`}
-                                        type="number"
-                                        min="0"
-                                        step="1"
-                                        value={m.amount}
-                                        onChange={(e) => setMockupAmounts(prev => ({ ...prev, [m.key]: e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)) }))}
-                                        className="w-24 px-2 py-1 text-right border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-regal-yellow"
-                                      />
-                                    </span>
+                                    <AmountInput id={`mockup-${m.key}`} value={m.amount} label={`MOQ Charges - ${m.category}`} align="left" onChange={(v) => setMockupAmounts(prev => ({ ...prev, [m.key]: v }))} />
                                   </td>
                                   <td colSpan={2}></td>
                                 </tr>
@@ -1692,21 +1746,10 @@ const CustomerInvoicePage: React.FC = () => {
                                     <label htmlFor={`dtf-amount-${l.id}`} className="font-medium">
                                       DTF printing - {l.category} ({metersLabel(l.dtf!.half_meters)})
                                     </label>
-                                    <span className="block text-xs text-gray-500">Roll length charge Rs. {l.dtf!.charge.toLocaleString()}.</span>
+                                    <span className="block text-xs text-gray-500">Roll length charge Rs. {l.dtf!.charge}.</span>
                                   </td>
                                   <td className="px-4 py-2 whitespace-nowrap">
-                                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-sm text-teal-700 font-medium">
-                                      Rs.
-                                      <input
-                                        id={`dtf-amount-${l.id}`}
-                                        type="number"
-                                        min="0"
-                                        step="1"
-                                        value={l.dtf!.amount}
-                                        onChange={(e) => setDtfAmount(l.id, e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)))}
-                                        className="w-24 px-2 py-1 text-right border border-teal-200 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-300"
-                                      />
-                                    </span>
+                                    <AmountInput id={`dtf-amount-${l.id}`} value={l.dtf!.amount} label={`DTF printing - ${l.category}`} align="left" onChange={(v) => setDtfAmount(l.id, v)} />
                                   </td>
                                   <td colSpan={2}></td>
                                 </tr>
@@ -1716,7 +1759,7 @@ const CustomerInvoicePage: React.FC = () => {
                               <tr className="bg-yellow-100 font-semibold text-regal-black text-sm border-t-2 border-gray-300">
                                 <td className="px-4 py-2.5" colSpan={3}>{block.team} total</td>
                                 <td className="px-4 py-2.5 whitespace-nowrap">{block.pieces} pcs</td>
-                                <td className="px-4 py-2.5 whitespace-nowrap" colSpan={3}>Rs. {block.total.toLocaleString()}</td>
+                                <td className="px-4 py-2.5 whitespace-nowrap" colSpan={3}>Rs. {block.total}</td>
                               </tr>
                             </tfoot>
                           </table>
@@ -1727,6 +1770,32 @@ const CustomerInvoicePage: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* Subtotal - each team's total (its lines + MOQ + DTF, edited in the team's block
+                above), the rush charge, then the Total - between the cart and Customer Details. */}
+            {teamBlocks.length > 0 && (
+              <div className="regal-card p-3 md:p-6">
+                <div className="text-base font-semibold text-gray-800 mb-1">Subtotal ({totalPieces} pcs)</div>
+                <div className="mb-2 pl-3 space-y-1">
+                  {teamBlocks.map(b => (
+                    <div key={b.team} className="flex justify-between items-center gap-2 text-base text-gray-700">
+                      <span>{b.team} ({b.pieces} pcs)</span>
+                      <span className="whitespace-nowrap">Rs. {b.total}</span>
+                    </div>
+                  ))}
+                </div>
+                {estimatedIsRush && estimatedRushCharge > 0 && (
+                  <div className="flex justify-between items-center gap-2 text-sm text-orange-700 font-medium mb-2">
+                    <span>Rush Charge (Rs. {rushRateValue} × {totalPieces} pcs)</span>
+                    <span className="whitespace-nowrap">+ Rs. {estimatedRushCharge}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-lg mt-2 pt-2 border-t border-gray-200">
+                  <span>Total</span>
+                  <span className="whitespace-nowrap">Rs. {totalAmount}</span>
+                </div>
+              </div>
+            )}
 
             {/* Customer Details (Right Bottom) */}
             <div className="regal-card p-3 md:p-6 sticky lg:top-4">
@@ -1834,30 +1903,16 @@ const CustomerInvoicePage: React.FC = () => {
                       <div className="text-sm text-gray-800">
                         <div className="text-xs font-semibold mb-1">Calculation</div>
                         <div className="px-3 py-2 rounded-lg bg-white border border-orange-100">
-                          Rs. {rushRateValue.toLocaleString()} × {totalPieces} pcs
+                          Rs. {rushRateValue} × {totalPieces} pcs
                         </div>
                       </div>
                       <div className="text-sm text-gray-800">
                         <div className="text-xs font-semibold mb-1">Rush charge (added to total)</div>
                         <div className="px-3 py-2 rounded-lg bg-orange-50 border border-orange-200 text-orange-800 font-bold text-right">
-                          + Rs. {estimatedRushCharge.toLocaleString()}
+                          + Rs. {estimatedRushCharge}
                         </div>
                       </div>
                     </div>
-                  </div>
-                )}
-
-                {/* Subtotal is just a heading; under it each team's total (its lines + flat
-                    charges + DTF, edited in the team's block in the cart). The total is below. */}
-                {teamBlocks.length > 0 && (
-                  <div className="mb-3 md:mb-4 p-3 rounded-lg border border-gray-200 bg-gray-50 space-y-1">
-                    <div className="text-base font-semibold text-gray-800">Subtotal ({totalPieces} pcs)</div>
-                    {teamBlocks.map(b => (
-                      <div key={b.team} className="flex justify-between items-center gap-2 text-base text-gray-700 pl-3">
-                        <span>{b.team} ({b.pieces} pcs)</span>
-                        <span className="whitespace-nowrap font-medium">Rs. {b.total.toLocaleString()}</span>
-                      </div>
-                    ))}
                   </div>
                 )}
 
@@ -1868,15 +1923,15 @@ const CustomerInvoicePage: React.FC = () => {
                     <label className="block text-sm font-medium mb-1">Total Amount</label>
                     <input
                       type="number"
-                      value={totalAmount.toFixed(2)}
+                      value={Number(totalAmount.toFixed(2))}
                       className="regal-input w-full bg-gray-100 font-semibold"
                       readOnly
                     />
                     {estimatedIsRush && estimatedRushCharge > 0 && (
-                      <p className="text-xs text-orange-700 mt-1">Includes Rs. {estimatedRushCharge.toLocaleString()} rush charge</p>
+                      <p className="text-xs text-orange-700 mt-1">Includes Rs. {estimatedRushCharge} rush charge</p>
                     )}
                     {dtfTotal > 0 && (
-                      <p className="text-xs text-teal-700 mt-1">Includes Rs. {dtfTotal.toLocaleString()} DTF printing</p>
+                      <p className="text-xs text-teal-700 mt-1">Includes Rs. {dtfTotal} DTF printing</p>
                     )}
                   </div>
 
@@ -1900,7 +1955,7 @@ const CustomerInvoicePage: React.FC = () => {
                     <label className="block text-sm font-medium mb-1">Balance</label>
                     <input
                       type="number"
-                      value={balance.toFixed(2)}
+                      value={Number(balance.toFixed(2))}
                       className={`regal-input w-full font-semibold ${balance > 0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}
                       readOnly
                     />

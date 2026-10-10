@@ -356,7 +356,7 @@ const ViewCustomerInvoicePage: React.FC = () => {
                   {flatsOf(group.team).map(mc => (
                     <tr key={`flat-${mc.category}`} className="text-gray-900">
                       <td colSpan={8} className="px-4 py-2 text-sm font-medium">
-                        Flat Charges - {mc.category}
+                        MOQ Charges - {mc.category}
                         <span className="ml-2 text-xs font-normal">{mc.pieces} pcs (under 5) in this team · once, not per piece</span>
                       </td>
                       <td className="px-4 py-2 text-sm font-semibold">Rs. {Number(mc.amount).toFixed(2)}</td>
@@ -443,7 +443,7 @@ const ViewCustomerInvoicePage: React.FC = () => {
             )}
             {!teamOrder && invoice.mockup_charges.map(mc => (
               <div key={mc.category} className="flex justify-between text-purple-700 font-medium mb-2">
-                <span>Flat Charges ({mc.category})</span>
+                <span>MOQ Charges ({mc.category})</span>
                 <span>+ Rs. {Number(mc.amount).toFixed(2)}</span>
               </div>
             ))}

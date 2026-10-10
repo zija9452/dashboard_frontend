@@ -14,7 +14,7 @@ interface SubCategory {
   options: string[];
   is_modifier?: boolean;
   is_optional?: boolean;
-  dye_options?: string[]; // options ticked "Dye" - no flat charges, dye rate instead (Ideal Pricing page)
+  dye_options?: string[]; // options ticked "Dye" - no MOQ charges, dye rate instead (Ideal Pricing page)
 }
 
 interface CustomerCategory {
@@ -490,7 +490,7 @@ const CustomerCategoryPage: React.FC = () => {
                           onChange={() => handleToggleSubCategoryFlag(subCatIndex, 'is_optional')}
                           className="rounded border-gray-300"
                         />
-                        Optional (hidden by default, shown via a "+" button)
+                        Optional (hidden by default, shown via a &quot;+&quot; button)
                       </label>
                     </div>
 
@@ -510,7 +510,7 @@ const CustomerCategoryPage: React.FC = () => {
                           />
                           <label
                             className="flex items-center gap-1 text-xs text-gray-700 cursor-pointer whitespace-nowrap"
-                            title="Dye: no flat charges, the dye rate (Ideal Pricing page) applies instead"
+                            title="Dye: no MOQ charges, the dye rate (Ideal Pricing page) applies instead"
                           >
                             <input
                               type="checkbox"
@@ -690,7 +690,7 @@ const CustomerCategoryPage: React.FC = () => {
 
             {categories.length === 0 && !loading && (
               <div className="text-center py-12 text-gray-500">
-                No customer categories found. Click "+ Add Customer Category" to create one.
+                No customer categories found. Click &quot;+ Add Customer Category&quot; to create one.
               </div>
             )}
           </div>

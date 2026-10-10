@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useToast } from '@/components/ui/Toast';
 import PageHeader from '@/components/ui/PageHeader';
 import Pagination from '@/components/ui/Pagination';
@@ -195,6 +196,12 @@ const ShopOrderPage: React.FC = () => {
               </svg>
               Search
             </button>
+            <Link
+              href="/view-customer-order"
+              className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap px-4 py-2 flex items-center gap-2"
+            >
+              Customized Orders
+            </Link>
           </div>
 
           {showSearch && (

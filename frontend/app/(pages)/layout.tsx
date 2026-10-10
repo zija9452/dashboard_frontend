@@ -10,6 +10,7 @@ import SalesmanAttendanceWidget from "@/components/SalesmanAttendanceWidget";
 import ShopOrderApprovalBadge from "@/components/ShopOrderApprovalBadge";
 import CashDepositBadge from "@/components/CashDepositBadge";
 import BranchSwitcher from "@/components/BranchSwitcher";
+import WhatsAppButton from "@/components/WhatsAppButton";
 import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
 import Image from "next/image";
 import { useEffect, useState } from "react";
@@ -207,6 +208,7 @@ function SidebarLayoutContent({ children }: { children: React.ReactNode }) {
             <main className="flex-1 md:px-6 md:pb-6 md:pt-2 bg-white">
               {children}
             </main>
+            <WhatsAppButton />
           </div>
         </div>
       </ToastProvider>

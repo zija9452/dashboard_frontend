@@ -24,7 +24,7 @@ export const QuantityTierCards: React.FC<{ summaries: CategoryTierSummary[] }> =
           </span>
           {s.mockupAmount !== null && (
             <span className="whitespace-nowrap text-xs font-semibold text-purple-700 bg-white border border-purple-200 rounded-full px-2 py-px">
-              + Rs. {s.mockupAmount.toLocaleString()} mockup
+              + Rs. {s.mockupAmount} MOQ
             </span>
           )}
           {s.dyeMultiplier > 1 && (
@@ -41,17 +41,16 @@ export const QuantityTierCards: React.FC<{ summaries: CategoryTierSummary[] }> =
               {s.next.rates.map((r, i) => (
                 <span key={i} className="whitespace-nowrap text-xs text-green-700">
                   {r.variant && <span className="text-gray-600 font-medium">{r.variant}: </span>}
-                  <b className="text-[13px]">{r.nextRate.toLocaleString()}</b>/pc
-                  {r.currentRate !== null && r.nextRate < r.currentRate && <span className="text-gray-500"> instead of {r.currentRate.toLocaleString()}</span>}
+                  <b className="text-[13px]">{r.nextRate}</b>/pc
+                  {r.currentRate !== null && r.nextRate < r.currentRate && <span className="text-gray-500"> instead of {r.currentRate}</span>}
                 </span>
               ))}
               {s.mockupAmount !== null && (
-                // The mockup charge this category drops at the next tier - struck out
-                // like any other price that goes down, plus a FREE label.
+                // The MOQ charge this category drops at the next tier - struck out
+                // like any other price that goes down.
                 <span className="whitespace-nowrap inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-px">
-                  Mockup
-                  <span className="line-through text-gray-400">Rs. {s.mockupAmount.toLocaleString()}</span>
-                  <span className="font-bold">FREE</span>
+                  MOQ
+                  <span className="line-through text-gray-400">Rs. {s.mockupAmount}</span>
                 </span>
               )}
               {s.next.tierPriceMissing && s.next.rates.length === 0 && (
@@ -78,7 +77,7 @@ export const MockupChargeRows: React.FC<{
         className="flex flex-wrap justify-between items-center gap-2 text-sm text-purple-700 font-medium mb-2 px-2 py-1.5 bg-purple-50 border border-purple-200 rounded-md"
       >
         <label htmlFor={`mockup-${m.key}`}>
-          Flat Charges - {m.category} ({m.pieces} pcs)
+          MOQ Charges - {m.category} ({m.pieces} pcs)
           <span className="block text-xs font-normal text-gray-500">
             One-time charge for orders 1-{MOCKUP_MAX_PIECES} pcs. Removed at {MOCKUP_MAX_PIECES + 1}+ pcs.
           </span>
@@ -118,14 +117,14 @@ export const MockupLinePreview: React.FC<{
   let text: React.ReactNode = null;
   if (tierPieces <= MOCKUP_MAX_PIECES) {
     if (nonDyeInCart > 0) {
-      text = <>{name} flat charges (Rs. {amount.toLocaleString()}) are already in the total, not added again.</>;
+      text = <>{name} MOQ charges (Rs. {amount}) are already in the total, not added again.</>;
     } else if (isDye) {
-      text = <>Dye: no flat charges - the dye rate applies instead.</>;
+      text = <>Dye: no MOQ charges - the dye rate applies instead.</>;
     } else {
-      text = <>+ Flat Charges ({name}, under {MOCKUP_MAX_PIECES + 1} pcs): Rs. {amount.toLocaleString()} → <b className="text-gray-900">Rs. {(lineTotal + amount).toLocaleString()}</b> with flat charges. Added once{team ? ' for this team' : ' to the total'}, not per piece.</>;
+      text = <>+ MOQ Charges ({name}, under {MOCKUP_MAX_PIECES + 1} pcs): Rs. {amount} → <b className="text-gray-900">Rs. {(lineTotal + amount)}</b> with MOQ charges. Added once{team ? ' for this team' : ' to the total'}, not per piece.</>;
     }
   } else if (nonDyeInCart > 0 && alreadyInCart <= MOCKUP_MAX_PIECES) {
-    text = <>{name} has {alreadyInCart} pcs now, so Rs. {amount.toLocaleString()} flat charges are in the total. With this item it reaches {tierPieces} pcs, so the flat charges will be removed.</>;
+    text = <>{name} has {alreadyInCart} pcs now, so Rs. {amount} MOQ charges are in the total. With this item it reaches {tierPieces} pcs, so the MOQ charges will be removed.</>;
   }
   if (!text) return null;
   return <p className="text-sm font-medium mt-1.5 px-2.5 py-2 rounded-md bg-purple-50 text-purple-700">{text}</p>;

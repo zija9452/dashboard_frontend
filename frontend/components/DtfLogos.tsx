@@ -149,8 +149,8 @@ export const DtfLogoBox: React.FC<{
               {' '}· {metersLabel(result.block.half_meters)} fits up to {inches(result.block.half_meters * HALF_METER_IN)}
             </p>
             <div className="flex flex-wrap justify-between items-baseline gap-2 rounded-md border border-teal-200 bg-teal-50 px-2.5 py-2 text-teal-700 tabular-nums">
-              <span>DTF charge · {metersLabel(result.block.half_meters)} ({metersLabel(1)} = Rs. {result.block.price_per_half_meter.toLocaleString()})</span>
-              <b className="text-base text-regal-black">Rs. {result.block.charge.toLocaleString()}</b>
+              <span>DTF charge · {metersLabel(result.block.half_meters)} ({metersLabel(1)} = Rs. {result.block.price_per_half_meter})</span>
+              <b className="text-base text-regal-black">Rs. {result.block.charge}</b>
             </div>
           </>
         )}

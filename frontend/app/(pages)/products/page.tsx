@@ -320,15 +320,25 @@ const ProductsPage: React.FC = () => {
           showConfirmButton: false
         });
       } else {
-        await productsApi.createProduct({ ...basePayload, stock_level: 0 });
-        Swal.fire({
-          title: 'Created!',
-          text: 'Product has been created successfully.',
-          icon: 'success',
-          timer: 2000,
-          timerProgressBar: true,
-          showConfirmButton: false
-        });
+        // Also created (stock 0, same barcode) in the other branch; a failed copy comes back as a warning
+        const created = await productsApi.createProduct({ ...basePayload, stock_level: 0 }) as { branch_warnings?: string[] };
+        const branchWarnings = created?.branch_warnings ?? [];
+        if (branchWarnings.length) {
+          Swal.fire({
+            title: 'Created here only',
+            text: `${branchWarnings.join(' ')} - it will be added there by the next product sync.`,
+            icon: 'warning',
+          });
+        } else {
+          Swal.fire({
+            title: 'Created!',
+            text: 'Product has been created successfully.',
+            icon: 'success',
+            timer: 2000,
+            timerProgressBar: true,
+            showConfirmButton: false
+          });
+        }
       }
 
       uploadedUrl = ''; // Saved: keep it even if the refresh below fails
@@ -634,16 +644,17 @@ const ProductsPage: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium mb-1">
                   Barcode
-                  <span className="text-xs text-gray-500 ml-2">(Auto-generated, scanner compatible)</span>
+                  <span className="text-xs text-gray-500 ml-2">(Auto-generated, editable)</span>
                 </label>
                 <input
                   type="text"
                   name="barcode"
                   value={formData.barcode}
-                  readOnly
-                  className="regal-input w-full font-mono bg-gray-50 cursor-not-allowed"
+                  onChange={(e) => setFormData(prev => ({ ...prev, barcode: e.target.value.trim() }))}
+                  className="regal-input w-full font-mono"
                   placeholder="Auto-generated barcode"
-                  disabled
+                  maxLength={50}
+                  required
                 />
               </div>
 

@@ -293,11 +293,15 @@ const CashDepositsPage: React.FC = () => {
         if (response.ok) {
           const data = await response.json();
           setRole(data.user?.role || '');
-          // Default view: sales/admin see what waits for their approval (Pending),
-          // the cashier sees what came back to them (Rejected, with payments missing proof)
+          // Default view: sales see what waits for their approval (Pending, with payments
+          // missing proof), the cashier sees what came back to them (Rejected, with payments
+          // missing proof), admin sees everything (All) (2026-10-13)
           if (data.user?.role === 'cashier') {
             setStatusFilter('REJECTED');
             setApplied((prev) => ({ ...prev, status: 'REJECTED' }));
+          } else if (data.user?.role === 'admin') {
+            setStatusFilter('');
+            setApplied((prev) => ({ ...prev, status: '' }));
           }
         }
       } catch (error) {

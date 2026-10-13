@@ -264,6 +264,10 @@ const WarehouseInvoicePage: React.FC = () => {
       showToast('Product not found. Please select from the list.', 'error');
       return;
     }
+    if (unitPrice === '' || Number(unitPrice) < 0) {
+      showToast('Please enter a valid unit price', 'error');
+      return;
+    }
     if (!quantity || Number(quantity) < 1) {
       showToast('Quantity must be at least 1', 'error');
       return;
@@ -417,9 +421,10 @@ const WarehouseInvoicePage: React.FC = () => {
                 <label className="block text-sm font-medium mb-1">Unit Price</label>
                 <input
                   type="number"
+                  min="0"
                   value={unitPrice}
-                  readOnly
-                  className="regal-input w-full h-9 bg-gray-50"
+                  onChange={(e) => setUnitPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                  className="regal-input w-full h-9"
                   placeholder="Unit Price"
                 />
               </div>

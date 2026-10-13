@@ -199,7 +199,7 @@ const StockPage: React.FC = () => {
 
       <div className="flex flex-col sm:flex-row justify-between gap-4 mb-6">
         {/* Left side - Action Buttons */}
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 min-w-0">
           <button
             onClick={() => router.push('/stock/stockin')}
             className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
@@ -235,11 +235,20 @@ const StockPage: React.FC = () => {
           >
             Adjust Stock
           </button>
+
+          <button
+            onClick={() => router.push('/stock/transfer')}
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+          >
+            Transfer Stock
+          </button>
         </div>
 
         {/* Right side - Search */}
-        <div className="w-full sm:w-auto flex gap-2">
-          <div className="relative">
+        {/* Fixed width + items-start: the 5 buttons wrap instead of squeezing the search
+            box (squeezed, the icon dropped below it and Clear stretched to the row height) */}
+        <div className="w-full sm:w-auto sm:shrink-0 flex items-start gap-2">
+          <div className="relative flex-1 sm:flex-none sm:w-72">
             <input
               id="searchInput"
               type="text"

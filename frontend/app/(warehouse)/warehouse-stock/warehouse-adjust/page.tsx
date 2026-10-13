@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/ui/PageHeader';
+import ProductSearchTabs, { SearchProduct } from '@/components/ProductSearchTabs';
 
 interface WarehouseAdjustItem {
   product_id: string;
@@ -16,91 +17,33 @@ interface WarehouseAdjustItem {
   reason: string;
 }
 
-interface Product {
-  pro_id: string;
-  pro_name: string;
-  pro_barcode: string;
-  pro_price: number;
-  pro_cost: number;
-  stock: number;
-  warehouse_stock: number;
-  is_warehouse_product: boolean;
-}
-
 const WarehouseAdjustStockPage: React.FC = () => {
   const router = useRouter();
   const { showToast } = useToast();
-  const barcodeInputRef = useRef<HTMLInputElement>(null);
-
-  const [barcode, setBarcode] = useState('');
   const [adjustItems, setAdjustItems] = useState<WarehouseAdjustItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [searching, setSearching] = useState(false);
 
-  // Focus barcode input on mount
-  useEffect(() => {
-    barcodeInputRef.current?.focus();
-  }, []);
-
-  // Search products by barcode
-  const handleBarcodeSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!barcode.trim()) {
-      showToast('Please enter a barcode', 'error');
+  // Product picked by barcode scan or name search
+  const addProduct = (product: SearchProduct) => {
+    if (adjustItems.some(item => item.product_id === product.pro_id)) {
+      showToast('Product already in list', 'warning');
       return;
     }
-
-    if (searching) return;
-    setSearching(true);
-
-    try {
-      const response = await fetch(`/api/products/searchbybarcode?barcode=${encodeURIComponent(barcode)}`, {
-        method: 'GET',
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        const product = await response.json();
-        if (product && product.pro_id) {
-          // Check if product already in list
-          const exists = adjustItems.find(item => item.product_id === product.pro_id);
-          if (exists) {
-            showToast('Product already in list', 'warning');
-          } else {
-            if (!product.is_warehouse_product) {
-              showToast('This is not a warehouse product', 'error');
-              setSearching(false);
-              return;
-            }
-            
-            const newItem: WarehouseAdjustItem = {
-              product_id: product.pro_id,
-              product_name: product.pro_name,
-              barcode: product.pro_barcode,
-              current_stock: product.warehouse_stock || 0,
-              action: 'increase',
-              quantity: 0,
-              reason: 'Stock count adjustment',
-            };
-            setAdjustItems([...adjustItems, newItem]);
-            showToast(`Product added: ${product.pro_name}`, 'success');
-          }
-        } else {
-          showToast('Product not found', 'error');
-        }
-      } else {
-        const errorData = await response.json();
-        showToast(errorData.error || 'Error fetching product', 'error');
-      }
-    } catch (error) {
-      console.error('Error fetching product:', error);
-      showToast('Error fetching product', 'error');
-    } finally {
-      setSearching(false);
-      setBarcode('');
-      barcodeInputRef.current?.focus();
+    if (!product.is_warehouse_product) {
+      showToast('This is not a warehouse product', 'error');
+      return;
     }
+    const newItem: WarehouseAdjustItem = {
+      product_id: product.pro_id,
+      product_name: product.pro_name,
+      barcode: product.pro_barcode,
+      current_stock: product.warehouse_stock || 0,
+      action: 'increase',
+      quantity: 0,
+      reason: 'Stock count adjustment',
+    };
+    setAdjustItems(prev => [...prev, newItem]);
+    showToast(`Product added: ${product.pro_name}`, 'success');
   };
 
   // Update item field
@@ -227,37 +170,8 @@ const WarehouseAdjustStockPage: React.FC = () => {
     <div className="p-6">
       <PageHeader title="Warehouse Adjust Stock" />
 
-      {/* Barcode Scanner Input */}
-      <div className="regal-card mb-6">
-        <h3 className="text-lg font-semibold mb-4">Search Product by Barcode</h3>
-        <form onSubmit={handleBarcodeSubmit} className="flex gap-4">
-          <input
-            ref={barcodeInputRef}
-            type="text"
-            value={barcode}
-            onChange={(e) => setBarcode(e.target.value)}
-            placeholder="Scan or enter barcode..."
-            className="regal-input flex-grow"
-            autoFocus
-          />
-          <button
-            type="submit"
-            disabled={searching}
-            className={`regal-btn flex items-center justify-center min-w-[130px] transition-all ${
-              searching ? 'bg-regal-yellow/50 cursor-not-allowed text-regal-black/60' : 'bg-regal-yellow text-regal-black'
-            }`}
-          >
-            {searching ? (
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-regal-black/30 border-t-regal-black rounded-full animate-spin"></div>
-                <span>Search</span>
-              </div>
-            ) : (
-              'Search'
-            )}
-          </button>
-        </form>
-      </div>
+      {/* Barcode scan / name search (warehouse products only) */}
+      <ProductSearchTabs onSelect={addProduct} warehouseOnly />
 
       {/* Adjustment Items Table */}
       {adjustItems.length > 0 && (
@@ -359,7 +273,7 @@ const WarehouseAdjustStockPage: React.FC = () => {
       {adjustItems.length === 0 && (
         <div className="regal-card text-center py-12 text-gray-500">
           <p className="text-lg">No products added yet</p>
-          <p className="text-sm mt-2">Search for products by barcode to adjust their warehouse stock</p>
+          <p className="text-sm mt-2">Scan a barcode or search by name to add warehouse products</p>
         </div>
       )}
     </div>

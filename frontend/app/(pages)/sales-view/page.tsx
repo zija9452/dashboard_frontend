@@ -156,6 +156,7 @@ const SalesViewPage: React.FC = () => {
     { value: 'expense', label: 'Expense' },
     { value: 'refund', label: 'Refund' },
     { value: 'stockadjustment', label: 'Stock Adjustment' },
+    { value: 'stocktransfer', label: 'Stock Transfer' },
   ];
 
   // Fetch sales data
@@ -230,6 +231,9 @@ const SalesViewPage: React.FC = () => {
       } else if (reportType === 'stockadjustment') {
         apiUrl = `/api/salesview/stock-adjustments/excel?from_date=${fromDate}&to_date=${toDate}&branch=${salesBranch}`;
         reportName = 'Stock Adjustments';
+      } else if (reportType === 'stocktransfer') {
+        apiUrl = `/api/salesview/stock-transfers/excel?from_date=${fromDate}&to_date=${toDate}&branch=${salesBranch}`;
+        reportName = 'Stock Transfers';
       } else {
         showToast('Please select Walk-in Invoice, Customer Invoice, Expense or Stock Adjustment report type', 'info');
         setGeneratingExcel(false);
@@ -299,6 +303,9 @@ const SalesViewPage: React.FC = () => {
       } else if (reportType === 'stockadjustment') {
         apiUrl = `/api/salesview/stock-adjustments/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${salesBranch}`;
         reportTitleText = 'Stock Adjustment Report';
+      } else if (reportType === 'stocktransfer') {
+        apiUrl = `/api/salesview/stock-transfers/pdf?from_date=${fromDate}&to_date=${toDate}&branch=${salesBranch}`;
+        reportTitleText = 'Stock Transfer Report';
       } else {
         showToast('Please select Walk-in Invoice, Customer Invoice, Expense or Stock Adjustment report type', 'info');
         setGeneratingPdf(false);

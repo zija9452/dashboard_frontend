@@ -17,7 +17,7 @@ export const BRANCHES: Branch[] = [
 
 // Light House keeps the original Firestore signal ids; other branches get
 // their own doc (mirrors branch_signal_id() in backend utils/firestore_signals.py).
-const DEFAULT_BRANCH = 'lighthouse';
+export const DEFAULT_BRANCH = 'lighthouse';
 
 export const branchSignalId = (signalId: string, branchCode: string): string =>
   branchCode === DEFAULT_BRANCH ? signalId : `${signalId}__${branchCode}`;

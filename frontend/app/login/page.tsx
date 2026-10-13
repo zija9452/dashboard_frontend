@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useSession } from '@/auth/session-provider';
-import { BRANCHES } from '@/lib/branch';
+import { BRANCHES, DEFAULT_BRANCH } from '@/lib/branch';
 import { useRouter } from 'next/navigation';
 import { BuildingStorefrontIcon, EyeIcon, EyeSlashIcon, LockClosedIcon, UserCircleIcon, UserGroupIcon } from '@heroicons/react/24/outline';
 
@@ -35,7 +35,9 @@ const LoginPage: React.FC = () => {
 
     try {
       // Prevent credentials from being passed in URL by ensuring they're only in request body
-      await signIn({ username, password, role: selectedRole, branch: selectedBranch });
+      // Warehouse is only in Light House, so a warehouse login always opens Light House
+      const branch = selectedRole === 'warehouse' ? DEFAULT_BRANCH : selectedBranch;
+      await signIn({ username, password, role: selectedRole, branch });
 
       // Clear form fields after successful login
       setUsername('');

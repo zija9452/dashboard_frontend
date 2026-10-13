@@ -6,12 +6,13 @@ import { Branch, BRANCHES, useBranch } from '@/lib/branch';
 
 interface BranchSwitcherProps {
   userRole: string | null;
+  label?: string; // Shown instead of the branch name (warehouse layout: "Main Warehouse")
 }
 
 // Top bar: shows the logged-in branch; admin, sales and production can switch
 // to another branch (must match BRANCH_SWITCH_ROLES in backend routers/auth.py).
 // ml-14 keeps it clear of the fixed PageHamburgerButton.
-const BranchSwitcher: React.FC<BranchSwitcherProps> = ({ userRole }) => {
+const BranchSwitcher: React.FC<BranchSwitcherProps> = ({ userRole, label }) => {
   const branch = useBranch();
   const branches = BRANCHES;
   // Branch being switched to - shows the loading overlay until the page reloads
@@ -66,7 +67,7 @@ const BranchSwitcher: React.FC<BranchSwitcherProps> = ({ userRole }) => {
           ))}
         </select>
       ) : (
-        <span className="text-sm font-semibold text-regal-black">{branch.name}</span>
+        <span className="text-sm font-semibold text-regal-black">{label ?? branch.name}</span>
       )}
       {error && <span className="text-xs text-red-600">{error}</span>}
 

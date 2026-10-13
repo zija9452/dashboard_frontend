@@ -739,8 +739,6 @@ const ShopWarehouseProductsPage: React.FC = () => {
                   <th className="px-2 py-5 w-20">Cost</th>
                   <th className="px-2 py-5 text-left w-24">Barcode</th>
                   <th className="px-2 py-5 w-20">Discount</th>
-                  <th className="px-2 py-5 w-20">Stock</th>
-                  <th className="px-2 py-5 w-20">Limited Qty</th>
                   <th className="px-2 py-5 text-left w-28">Category</th>
                   <th className="px-2 py-5 text-left w-28">Brand</th>
                   <th className="px-2 py-5 text-left w-24">Article No</th>
@@ -761,8 +759,6 @@ const ShopWarehouseProductsPage: React.FC = () => {
                     <td className="px-2 py-4 text-center">{product.pro_cost}</td>
                     <td className="px-2 py-4">{product.pro_barcode || '-'}</td>
                     <td className="px-2 py-4  text-center">{product.pro_dis !== undefined && product.pro_dis !== null ? `${product.pro_dis}%` : '0%'}</td>
-                    <td className="px-2 py-4 text-center">{product.stock}</td>
-                    <td className="px-2 py-4 text-center">{product.limitedquan}</td>
                     <td className="px-2 py-4">{product.cat_id_fk || '-'}</td>
                     <td className="px-2 py-4">{product.brand || '-'}</td>
                     

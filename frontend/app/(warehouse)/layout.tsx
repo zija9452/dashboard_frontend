@@ -99,7 +99,7 @@ function WarehouseSidebarLayoutContent({ children }: { children: React.ReactNode
             }`}
           >
             <header className="bg-white shadow-sm sticky top-0 z-20 flex items-center justify-end px-4 py-2">
-              <BranchSwitcher userRole={userRole} />
+              <BranchSwitcher userRole={userRole} label="Main Warehouse" />
             </header>
             <main className="flex-1 md:px-6 md:pb-6 md:pt-2 bg-white">
               {children}

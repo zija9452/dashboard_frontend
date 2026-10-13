@@ -774,8 +774,9 @@ const CashDepositsPage: React.FC = () => {
         </select>
       </div>
 
-      {/* Line 1: New Deposit + Search button (opens search + dropdowns, like View Customer Orders) */}
-      <div className="flex gap-2 mb-4">
+      {/* Line 1: New Deposit + Search button (opens search + dropdowns, like View Customer Orders).
+          Shown once the role is known, so New Deposit does not pop in later and push Search aside */}
+      <div className={`flex gap-2 mb-4 ${userLoaded ? '' : 'invisible'}`}>
         {canSubmit && (
           <button
             onClick={() => (showForm ? closeForm() : openNewForm())}

@@ -56,7 +56,7 @@ function WarehouseSidebarLayoutContent({ children }: { children: React.ReactNode
               </div></Link>
 
               <div className="mt-5 flex-1 flex flex-col overflow-hidden">
-                <nav className="h-[70%] overflow-y-auto px-2">
+                <nav className="h-[90%] overflow-y-auto px-2">
                   <SidebarLink href="/warehouse-dashboard" className="text-base py-3 border-b border-gray-200">
                     Warehouse Dashboard
                   </SidebarLink>

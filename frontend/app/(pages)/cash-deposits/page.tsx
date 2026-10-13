@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import Pagination from '@/components/ui/Pagination';
@@ -10,8 +10,9 @@ import { CASH_DEPOSITS_CHANGED } from '@/components/CashDepositBadge';
 import {
   MAX_PROOF_IMAGES, PAYMENT_PROOFS_CHANGED, PaymentProof, proofFilesError, uploadProofImages,
 } from '@/lib/paymentMethods';
-import { ArrowDownTrayIcon, MagnifyingGlassPlusIcon } from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, MagnifyingGlassPlusIcon, ShareIcon } from '@heroicons/react/24/outline';
 import { useBranch } from '@/lib/branch';
+import { flushSync } from 'react-dom';
 
 type DepositStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 // Pay slips also have MISSING (online payment saved, no screenshot yet)
@@ -135,9 +136,53 @@ const downloadUrl = (url: string, name: string) =>
 // "European Sports Karim Abad" -> "Karim Abad"
 const shortBranchName = (name: string) => name.replace(/^European Sports\s+/i, '').trim();
 
-// Download a slip with a yellow "<BRANCH> BRANCH" band added under the photo (2026-10-10),
-// so HR can tell which shop it came from. The photo keeps its full size; the band is
-// extra height, nothing is covered. Saved as e.g. LightHouse_DEP-0002_slip_1.jpg.
+// Slip photo with a yellow "<BRANCH> BRANCH" band added under it (2026-10-10), so HR can
+// tell which shop it came from. The photo keeps its full size; the band is extra height,
+// nothing is covered. Named e.g. LightHouse_DEP-0002_slip_1.jpg. Used by Download and Share.
+// Branch unknown -> the original photo. Throws if the image can't be read.
+const makeBandedSlip = async (url: string, name: string, branchName: string | null): Promise<File> => {
+  const safeName = name.replace(/[^A-Za-z0-9_-]/g, '_');
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const original = await response.blob();
+  if (!branchName) return new File([original], `${safeName}.jpg`, { type: original.type || 'image/jpeg' });
+
+  const branch = shortBranchName(branchName);
+  const photo = await createImageBitmap(original);
+  const { width, height } = photo;
+
+  const bandHeight = Math.max(40, Math.round(width * 0.07));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height + bandHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas not supported');
+
+  ctx.drawImage(photo, 0, 0);
+  photo.close();
+  ctx.fillStyle = '#FFD01F'; // theme yellow (regal-yellow)
+  ctx.fillRect(0, height, width, bandHeight);
+
+  // LIGHT HOUSE BRANCH / KARIMABAD BRANCH (Karimabad is written as one word)
+  const label = `${branch.toUpperCase().replace(/\s+/g, ' ').replace('KARIM ABAD', 'KARIMABAD')} BRANCH`;
+  let fontSize = Math.round(bandHeight * 0.5);
+  ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+  // Shrink to fit narrow (portrait) photos
+  while (fontSize > 10 && ctx.measureText(label).width > width * 0.92) {
+    fontSize -= 2;
+    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+  }
+  ctx.fillStyle = '#000000'; // black text, like the yellow buttons (regal-black)
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, width / 2, height + bandHeight / 2);
+
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+  if (!blob) throw new Error('Could not create image');
+  return new File([blob], `${branch.replace(/[^A-Za-z0-9]/g, '')}_${safeName}.jpg`, { type: 'image/jpeg' });
+};
+
+// Download the slip with the branch band.
 // Branch unknown or the image can't be read -> plain download as before.
 const downloadWithBranchBand = async (url: string, name: string, branchName: string | null) => {
   const fallback = () => {
@@ -147,44 +192,11 @@ const downloadWithBranchBand = async (url: string, name: string, branchName: str
     fallback();
     return;
   }
-  const branch = shortBranchName(branchName);
   try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const photo = await createImageBitmap(await response.blob());
-    const { width, height } = photo;
-
-    const bandHeight = Math.max(40, Math.round(width * 0.07));
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height + bandHeight;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Canvas not supported');
-
-    ctx.drawImage(photo, 0, 0);
-    photo.close();
-    ctx.fillStyle = '#FFD01F'; // theme yellow (regal-yellow)
-    ctx.fillRect(0, height, width, bandHeight);
-
-    // LIGHT HOUSE BRANCH / KARIMABAD BRANCH (Karimabad is written as one word)
-    const label = `${branch.toUpperCase().replace(/\s+/g, ' ').replace('KARIM ABAD', 'KARIMABAD')} BRANCH`;
-    let fontSize = Math.round(bandHeight * 0.5);
-    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-    // Shrink to fit narrow (portrait) photos
-    while (fontSize > 10 && ctx.measureText(label).width > width * 0.92) {
-      fontSize -= 2;
-      ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-    }
-    ctx.fillStyle = '#000000'; // black text, like the yellow buttons (regal-black)
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, width / 2, height + bandHeight / 2);
-
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
-    if (!blob) throw new Error('Could not create image');
+    const file = await makeBandedSlip(url, name, branchName);
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `${branch.replace(/[^A-Za-z0-9]/g, '')}_${name.replace(/[^A-Za-z0-9_-]/g, '_')}.jpg`;
+    link.href = URL.createObjectURL(file);
+    link.download = file.name;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -194,6 +206,18 @@ const downloadWithBranchBand = async (url: string, name: string, branchName: str
     fallback();
   }
 };
+
+const ShareButton = ({ busy, onShare }: { busy: boolean; onShare: () => void }) => (
+  <button
+    type="button"
+    onClick={onShare}
+    className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-regal-yellow px-3 py-1.5 text-sm font-medium text-regal-black shadow-sm transition-colors hover:bg-yellow-200"
+    title="Share on WhatsApp"
+  >
+    {busy ? <Spinner /> : <ShareIcon className="h-4 w-4" />}
+    Share
+  </button>
+);
 
 const Spinner = () => (
   <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
@@ -218,13 +242,14 @@ const CashDepositsPage: React.FC = () => {
   const loading = depositsLoading || proofsLoading;
   // Filter inputs; applied on Fetch (like Sales View)
   const [typeFilter, setTypeFilter] = useState<RecordType>('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('PENDING');
+  // Default: everything (Status All, Online Payment All, All Time) for every role (2026-10-13)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
   // Smart search: a date (dd/mm or dd/mm/yyyy) or deposit / invoice no, bank, customer, name, amount
   const [search, setSearch] = useState('');
-  const [period, setPeriod] = useState<Period>('month'); // applies at once, like Google
+  const [period, setPeriod] = useState<Period>('all'); // applies at once, like Google
   const [applied, setApplied] = useState<{ type: RecordType; status: StatusFilter; search: string }>({
     type: '',
-    status: 'PENDING',
+    status: '',
     search: '',
   });
   const [depositPage, setDepositPage] = useState(1);
@@ -253,6 +278,10 @@ const CashDepositsPage: React.FC = () => {
   const [showRejectBox, setShowRejectBox] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [zoomSrc, setZoomSrc] = useState<string | null>(null);
+  // Share: slip URL being prepared, and photos already made (a second tap shares at once)
+  const [sharingUrl, setSharingUrl] = useState<string | null>(null);
+  const sharedFiles = useRef(new Map<string, File>());
+  const shareBusy = useRef(false);
 
   const isAdmin = role === 'admin';
   const canSubmit = role === 'admin' || role === 'cashier';
@@ -267,12 +296,6 @@ const CashDepositsPage: React.FC = () => {
         if (response.ok) {
           const data = await response.json();
           setRole(data.user?.role || '');
-          // Default view: sales/admin see what waits for their approval (Pending),
-          // the cashier sees what came back to them (Rejected, with payments missing proof)
-          if (data.user?.role === 'cashier') {
-            setStatusFilter('REJECTED');
-            setApplied((prev) => ({ ...prev, status: 'REJECTED' }));
-          }
         }
       } catch (error) {
         console.error('Error fetching user role:', error);
@@ -653,6 +676,59 @@ const CashDepositsPage: React.FC = () => {
       setProofUploading(false);
     }
   };
+
+  // Share the slip photo (with the branch band, no caption) through the phone / Windows
+  // share menu: WhatsApp -> group -> Send. Needs HTTPS; on a computer WhatsApp shows
+  // in the menu only when WhatsApp Desktop is installed.
+  // Nothing on the page may re-render while the menu is open: a focus / DOM change
+  // closes the Windows share box at once. So the spinner is cleared (flushSync) before
+  // share() and the busy guard is a ref, not state.
+  const shareSlip = async (url: string, name: string) => {
+    if (shareBusy.current) return;
+    shareBusy.current = true;
+    try {
+      let file = sharedFiles.current.get(url);
+      if (!file) {
+        setSharingUrl(url);
+        try {
+          file = await makeBandedSlip(url, name, currentBranch?.name ?? null);
+          sharedFiles.current.set(url, file);
+        } finally {
+          flushSync(() => setSharingUrl(null));
+        }
+      }
+      if (!navigator.canShare?.({ files: [file] })) {
+        showToast('This browser cannot share photos. Use Download, then send it on WhatsApp.', 'info');
+        return;
+      }
+      await navigator.share({ files: [file] });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return; // share menu closed
+      if (error instanceof DOMException && error.name === 'NotAllowedError') {
+        // Making the photo took too long for the browser; it is ready now
+        showToast('Photo ready - tap Share again', 'info');
+        return;
+      }
+      console.error('Slip share failed:', error);
+      showToast('Could not share the slip', 'error');
+    } finally {
+      shareBusy.current = false;
+    }
+  };
+
+  // Make the slip photos as soon as the panel opens, so Share opens the menu at once
+  useEffect(() => {
+    if (!selected) return;
+    const urls = isDeposit(selected)
+      ? selected.slips.map((s, i) => [s.file_url, `${selected.deposit_no}_slip_${i + 1}`])
+      : selected.images.map((img, i) => [img.file_url, `${selected.invoice_no}_payment_${i + 1}`]);
+    urls.forEach(([url, name]) => {
+      if (sharedFiles.current.has(url)) return;
+      makeBandedSlip(url, name, currentBranch?.name ?? null)
+        .then((file) => sharedFiles.current.set(url, file))
+        .catch(() => {}); // made again on Share
+    });
+  }, [selected, currentBranch]);
 
   // ---------- render ----------
 
@@ -1172,6 +1248,8 @@ const CashDepositsPage: React.FC = () => {
                             {s.bank_name} · <span className="font-semibold">Rs. {formatAmount(s.amount)}</span>
                           </p>
                         </div>
+                        <div className="flex gap-2">
+                        <ShareButton busy={sharingUrl === s.file_url} onShare={() => shareSlip(s.file_url, `${selected.deposit_no}_slip_${index + 1}`)} />
                         <button
                           type="button"
                           onClick={() => downloadWithBranchBand(s.file_url, `${selected.deposit_no}_slip_${index + 1}`, currentBranch?.name ?? null)}
@@ -1181,6 +1259,7 @@ const CashDepositsPage: React.FC = () => {
                           <ArrowDownTrayIcon className="h-4 w-4" />
                           Download
                         </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1357,6 +1436,7 @@ const CashDepositsPage: React.FC = () => {
                               Delete
                             </button>
                           )}
+                          <ShareButton busy={sharingUrl === img.file_url} onShare={() => shareSlip(img.file_url, `${selected.invoice_no}_payment_${index + 1}`)} />
                           <button
                             type="button"
                             onClick={() => downloadWithBranchBand(img.file_url, `${selected.invoice_no}_payment_${index + 1}`, currentBranch?.name ?? null)}

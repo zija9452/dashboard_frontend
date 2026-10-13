@@ -71,11 +71,11 @@ type RecordRow = Deposit | PaymentProof;
 const isDeposit = (r: RecordRow): r is Deposit => r.type === 'DEPOSIT';
 
 const STATUS_OPTIONS: { label: string; value: StatusFilter }[] = [
+  { label: 'All', value: '' },
   { label: 'Pending', value: 'PENDING' },
   { label: 'Approved', value: 'APPROVED' },
   { label: 'Rejected', value: 'REJECTED' },
   { label: 'Pay Slip Not Attached', value: 'MISSING' },
-  { label: 'All', value: '' },
 ];
 
 const TYPE_OPTIONS: { label: string; value: RecordType }[] = [
@@ -239,17 +239,16 @@ const CashDepositsPage: React.FC = () => {
   // Start as loading: the lists wait for the user role first, so no "No records" flash
   const [depositsLoading, setDepositsLoading] = useState(true);
   const [proofsLoading, setProofsLoading] = useState(true);
-  const loading = depositsLoading || proofsLoading;
-  // Filter inputs; applied on Fetch (like Sales View)
+  // Filter inputs; applied at once (see applyFilters)
   const [typeFilter, setTypeFilter] = useState<RecordType>('');
-  // Default: everything (Status All, Online Payment All, All Time) for every role (2026-10-13)
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('PENDING');
   // Smart search: a date (dd/mm or dd/mm/yyyy) or deposit / invoice no, bank, customer, name, amount
   const [search, setSearch] = useState('');
-  const [period, setPeriod] = useState<Period>('all'); // applies at once, like Google
+  const [showSearch, setShowSearch] = useState(false); // search + dropdowns open on the Search button
+  const [period, setPeriod] = useState<Period>('month'); // applies at once, like Google
   const [applied, setApplied] = useState<{ type: RecordType; status: StatusFilter; search: string }>({
     type: '',
-    status: '',
+    status: 'PENDING',
     search: '',
   });
   const [depositPage, setDepositPage] = useState(1);
@@ -296,6 +295,12 @@ const CashDepositsPage: React.FC = () => {
         if (response.ok) {
           const data = await response.json();
           setRole(data.user?.role || '');
+          // Default view: sales/admin see what waits for their approval (Pending),
+          // the cashier sees what came back to them (Rejected, with payments missing proof)
+          if (data.user?.role === 'cashier') {
+            setStatusFilter('REJECTED');
+            setApplied((prev) => ({ ...prev, status: 'REJECTED' }));
+          }
         }
       } catch (error) {
         console.error('Error fetching user role:', error);
@@ -315,11 +320,20 @@ const CashDepositsPage: React.FC = () => {
     return params;
   }, [applied, period]);
 
-  const applyFilters = () => {
-    setApplied({ type: typeFilter, status: statusFilter, search: search.trim() });
+  // Filters apply at once (no Fetch button): dropdowns on change, search on Enter
+  // or when typing stops
+  const applyFilters = useCallback((patch: Partial<typeof applied>) => {
+    setApplied((prev) => ({ ...prev, ...patch }));
     setDepositPage(1);
     setProofPage(1);
-  };
+  }, []);
+
+  useEffect(() => {
+    const value = search.trim();
+    if (value === applied.search) return;
+    const timer = setTimeout(() => applyFilters({ search: value }), 500);
+    return () => clearTimeout(timer);
+  }, [search, applied.search, applyFilters]);
 
   // One column's page: DEPOSIT, or PROOF (customized + walk-in) / one of them
   const fetchRecords = useCallback(async (type: string, page: number) => {
@@ -760,28 +774,38 @@ const CashDepositsPage: React.FC = () => {
         </select>
       </div>
 
-      {/* Line 1: action button */}
-      {canSubmit && (
-        <div className="mb-4">
+      {/* Line 1: New Deposit + Search button (opens search + dropdowns, like View Customer Orders) */}
+      <div className="flex gap-2 mb-4">
+        {canSubmit && (
           <button
             onClick={() => (showForm ? closeForm() : openNewForm())}
             className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
           >
             {showForm && !editing ? 'Cancel' : '+ New Deposit'}
           </button>
-        </div>
-      )}
+        )}
+        <button
+          onClick={() => setShowSearch(!showSearch)}
+          className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap px-4 py-2 flex items-center gap-2"
+        >
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          Search
+        </button>
+      </div>
 
-      {/* Line 2: filters (Sales View style) */}
-      <div className="flex flex-col md:flex-row md:items-end gap-4 mb-6">
-        <div className="grid grid-cols-2 md:flex gap-2 md:gap-4">
+      {/* Line 2: filters, shown on Search click; apply at once - no Fetch button */}
+      {showSearch && (
+        <div className="grid grid-cols-2 md:flex md:items-end gap-2 md:gap-4 mb-6">
           <div className="col-span-2 md:w-80">
             <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
+              onKeyDown={(e) => e.key === 'Enter' && applyFilters({ search: search.trim() })}
+              autoFocus
               placeholder="Date (03/10), Deposit / Invoice No, Bank, Customer, Amount"
               className="regal-input w-full"
             />
@@ -790,7 +814,11 @@ const CashDepositsPage: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              onChange={(e) => {
+                const value = e.target.value as StatusFilter;
+                setStatusFilter(value);
+                applyFilters({ status: value });
+              }}
               className="regal-input w-full"
             >
               {STATUS_OPTIONS.map((option) => (
@@ -804,7 +832,11 @@ const CashDepositsPage: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">Online Payment</label>
             <select
               value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value as RecordType)}
+              onChange={(e) => {
+                const value = e.target.value as RecordType;
+                setTypeFilter(value);
+                applyFilters({ type: value });
+              }}
               className="regal-input w-full"
             >
               {TYPE_OPTIONS.map((option) => (
@@ -815,17 +847,7 @@ const CashDepositsPage: React.FC = () => {
             </select>
           </div>
         </div>
-
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={applyFilters}
-            disabled={loading}
-            className="text-regal-black w-24 bg-regal-yellow py-3 rounded-md text-sm font-semibold transition disabled:opacity-50"
-          >
-            {loading ? 'Fetching...' : 'Fetch'}
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* Add/Edit Form (inline, like Products) */}
       {showForm && (

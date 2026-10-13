@@ -3,7 +3,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 // Floating button on every page: opens WhatsApp on its chat list (no specific
-// chat). Phone -> WhatsApp app; computer -> WhatsApp Web in a new tab.
+// chat) in the WhatsApp app - phone app, or WhatsApp Desktop on a computer.
+// (WhatsApp Web was dropped: every click reopened and reloaded a new tab.)
 // Slips go to a group via Share.
 // Drag it (like the Vercel toolbar); on release it snaps to the nearest of the
 // four corners, never stays mid-screen. The corner is remembered per browser.
@@ -12,7 +13,6 @@ const SIZE = 56; // h-14 w-14
 const MARGIN = 20; // gap from the screen edges in a corner
 const DRAG_THRESHOLD = 5; // px moved before a press counts as a drag, not a click
 const STORAGE_KEY = 'whatsapp-button-corner';
-const WHATSAPP_TAB = 'european-sports-whatsapp'; // window name, so clicks reuse one tab
 
 type Corner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 const CORNERS: Corner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
@@ -75,21 +75,9 @@ const WhatsAppButton: React.FC = () => {
   }, []);
 
   const openWhatsApp = () => {
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobile) {
-      window.location.href = 'whatsapp://';
-    } else {
-      // Named tab: open('', name) brings back the WhatsApp tab this page opened
-      // earlier without reloading it; only a fresh (blank) tab gets the URL.
-      const tab = window.open('', WHATSAPP_TAB);
-      if (!tab) return; // popup blocked
-      try {
-        if (tab.location.href === 'about:blank') tab.location.href = 'https://web.whatsapp.com/';
-      } catch {
-        // Cross-origin -> WhatsApp Web is already loaded in that tab
-      }
-      tab.focus();
-    }
+    // Phone and computer both: the installed WhatsApp app (an open one comes to
+    // the front). Without the app installed nothing happens.
+    window.location.href = 'whatsapp://';
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {

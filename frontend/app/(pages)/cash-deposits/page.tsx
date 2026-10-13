@@ -114,7 +114,7 @@ const STATUS_BADGE: Record<RecordStatus, string> = {
   REJECTED: 'bg-red-100 text-red-800',
 };
 
-const BANKS = ['HBL', 'MCB', 'UBL', 'Meezan Bank', 'Islami Bank', 'Allied Bank', 'Bank Alfalah', 'Bank Al Habib', 'Faysal Bank', 'Askari Bank', 'National Bank'];
+const BANKS = ['Faysal Bank', 'Islami Bank', 'Jns Sportswear Bank'];
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 const PAGE_SIZE = 20;
 // Each column fills the screen height whatever the number of entries; more rows scroll inside it
@@ -241,14 +241,15 @@ const CashDepositsPage: React.FC = () => {
   const [proofsLoading, setProofsLoading] = useState(true);
   // Filter inputs; applied at once (see applyFilters)
   const [typeFilter, setTypeFilter] = useState<RecordType>('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('PENDING');
+  // Everyone starts on All; Pending / Rejected also list payments with no pay slip (STATUS_QUERY)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
   // Smart search: a date (dd/mm or dd/mm/yyyy) or deposit / invoice no, bank, customer, name, amount
   const [search, setSearch] = useState('');
   const [showSearch, setShowSearch] = useState(false); // search + dropdowns open on the Search button
   const [period, setPeriod] = useState<Period>('month'); // applies at once, like Google
   const [applied, setApplied] = useState<{ type: RecordType; status: StatusFilter; search: string }>({
     type: '',
-    status: 'PENDING',
+    status: '',
     search: '',
   });
   const [depositPage, setDepositPage] = useState(1);
@@ -293,16 +294,6 @@ const CashDepositsPage: React.FC = () => {
         if (response.ok) {
           const data = await response.json();
           setRole(data.user?.role || '');
-          // Default view: sales see what waits for their approval (Pending, with payments
-          // missing proof), the cashier sees what came back to them (Rejected, with payments
-          // missing proof), admin sees everything (All) (2026-10-13)
-          if (data.user?.role === 'cashier') {
-            setStatusFilter('REJECTED');
-            setApplied((prev) => ({ ...prev, status: 'REJECTED' }));
-          } else if (data.user?.role === 'admin') {
-            setStatusFilter('');
-            setApplied((prev) => ({ ...prev, status: '' }));
-          }
         }
       } catch (error) {
         console.error('Error fetching user role:', error);
@@ -547,13 +538,13 @@ const CashDepositsPage: React.FC = () => {
       releasePreviews();
       setShowForm(false);
       setEditing(null);
-      // Show all pending (clear search) so the saved deposit is visible
-      setStatusFilter('PENDING');
+      // Show All (clear search) so the saved deposit is visible
+      setStatusFilter('');
       setSearch('');
-      if (applied.status === 'PENDING' && !applied.search && depositPage === 1) {
+      if (applied.status === '' && !applied.search && depositPage === 1) {
         fetchDepositList();
       } else {
-        setApplied((prev) => ({ ...prev, status: 'PENDING', search: '' }));
+        setApplied((prev) => ({ ...prev, status: '', search: '' }));
         setDepositPage(1);
         setProofPage(1);
       }

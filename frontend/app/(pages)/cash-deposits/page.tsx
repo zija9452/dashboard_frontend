@@ -282,11 +282,9 @@ const CashDepositsPage: React.FC = () => {
   const sharedFiles = useRef(new Map<string, File>());
   const shareBusy = useRef(false);
 
-  const isAdmin = role === 'admin';
-  const canSubmit = role === 'admin' || role === 'cashier';
   const canReview = role === 'admin' || role === 'sales';
-  // Cashier can fix any deposit of the branch, also one made by admin (2026-10-09)
-  const canEdit = (d: Deposit) => d.status !== 'APPROVED' && (isAdmin || role === 'cashier');
+  // Everyone on the page (admin / cashier / sales) can add and fix deposits (2026-10-13)
+  const canEdit = (d: Deposit) => d.status !== 'APPROVED';
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -774,17 +772,14 @@ const CashDepositsPage: React.FC = () => {
         </select>
       </div>
 
-      {/* Line 1: New Deposit + Search button (opens search + dropdowns, like View Customer Orders).
-          Shown once the role is known, so New Deposit does not pop in later and push Search aside */}
-      <div className={`flex gap-2 mb-4 ${userLoaded ? '' : 'invisible'}`}>
-        {canSubmit && (
-          <button
-            onClick={() => (showForm ? closeForm() : openNewForm())}
-            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
-          >
-            {showForm && !editing ? 'Cancel' : '+ New Deposit'}
-          </button>
-        )}
+      {/* Line 1: New Deposit + Search button (opens search + dropdowns, like View Customer Orders) */}
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => (showForm ? closeForm() : openNewForm())}
+          className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+        >
+          {showForm && !editing ? 'Cancel' : '+ New Deposit'}
+        </button>
         <button
           onClick={() => setShowSearch(!showSearch)}
           className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap px-4 py-2 flex items-center gap-2"

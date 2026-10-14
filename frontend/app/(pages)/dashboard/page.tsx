@@ -75,6 +75,7 @@ const daysUntilLabel = (dateStr: string) => {
 interface DashboardData {
   totalSales: number;
   totalExpense: number;
+  monthlyExpense?: number; // Admin only: rent, salary... (not in totalExpense / the chart)
   totalPurchase: number;
   outOfStock: number;
   shortStock: number;
@@ -693,6 +694,11 @@ const DashboardPage: React.FC = () => {
                 <p className="text-xl md:text-2xl font-semibold text-gray-900">
                   Rs. {Math.round(dashboardData.totalExpense).toLocaleString()}
                 </p>
+                {dashboardData.monthlyExpense !== undefined && (
+                  <p className="text-[10px] md:text-xs font-medium text-gray-600">
+                    Monthly: Rs. {Math.round(dashboardData.monthlyExpense).toLocaleString()}
+                  </p>
+                )}
               </div>
               <div className="text-3xl md:text-4xl">💸</div>
             </div>

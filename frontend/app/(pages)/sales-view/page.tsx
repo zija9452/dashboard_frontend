@@ -74,6 +74,8 @@ interface SalesSummary {
   totalPurchase: number;
   totalRefund: number;
   netProfit: number;
+  monthlyExpense?: number;      // Monthly (rent, salary...) - not in Total Expense / Net Cash / Net Profit
+  profitAfterMonthly?: number;  // Net Profit - Monthly Expense
   walkin_sales?: number;
   customer_payments?: number;
 }
@@ -122,6 +124,8 @@ const SalesViewPage: React.FC = () => {
     totalPurchase: 0,
     totalRefund: 0,
     netProfit: 0,
+    monthlyExpense: 0,
+    profitAfterMonthly: 0,
     walkin_sales: 0,
     customer_payments: 0,
   });
@@ -833,6 +837,14 @@ const SalesViewPage: React.FC = () => {
             <div className="flex items-center gap-1">
               <p>Net Profit:</p>
               <p>{summary?.netProfit?.toLocaleString() || 0}</p>
+            </div>
+            <div className="flex items-center gap-1">
+              <p>Monthly Expense:</p>
+              <p>{summary?.monthlyExpense?.toLocaleString() || 0}</p>
+            </div>
+            <div className="flex items-center gap-1">
+              <p>Profit after Monthly:</p>
+              <p>{summary?.profitAfterMonthly?.toLocaleString() || 0}</p>
             </div>
           </div>
         </div>

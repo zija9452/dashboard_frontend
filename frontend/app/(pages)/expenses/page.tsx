@@ -16,8 +16,24 @@ interface Expense {
   branch: string;
   created_by: string;
   created_at: string;
-  is_admin_only: boolean;
+  is_monthly: boolean;
 }
+
+type ExpenseKind = 'all' | 'daily' | 'monthly';
+
+// Summary cards (admin only): today's Daily, the selected month's Daily and Monthly totals
+interface ExpenseCards {
+  todayDaily: number;
+  monthDaily: number;
+  monthMonthly: number;
+}
+
+// Quick picks for Monthly expenses: tap to fill the Expense name
+const MONTHLY_QUICK_PICKS = ['Shop Rent', 'Salary', 'Electricity Bill', 'Internet Bill'];
+
+const currentMonth = () => new Date().toISOString().slice(0, 7); // YYYY-MM
+
+const formatRs = (amount: number) => `Rs. ${Math.round(amount).toLocaleString()}`;
 
 const ExpensesPage: React.FC = () => {
   const router = useRouter();
@@ -31,6 +47,10 @@ const ExpensesPage: React.FC = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  // Type filter: Daily (counter) / Monthly (rent, salary... admin only); cashiers only ever get Daily
+  const [view, setView] = useState<ExpenseKind>('all');
+  const [month, setMonth] = useState(currentMonth());
+  const [cards, setCards] = useState<ExpenseCards | null>(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -47,7 +67,7 @@ const ExpensesPage: React.FC = () => {
     amount: 0,
     date: '',
     branch: '',
-    is_admin_only: false
+    is_monthly: false
   });
 
   // Branch options: the branch this user is logged into
@@ -62,6 +82,8 @@ const ExpensesPage: React.FC = () => {
       const params = new URLSearchParams();
       params.append('page', currentPage.toString());
       params.append('limit', pageSize.toString());
+      params.append('kind', view);
+      if (month) params.append('month', month);
 
       const response = await fetch(`/api/expenses/?${params.toString()}`, {
         method: 'GET',
@@ -77,6 +99,9 @@ const ExpensesPage: React.FC = () => {
         setExpenses(expensesList);
         setTotalItems(total);
         setTotalPagesFromApi(totalPages);
+        setCards(data.cards || null);
+        // Backend sends cards to admins only: show the admin UI with the table, without waiting on the session call
+        if (data.cards) setIsAdmin(true);
       } else {
         showToast('Failed to fetch expenses', 'error');
       }
@@ -90,9 +115,15 @@ const ExpensesPage: React.FC = () => {
 
   useEffect(() => {
     fetchExpenses();
-  }, [currentPage, pageSize, searchTerm]);
+  }, [currentPage, pageSize, searchTerm, view, month]);
 
-  // Only admins can mark an expense as private (hidden from cashiers)
+  // Type filter / summary card click (admin only)
+  const handleViewChange = (kind: ExpenseKind) => {
+    setView(kind);
+    setCurrentPage(1);
+  };
+
+  // Only admins can add Monthly expenses (hidden from cashiers)
   useEffect(() => {
     const fetchUserRole = async () => {
       try {
@@ -125,7 +156,7 @@ const ExpensesPage: React.FC = () => {
       amount: 0,
       date: new Date().toISOString().split('T')[0],
       branch: '',
-      is_admin_only: false
+      is_monthly: view === 'monthly'
     });
     setEditingExpense(null);
     setShowAddForm(false);
@@ -149,7 +180,7 @@ const ExpensesPage: React.FC = () => {
         expense_date: formData.date || new Date().toISOString().split('T')[0],
         branch: formData.branch,
         created_by: currentUser?.id,
-        is_admin_only: isAdmin ? formData.is_admin_only : false
+        is_monthly: isAdmin ? formData.is_monthly : false
       };
 
       if (editingExpense) {
@@ -239,7 +270,7 @@ const ExpensesPage: React.FC = () => {
       amount: expense.amount,
       date: expense.expense_date,
       branch: expense.branch,
-      is_admin_only: expense.is_admin_only
+      is_monthly: expense.is_monthly
     });
     setShowAddForm(true);
 
@@ -295,6 +326,9 @@ const ExpensesPage: React.FC = () => {
     }
   };
 
+  // Selected month for the summary cards, e.g. "Oct 2026"
+  const monthLabel = new Date(`${month}-01`).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+
   // Handle page change
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -305,9 +339,9 @@ const ExpensesPage: React.FC = () => {
       <PageHeader title="View Expense" />
 
       {/* Controls Section */}
-      <div className="flex flex-col sm:flex-row justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         {/* Left side - Action Buttons */}
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => {
               if (!showAddForm) {
@@ -316,7 +350,7 @@ const ExpensesPage: React.FC = () => {
                   amount: 0,
                   date: new Date().toISOString().split('T')[0],
                   branch: '',
-                  is_admin_only: false
+                  is_monthly: view === 'monthly'
                 });
                 setEditingExpense(null);
                 setShowAddForm(true);
@@ -328,6 +362,32 @@ const ExpensesPage: React.FC = () => {
           >
             {showAddForm ? 'Cancel' : 'Add New'}
           </button>
+
+          {/* Filters (admin only): Type + Month */}
+          {isAdmin && (
+            <>
+              <select
+                value={view}
+                onChange={(e) => handleViewChange(e.target.value as ExpenseKind)}
+                className="regal-input w-auto py-2"
+                aria-label="Type"
+              >
+                <option value="all">All Types</option>
+                <option value="daily">Daily</option>
+                <option value="monthly">Monthly</option>
+              </select>
+              <input
+                type="month"
+                value={month}
+                onChange={(e) => {
+                  setMonth(e.target.value || currentMonth());
+                  setCurrentPage(1);
+                }}
+                className="regal-input w-auto py-2"
+                aria-label="Month"
+              />
+            </>
+          )}
         </div>
 
         {/* Right side - Search */}
@@ -369,6 +429,40 @@ const ExpensesPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Summary cards (admin only): click a card to show only that type */}
+      {isAdmin && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          {[
+            { kind: 'daily' as ExpenseKind, label: 'Today (Daily)', amount: cards?.todayDaily, hint: '' },
+            { kind: 'daily' as ExpenseKind, label: `${monthLabel} Daily`, amount: cards?.monthDaily, hint: '' },
+            { kind: 'monthly' as ExpenseKind, label: `${monthLabel} Monthly`, amount: cards?.monthMonthly, hint: 'Rent, salary... (not in daily cash)' },
+          ].map(card => (
+            <button
+              key={card.label}
+              type="button"
+              onClick={() => handleViewChange(card.kind)}
+              className={`regal-card p-3 md:p-4 text-left transition-shadow hover:shadow-md ${
+                view === card.kind ? 'border-l-4 border-regal-yellow' : ''
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs md:text-sm font-medium text-gray-600 mb-1">{card.label}</p>
+                  {/* Card stays visible while loading; only the amount pulses */}
+                  {loading || card.amount === undefined ? (
+                    <div className="h-7 md:h-8 w-28 bg-gray-200 rounded animate-pulse" />
+                  ) : (
+                    <p className="text-xl md:text-2xl font-semibold text-gray-900">{formatRs(card.amount)}</p>
+                  )}
+                  {card.hint && <p className="text-[10px] md:text-xs font-medium text-gray-500">{card.hint}</p>}
+                </div>
+                <div className="text-3xl md:text-4xl">🧾</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Add/Edit Form */}
       {showAddForm && (
         <div className="border-0 p-0 mb-6 transition-all duration-300">
@@ -376,6 +470,53 @@ const ExpensesPage: React.FC = () => {
             {editingExpense ? 'Edit Expense' : 'Add New Expense'}
           </h3>
           <form onSubmit={handleSubmit}>
+            {/* Type (admin only): cashiers always add Daily */}
+            {isAdmin && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-1">Type *</label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { monthly: false, label: 'Daily', hint: 'Paid from counter' },
+                    { monthly: true, label: 'Monthly', hint: 'Rent, salary...' },
+                  ].map(option => (
+                    <button
+                      key={option.label}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, is_monthly: option.monthly }))}
+                      className={`rounded-md border px-4 py-2 text-left transition-colors ${
+                        formData.is_monthly === option.monthly
+                          ? 'border-regal-yellow bg-regal-yellow text-regal-black'
+                          : 'border-gray-300 bg-white text-gray-600 hover:border-regal-yellow'
+                      }`}
+                    >
+                      <span className="block text-sm font-semibold">{option.label}</span>
+                      <span className="block text-[11px]">{option.hint}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {formData.is_monthly && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-gray-500">Quick:</span>
+                    {MONTHLY_QUICK_PICKS.map(name => (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, expense: name }))}
+                        className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                          formData.expense === name
+                            ? 'border-regal-yellow bg-regal-yellow text-regal-black'
+                            : 'border-gray-300 text-gray-600 hover:border-regal-yellow'
+                        }`}
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Expense *</label>
@@ -434,19 +575,6 @@ const ExpensesPage: React.FC = () => {
               </div>
             </div>
 
-            {isAdmin && (
-              <label className="mt-4 flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  name="is_admin_only"
-                  checked={formData.is_admin_only}
-                  onChange={handleInputChange}
-                  className="h-4 w-4"
-                />
-                Keep this private (Admin only) - cashiers won&apos;t see this expense
-              </label>
-            )}
-
             <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="submit"
@@ -495,6 +623,9 @@ const ExpensesPage: React.FC = () => {
                 <tr>
                   <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
                   <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">Expense</th>
+                  {isAdmin && (
+                    <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                  )}
                   <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
                   <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                   <th className="px-6 py-5 text-left text-xs font-medium text-gray-500 uppercase">Branch</th>
@@ -507,12 +638,18 @@ const ExpensesPage: React.FC = () => {
                     <td className="px-6 py-4 text-sm text-gray-900">{((currentPage - 1) * pageSize) + index + 1}</td>
                     <td className="px-6 py-4 text-sm text-gray-900">
                       {expense.expense}
-                      {isAdmin && expense.is_admin_only && (
-                        <span className="ml-2 inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
-                          Private
-                        </span>
-                      )}
                     </td>
+                    {isAdmin && (
+                      <td className="px-6 py-4 text-sm">
+                        <span
+                          className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
+                            expense.is_monthly ? 'bg-regal-yellow text-regal-black' : 'bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          {expense.is_monthly ? 'Monthly' : 'Daily'}
+                        </span>
+                      </td>
+                    )}
                     <td className="px-6 py-4 text-sm text-gray-900">{expense.amount}</td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {new Date(expense.expense_date).toLocaleDateString('en-GB')}

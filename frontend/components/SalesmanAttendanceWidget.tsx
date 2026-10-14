@@ -22,7 +22,7 @@ interface AttendanceOverview {
   pending_count: number;
 }
 
-const POLL_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+const POLL_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 function todayKey(): string {
   const now = new Date();
@@ -112,7 +112,7 @@ const SalesmanAttendanceWidget: React.FC = () => {
   }, [fetchOverview]);
 
   // Instant push the moment anyone checks in/out on any machine, instead of
-  // waiting for the next 45s poll - the interval above stays as a fallback
+  // waiting for the next hourly poll - the interval above stays as a fallback
   // in case the Firestore listener ever misses an update (e.g. offline tab).
   const branch = useBranch();
   useEffect(() => {

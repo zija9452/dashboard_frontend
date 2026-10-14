@@ -9,6 +9,11 @@ export async function GET(request: NextRequest) {
     const params = new URLSearchParams();
     params.append('page', page);
     params.append('limit', limit);
+    // Daily / Monthly / all + month (YYYY-MM) filters
+    for (const key of ['kind', 'month']) {
+      const value = request.nextUrl.searchParams.get(key);
+      if (value) params.append(key, value);
+    }
 
     const queryString = params.toString();
     const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/expenses/${queryString ? '?' + queryString : ''}`;

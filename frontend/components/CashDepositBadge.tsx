@@ -11,7 +11,7 @@ export const CASH_DEPOSITS_CHANGED = 'cash-deposits-changed';
 
 // Data lives on Neon - keep polling infrequent; the Firestore signal below is the
 // instant path, this is only the fallback (like the shop order badges).
-const POLL_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+const POLL_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 interface CashDepositBadgeProps {
   role: string | null;

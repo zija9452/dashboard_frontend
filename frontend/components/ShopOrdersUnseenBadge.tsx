@@ -7,7 +7,7 @@ import { branchSignalId, useBranch } from '@/lib/branch';
 
 // Shop order data lives on Neon - keep polling infrequent so the badge
 // doesn't burn extra queries against it while someone is just logged in.
-const POLL_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+const POLL_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 const ShopOrdersUnseenBadge: React.FC = () => {
   const [count, setCount] = useState(0);

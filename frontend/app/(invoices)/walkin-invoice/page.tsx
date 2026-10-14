@@ -1235,7 +1235,8 @@ const WalkInInvoicePage: React.FC = () => {
             {/* Add Button - Centered with reduced width */}
             <button
               onClick={addToCart}
-              className="regal-btn bg-regal-yellow text-regal-black w-1/2 mx-auto block py-2 mb-2"
+              disabled={!selectedProduct}
+              className="regal-btn bg-regal-yellow text-regal-black w-1/2 mx-auto block py-2 mb-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Add
             </button>

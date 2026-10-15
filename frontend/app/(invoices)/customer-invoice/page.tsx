@@ -11,7 +11,7 @@ import {
   CustomerCategoryGrouped,
   PricedLine,
   tierForQuantity,
-  isQtyTier,
+  isQtyTier, tierRangeLabel,
   lookupIdealPrice,
   piecesOfCategory,
   repriceCart,
@@ -1669,11 +1669,11 @@ const CustomerInvoicePage: React.FC = () => {
                                         <span className={item.rateChange === 'down' ? 'text-green-700 font-medium' : ''}>{item.unitPrice}</span>
                                       )}
                                       {item.rateChange === 'down' && (
-                                        <span className="block text-[10px] text-green-700">qty rate · {tierPcs} pcs</span>
+                                        <span className="block text-[10px] text-green-700">qty rate · {tierRangeLabel(tierPcs)}</span>
                                       )}
                                       {item.rateChange === 'up' && (
                                         <span className="block text-[10px] text-amber-600">
-                                          {isQtyTier(tierPcs) ? 'qty' : 'single'} rate · {tierPcs} pcs
+                                          {isQtyTier(tierPcs) ? 'qty' : 'single'} rate · {tierRangeLabel(tierPcs)}
                                         </span>
                                       )}
                                       {item.autoPriced && lineDyeMultiplier(cart, customerCategories, item) > 1 && (
@@ -1685,7 +1685,7 @@ const CustomerInvoicePage: React.FC = () => {
                                       )}
                                     </td>
                                     <td className="px-4 py-2 text-sm text-gray-900">
-                                      <QtyInput value={item.quantity} label={item.category} onChange={(qty) => setLineQty(item.id, qty)} />
+                                      <QtyInput plain value={item.quantity} label={item.category} onChange={(qty) => setLineQty(item.id, qty)} />
                                     </td>
                                     <td className="px-4 py-4 text-sm font-semibold text-gray-900">{item.totalPrice}</td>
                                     <td className="px-4 py-4 text-sm">
@@ -1734,7 +1734,7 @@ const CustomerInvoicePage: React.FC = () => {
                                   </td>
                                   {/* Amount in the Total column, under the line totals */}
                                   <td className="px-4 py-2 whitespace-nowrap">
-                                    <AmountInput id={`mockup-${m.key}`} value={m.amount} label={`MOQ Charges - ${m.category}`} align="left" onChange={(v) => setMockupAmounts(prev => ({ ...prev, [m.key]: v }))} />
+                                    <AmountInput plain id={`mockup-${m.key}`} value={m.amount} label={`MOQ Charges - ${m.category}`} align="left" onChange={(v) => setMockupAmounts(prev => ({ ...prev, [m.key]: v }))} />
                                   </td>
                                   <td colSpan={2}></td>
                                 </tr>

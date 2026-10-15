@@ -122,7 +122,7 @@ const CategoryPage: React.FC = () => {
       if (editingCategory) {
         // Update category
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/category/${editingCategory.id}`,
+          `/api/category/${editingCategory.id}`,
           {
             method: 'PUT',
             headers: {
@@ -207,7 +207,7 @@ const CategoryPage: React.FC = () => {
       setDeletingId(id);
       try {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/category/${id}`,
+          `/api/category/${id}`,
           {
             method: 'DELETE',
             credentials: 'include',

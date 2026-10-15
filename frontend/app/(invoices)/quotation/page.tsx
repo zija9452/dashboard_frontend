@@ -9,7 +9,7 @@ import {
   CustomerCategoryGrouped,
   PricedLine,
   tierForQuantity,
-  isQtyTier,
+  isQtyTier, tierRangeLabel,
   lookupIdealPrice,
   piecesOfCategory,
   repriceCart,
@@ -1089,11 +1089,11 @@ const QuotationPage: React.FC = () => {
                                       <span className={item.rateChange === 'down' ? 'text-green-700 font-medium' : ''}>{item.unitPrice}</span>
                                     )}
                                     {item.rateChange === 'down' && (
-                                      <span className="block text-[10px] text-green-700">qty rate · {tierPcs} pcs</span>
+                                      <span className="block text-[10px] text-green-700">qty rate · {tierRangeLabel(tierPcs)}</span>
                                     )}
                                     {item.rateChange === 'up' && (
                                       <span className="block text-[10px] text-amber-600">
-                                        {isQtyTier(tierPcs) ? 'qty' : 'single'} rate · {tierPcs} pcs
+                                        {isQtyTier(tierPcs) ? 'qty' : 'single'} rate · {tierRangeLabel(tierPcs)}
                                       </span>
                                     )}
                                     {item.autoPriced && lineDyeMultiplier(cart, customerCategories, item) > 1 && (
@@ -1105,7 +1105,7 @@ const QuotationPage: React.FC = () => {
                                     )}
                                   </td>
                                   <td className="px-4 py-2 text-right">
-                                    <QtyInput value={item.quantity} label={item.category} onChange={(qty) => setLineQty(item.id, qty)} />
+                                    <QtyInput plain value={item.quantity} label={item.category} onChange={(qty) => setLineQty(item.id, qty)} />
                                   </td>
                                   <td className="px-4 py-3 text-right font-medium">{item.totalPrice}</td>
                                   <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -1134,7 +1134,7 @@ const QuotationPage: React.FC = () => {
                                 {/* Amount in the Total column, under the line totals */}
                                 {/* pr-[7px] + the box's padding = px-4, so the number sits under the line totals */}
                                 <td className="py-2 pl-4 pr-[7px] text-right whitespace-nowrap">
-                                  <AmountInput id={`mockup-${m.key}`} value={m.amount} label={`MOQ Charges - ${m.category}`} onChange={(v) => setMockupAmounts(prev => ({ ...prev, [m.key]: v }))} />
+                                  <AmountInput plain id={`mockup-${m.key}`} value={m.amount} label={`MOQ Charges - ${m.category}`} onChange={(v) => setMockupAmounts(prev => ({ ...prev, [m.key]: v }))} />
                                 </td>
                                 <td></td>
                               </tr>

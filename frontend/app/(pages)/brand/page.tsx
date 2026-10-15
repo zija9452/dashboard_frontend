@@ -110,7 +110,7 @@ const BrandPage: React.FC = () => {
       if (editingBrand) {
         // Update brand
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/brand/${editingBrand.id}`,
+          `/api/brand/${editingBrand.id}`,
           {
             method: 'PUT',
             headers: {
@@ -194,7 +194,7 @@ const BrandPage: React.FC = () => {
       setDeletingId(id);
       try {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/brand/${id}`,
+          `/api/brand/${id}`,
           {
             method: 'DELETE',
             credentials: 'include',

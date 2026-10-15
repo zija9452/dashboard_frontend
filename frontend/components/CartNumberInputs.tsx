@@ -8,6 +8,9 @@ import React from 'react';
 // so the next digit replaces it.
 
 const BOX = 'h-8 px-2 text-sm font-medium text-gray-900 rounded-md border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-regal-yellow focus:border-regal-yellow';
+// Cart box that reads as plain text (colour from its cell) until focused, then shows the
+// yellow theme box. Shared by `plain` NumberBoxes and the Walk-in cart.
+export const PLAIN_BOX = 'h-8 px-2 text-sm rounded-md border border-transparent bg-transparent cursor-text focus:outline-none focus:bg-yellow-50 focus:ring-2 focus:ring-regal-yellow focus:border-regal-yellow [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
 
 const NumberBox: React.FC<{
   id?: string;
@@ -15,8 +18,9 @@ const NumberBox: React.FC<{
   min: number;
   label: string;
   className: string;
+  plain?: boolean;
   onChange: (value: number) => void;
-}> = ({ id, value, min, label, className, onChange }) => (
+}> = ({ id, value, min, label, className, plain, onChange }) => (
   <input
     id={id}
     type="text"
@@ -34,7 +38,7 @@ const NumberBox: React.FC<{
     onFocus={(e) => e.target.select()}
     onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
     aria-label={label}
-    className={`${BOX} ${className}`}
+    className={`${plain ? PLAIN_BOX : BOX} ${className}`}
   />
 );
 
@@ -43,9 +47,10 @@ const NumberBox: React.FC<{
 export const QtyInput: React.FC<{
   value: number;
   label: string;
+  plain?: boolean;
   onChange: (qty: number) => boolean;
-}> = ({ value, label, onChange }) => (
-  <NumberBox value={value} min={1} label={`Quantity for ${label}`} className="w-14 text-center" onChange={onChange} />
+}> = ({ value, label, plain, onChange }) => (
+  <NumberBox value={value} min={1} label={`Quantity for ${label}`} className="w-14 text-center" plain={plain} onChange={onChange} />
 );
 
 // MOQ / DTF amount in the Total column - 0 = waived. align="right" lines the number up
@@ -55,7 +60,8 @@ export const AmountInput: React.FC<{
   value: number;
   label: string;
   align?: 'left' | 'right';
+  plain?: boolean;
   onChange: (amount: number) => void;
-}> = ({ id, value, label, align = 'right', onChange }) => (
-  <NumberBox id={id} value={value} min={0} label={label} className={`w-24 ${align === 'right' ? 'text-right' : 'text-left'}`} onChange={onChange} />
+}> = ({ id, value, label, align = 'right', plain, onChange }) => (
+  <NumberBox id={id} value={value} min={0} label={label} className={`w-24 ${align === 'right' ? 'text-right' : 'text-left'}`} plain={plain} onChange={onChange} />
 );

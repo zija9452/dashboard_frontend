@@ -85,6 +85,11 @@ export const tierForQuantity = (quantity: number) =>
 
 export const isQtyTier = (pieces: number) => pieces >= PRICE_TIERS[1].minQty;
 
+// Cart hint for the tier a piece count is in: "16+ pcs" (from this many pcs the rate
+// applies); the single piece tier has no "+", so it reads "1-4 pcs".
+export const tierRangeLabel = (pieces: number) =>
+  isQtyTier(pieces) ? `${tierForQuantity(pieces).minQty}+ pcs` : `1-${MOCKUP_MAX_PIECES} pcs`;
+
 // A line is dye when a selected option is ticked "Dye" on the Customer Category page.
 export const isDyeLine = (categoryData: CustomerCategoryGrouped | undefined, fields?: Record<string, string>) =>
   !!categoryData && !!fields &&

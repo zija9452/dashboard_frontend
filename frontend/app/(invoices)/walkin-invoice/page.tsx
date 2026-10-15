@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useToast } from '@/components/ui/Toast';
 import ProofImagePicker from '@/components/ProofImagePicker';
 import { isOnlineMethod, uploadProofImages } from '@/lib/paymentMethods';
+import { PLAIN_BOX } from '@/components/CartNumberInputs';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import { Product as ProductAPI } from '@/lib/api/products';
@@ -88,7 +89,46 @@ interface CartItem {
   discount: number;
   total: number;
   barcode: string;
+  stock: number; // available stock when added, caps quantity edits in the cart
+  unit_discount: number; // discount per piece, so quantity edits rescale item discount
 }
+
+// Cart cell that looks like plain text; shows the yellow theme box only while focused.
+// Each keystroke commits if onCommit accepts it; on blur it falls back to the committed value.
+const EditableCell = ({
+  value,
+  onCommit,
+  step,
+  className = '',
+}: {
+  value: number;
+  onCommit: (raw: string) => void;
+  step?: string;
+  className?: string;
+}) => {
+  const [draft, setDraft] = useState<string | null>(null);
+  return (
+    <input
+      type="number"
+      step={step}
+      value={draft ?? String(value)}
+      onFocus={(e) => {
+        setDraft(String(value));
+        e.target.select();
+      }}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        onCommit(e.target.value);
+      }}
+      onBlur={() => setDraft(null)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+      }}
+      onWheel={(e) => e.currentTarget.blur()}
+      className={`w-20 ${PLAIN_BOX} ${className}`}
+    />
+  );
+};
 
 // Helper function: Convert base64 to blob (same as customer invoice)
 const base64ToBlob = (base64: string, mimeType: string) => {
@@ -647,25 +687,55 @@ const WalkInInvoicePage: React.FC = () => {
       return;
     }
 
-    // Validate: Check if quantity exceeds stock
-    if (Number(quantity) > stockQty) {
+    // Same product already in the cart (same barcode or same name): merge into that row.
+    // The row keeps its unit price; this add's discount is added on top.
+    const barcode = selectedProduct.barcode || selectedProduct.pro_barcode || '';
+    const name = (selectedProduct.product_name || '').trim().toLowerCase();
+    const existingIndex = selectedItems.findIndex(item =>
+      (barcode && item.barcode === barcode) || (name && item.product_name.trim().toLowerCase() === name)
+    );
+    const alreadyInCart = existingIndex >= 0 ? selectedItems[existingIndex].quantity : 0;
+
+    // Validate: Check if quantity exceeds stock (counting what is already in the cart)
+    if (Number(quantity) + alreadyInCart > stockQty) {
       showToast(`Cannot add more quantity. Available quantity: ${stockQty}`, 'error');
       return;
     }
 
-    const newItem: CartItem = {
-      id: selectedProduct.id || selectedProduct.pro_id || '',
-      product_name: selectedProduct.product_name || '',
-      category: selectedProduct.category || '',
-      unit_price: Number(unitPrice),
-      quantity: Number(quantity),
-      price: price, // price before discount (unit_price × quantity)
-      discount: discount * Number(quantity), // discount per item × quantity = total discount
-      total: price, // total before discount
-      barcode: selectedProduct.barcode || selectedProduct.pro_barcode || ''
-    };
+    if (existingIndex >= 0) {
+      const existing = selectedItems[existingIndex];
+      const mergedQty = existing.quantity + Number(quantity);
+      const mergedDiscount = existing.discount + discount * Number(quantity);
+      const mergedPrice = existing.unit_price * mergedQty;
+      const updated = [...selectedItems];
+      updated[existingIndex] = {
+        ...existing,
+        quantity: mergedQty,
+        price: mergedPrice,
+        total: mergedPrice,
+        discount: Math.min(mergedDiscount, mergedPrice),
+        unit_discount: Math.min(mergedDiscount, mergedPrice) / mergedQty,
+        stock: stockQty
+      };
+      setSelectedItems(updated);
+      showToast(`${existing.product_name} already in cart - quantity updated to ${mergedQty}`, 'success');
+    } else {
+      const newItem: CartItem = {
+        id: selectedProduct.id || selectedProduct.pro_id || '',
+        product_name: selectedProduct.product_name || '',
+        category: selectedProduct.category || '',
+        unit_price: Number(unitPrice),
+        quantity: Number(quantity),
+        price: price, // price before discount (unit_price × quantity)
+        discount: discount * Number(quantity), // discount per item × quantity = total discount
+        total: price, // total before discount
+        barcode: selectedProduct.barcode || selectedProduct.pro_barcode || '',
+        stock: stockQty,
+        unit_discount: Number(discount)
+      };
 
-    setSelectedItems([...selectedItems, newItem]);
+      setSelectedItems([...selectedItems, newItem]);
+    }
 
     // Reset form
     setSelectedProduct(null);
@@ -676,6 +746,42 @@ const WalkInInvoicePage: React.FC = () => {
     setDiscount(0);
     setSearchTerm('');
     setSearchResults([]);
+  };
+
+  // Edit unit price / quantity / discount of a cart row; invalid input is ignored
+  const updateCartItem = (index: number, field: 'unit_price' | 'quantity' | 'discount', raw: string) => {
+    if (raw.trim() === '') return;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0) return;
+
+    const item = selectedItems[index];
+    if (!item) return;
+    let { unit_price, quantity, discount, unit_discount } = item;
+
+    if (field === 'quantity') {
+      if (!Number.isInteger(value) || value < 1) return;
+      if (value > item.stock) {
+        showToast(`Cannot add more quantity. Available quantity: ${item.stock}`, 'error');
+        return;
+      }
+      quantity = value;
+      discount = unit_discount * quantity;
+    } else if (field === 'unit_price') {
+      unit_price = value;
+    } else {
+      discount = value;
+      unit_discount = value / quantity;
+    }
+
+    const price = unit_price * quantity;
+    if (discount > price) {
+      showToast('Discount cannot be more than the item total', 'error');
+      return;
+    }
+
+    const updated = [...selectedItems];
+    updated[index] = { ...item, unit_price, quantity, price, total: price, discount, unit_discount };
+    setSelectedItems(updated);
   };
 
   // Remove from selected items
@@ -1340,10 +1446,10 @@ const WalkInInvoicePage: React.FC = () => {
               <table className="w-full min-w-[700px]">
                 <thead className="bg-gray-100 sticky top-0">
                   <tr>
-                    <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                    <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
-                    <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
-                    <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Discount</th>
+                    <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase w-[22%]">Product</th>
+                    <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase w-[12%]">Unit Price</th>
+                    <th className="px-3 py-4 text-center text-xs font-medium text-gray-500 uppercase">Quantity</th>
+                    <th className="px-3 py-4 text-center text-xs font-medium text-gray-500 uppercase">Discount</th>
                     <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
                     <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">After Discount</th>
                     <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
@@ -1353,9 +1459,28 @@ const WalkInInvoicePage: React.FC = () => {
                   {selectedItems.map((item, index) => (
                     <tr key={index} className="hover:bg-gray-50">
                       <td className="px-3 py-4 text-sm">{item.product_name}</td>
-                      <td className="px-3 py-4 text-sm">{item.unit_price}</td>
-                      <td className="px-3 py-4 text-sm">{item.quantity}</td>
-                      <td className="px-3 py-4 text-sm text-center text-red-700">{item.discount}</td>
+                      <td className="px-3 py-4 text-sm">
+                        <EditableCell
+                          value={item.unit_price}
+                          onCommit={(raw) => updateCartItem(index, 'unit_price', raw)}
+                          className="-ml-2"
+                        />
+                      </td>
+                      <td className="px-3 py-4 text-sm text-center">
+                        <EditableCell
+                          value={item.quantity}
+                          step="1"
+                          onCommit={(raw) => updateCartItem(index, 'quantity', raw)}
+                          className="text-center"
+                        />
+                      </td>
+                      <td className="px-3 py-4 text-sm text-center text-red-700">
+                        <EditableCell
+                          value={item.discount}
+                          onCommit={(raw) => updateCartItem(index, 'discount', raw)}
+                          className="text-center"
+                        />
+                      </td>
                       <td className="px-3 py-4 text-sm">{item.price}</td>
                       <td className="px-3 py-4 text-sm font-semibold text-green-700 text-center">{item.price - item.discount}</td>
                       <td className="px-3 py-4 text-sm">

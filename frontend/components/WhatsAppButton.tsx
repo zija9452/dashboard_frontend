@@ -3,8 +3,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 // Floating button on every page: opens WhatsApp on its chat list (no specific
-// chat) in the WhatsApp app - phone app (Android: WhatsApp, else WhatsApp
-// Business), or WhatsApp Desktop on a computer.
+// chat) in the WhatsApp app - iPhone app, or WhatsApp Desktop on a computer.
+// Not shown on Android (see isAndroid).
 // (WhatsApp Web was dropped: every click reopened and reloaded a new tab.)
 // Slips go to a group via Share.
 // Drag it (like the Vercel toolbar); on release it snaps to the nearest of the
@@ -15,25 +15,10 @@ const MARGIN = 20; // gap from the screen edges in a corner
 const DRAG_THRESHOLD = 10; // px (10, not 5: a finger tap wobbles a few px) moved before a press counts as a drag, not a click
 const STORAGE_KEY = 'whatsapp-button-corner';
 
-// Android: WhatsApp only handles whatsapp://send, so a bare whatsapp:// does
-// nothing there. Instead the app is launched by package: normal WhatsApp first,
-// then WhatsApp Business. When a package is missing, Chrome goes to the
-// fallback URL - this same page with a marker hash - and the hashchange
-// handler tries the next app.
-const WHATSAPP_PACKAGE = 'com.whatsapp';
-const BUSINESS_PACKAGE = 'com.whatsapp.w4b';
-const TRY_BUSINESS_HASH = '#open-whatsapp-business';
-const NOT_INSTALLED_HASH = '#whatsapp-not-installed';
-
+// Hidden on Android: a web page there can't just open WhatsApp. WhatsApp only
+// accepts whatsapp://send, and Chrome won't launch an app's home screen from a
+// site. Needs our own Android app (Capacitor) - see whatsapp.pending.md.
 const isAndroid = () => /Android/i.test(navigator.userAgent);
-
-const androidIntent = (pkg: string, fallbackHash: string) => {
-  const fallbackUrl = window.location.href.split('#')[0] + fallbackHash;
-  return (
-    `intent://#Intent;package=${pkg};action=android.intent.action.MAIN;` +
-    `category=android.intent.category.LAUNCHER;S.browser_fallback_url=${encodeURIComponent(fallbackUrl)};end`
-  );
-};
 
 type Corner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 const CORNERS: Corner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
@@ -89,36 +74,14 @@ const WhatsAppButton: React.FC = () => {
   const drag = useRef<{ startX: number; startY: number; offsetX: number; offsetY: number; moved: boolean } | null>(null);
 
   useEffect(() => {
+    if (isAndroid()) return; // corner stays null -> button not shown
     setCorner(loadCorner());
     const onResize = () => setViewport((n) => n + 1);
     window.addEventListener('resize', onResize);
-
-    // Android fallback chain (see androidIntent): normal WhatsApp missing ->
-    // try Business; Business missing too -> tell the user.
-    const onHashChange = () => {
-      const hash = window.location.hash;
-      if (hash !== TRY_BUSINESS_HASH && hash !== NOT_INSTALLED_HASH) return;
-      // Drop the marker hash so the URL stays clean
-      history.replaceState(null, '', window.location.pathname + window.location.search);
-      if (hash === TRY_BUSINESS_HASH) {
-        window.location.href = androidIntent(BUSINESS_PACKAGE, NOT_INSTALLED_HASH);
-      } else {
-        alert('WhatsApp is not installed on this phone.');
-      }
-    };
-    window.addEventListener('hashchange', onHashChange);
-
-    return () => {
-      window.removeEventListener('resize', onResize);
-      window.removeEventListener('hashchange', onHashChange);
-    };
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
   const openWhatsApp = () => {
-    if (isAndroid()) {
-      window.location.href = androidIntent(WHATSAPP_PACKAGE, TRY_BUSINESS_HASH);
-      return;
-    }
     // iPhone and computer: the installed WhatsApp app (an open one comes to
     // the front). Without the app installed nothing happens.
     window.location.href = 'whatsapp://';

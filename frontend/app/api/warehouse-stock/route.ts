@@ -83,6 +83,8 @@ export async function POST(request: NextRequest) {
       backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/warehouse-stock/out`;
     } else if (action === 'adjust') {
       backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/warehouse-stock/adjust`;
+    } else if (action === 'barcodes') {
+      backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/warehouse-stock/barcodes`;
     } else {
       // Default to in for backward compatibility
       backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/warehouse-stock/in`;

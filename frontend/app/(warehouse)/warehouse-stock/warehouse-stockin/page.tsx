@@ -5,6 +5,7 @@ import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/ui/PageHeader';
+import { printZplLabels } from '@/lib/qzPrint';
 
 interface WarehouseStockInItem {
   product_id: string;
@@ -258,7 +259,48 @@ const WarehouseStockInPage: React.FC = () => {
     setStockInItems(stockInItems.filter((_, i) => i !== index));
   };
 
-  const handleStockIn = async () => {
+  // Labels like the shop's, with the vendor name where the shop prints the price
+  const fetchLabels = async (items: WarehouseStockInItem[]): Promise<any[]> => {
+    const response = await fetch('/api/warehouse-stock?action=barcodes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(items.map(item => ({
+        product_id: item.product_id,
+        quantity: item.quantity,
+        vendor_name: item.vendor_name || '',
+      }))),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || errorData.detail || 'Failed to generate barcodes');
+    }
+    const data = await response.json();
+    return data.zpl_commands || [];
+  };
+
+  const printLabels = async (items: WarehouseStockInItem[]) => {
+    try {
+      const zpl = await fetchLabels(items);
+      if (zpl.length === 0) { showToast('No barcodes to print', 'error'); return; }
+      if (await printZplLabels(zpl)) showToast('Barcodes printed successfully!', 'success');
+    } catch (error) {
+      showToast((error as Error).message || 'Error generating barcodes', 'error');
+    }
+  };
+
+  const handlePrintBarcodesOnly = async () => {
+    if (stockInItems.length === 0) { showToast('Please add at least one item', 'error'); return; }
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await printLabels(stockInItems);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleStockIn = async (withBarcode = false) => {
     if (stockInItems.length === 0) { showToast('Please add at least one item', 'error'); return; }
     if (submitting) return;
     setSubmitting(true);
@@ -267,6 +309,8 @@ const WarehouseStockInPage: React.FC = () => {
       let successCount = 0;
       let errorCount = 0;
       const errors: string[] = [];
+      const succeeded: WarehouseStockInItem[] = [];
+      const failed: WarehouseStockInItem[] = [];
 
       for (const item of stockInItems) {
         try {
@@ -285,26 +329,41 @@ const WarehouseStockInPage: React.FC = () => {
 
           if (response.ok) {
             successCount++;
+            succeeded.push(item);
           } else {
             const errorData = await response.json();
             errors.push(`${item.product_name}: ${errorData.error || errorData.detail || 'Failed'}`);
             errorCount++;
+            failed.push(item);
           }
         } catch {
           errors.push(`${item.product_name}: Network error`);
           errorCount++;
+          failed.push(item);
         }
       }
 
       if (successCount > 0 && errorCount > 0) {
-        Swal.fire({
+        const swalResult = await Swal.fire({
           title: 'Stock In Partially Failed',
           html: `<p>Successfully added: ${successCount} product(s)</p><p class="mt-2 text-red-600">Failed: ${errorCount} product(s)</p><div class="mt-2 text-left text-sm">${errors.map(e => `<p class="mt-1">• ${e}</p>`).join('')}</div>`,
-          icon: 'warning', confirmButtonText: 'OK',
+          icon: 'warning',
+          confirmButtonText: withBarcode ? 'Print Barcodes (added only)' : 'OK',
+          showCancelButton: withBarcode, cancelButtonText: 'Close',
         });
-        setStockInItems(prev => prev.slice(successCount));
+        // Only the failed items stay in the list for a retry
+        setStockInItems(failed);
+        if (withBarcode && swalResult.isConfirmed) await printLabels(succeeded);
       } else if (successCount > 0) {
-        Swal.fire({ title: 'Success!', text: `Stock added for ${successCount} product(s).`, icon: 'success', timer: 2000, timerProgressBar: true, showConfirmButton: false });
+        if (withBarcode) {
+          const swalResult = await Swal.fire({
+            title: 'Success!', text: `Stock added for ${successCount} product(s).`, icon: 'success',
+            showCancelButton: true, confirmButtonText: 'Print Barcodes', cancelButtonText: 'Close',
+          });
+          if (swalResult.isConfirmed) await printLabels(succeeded);
+        } else {
+          Swal.fire({ title: 'Success!', text: `Stock added for ${successCount} product(s).`, icon: 'success', timer: 2000, timerProgressBar: true, showConfirmButton: false });
+        }
         setStockInItems([]);
         router.push('/warehouse-stock');
       } else {
@@ -712,15 +771,26 @@ const WarehouseStockInPage: React.FC = () => {
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
+            {/* Same buttons as the shop Stock In page */}
             <button
-              onClick={handleStockIn}
+              onClick={handlePrintBarcodesOnly}
               disabled={submitting}
               className="regal-btn bg-regal-yellow text-regal-black disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 w-full sm:w-auto"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              {submitting ? 'Processing...' : 'Print Barcodes Only'}
+            </button>
+            <button
+              onClick={() => handleStockIn(true)}
+              disabled={submitting}
+              className="regal-btn bg-green-600 text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 w-full sm:w-auto"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              {submitting ? 'Processing...' : 'Stock In All'}
+              {submitting ? 'Processing...' : 'Stock In + Print Barcodes'}
             </button>
             <button
               onClick={() => setStockInItems([])}

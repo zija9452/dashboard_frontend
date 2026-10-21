@@ -13,6 +13,7 @@ import DemandTrendPanel, {
   type DemandStatsResponse,
 } from '@/components/demand/DemandTrendPanel';
 import { useBranch } from '@/lib/branch';
+import SearchBox from '@/components/ui/SearchBox';
 
 interface Demand {
   id: string;
@@ -926,30 +927,15 @@ const DemandPage: React.FC = () => {
 
       {showSearch && (
         <div className="flex flex-col sm:flex-row gap-2 mb-4">
-          <div className="relative flex-1 sm:flex-none">
-            <input
-              type="text"
-              placeholder="Search by demand, customer, category..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  setCurrentPage(1);
-                }
-              }}
-              className="regal-input w-full sm:w-72 pl-10 pr-4 py-4"
-              autoFocus
-            />
-            <svg
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
+          <SearchBox
+            value={searchTerm}
+            onChange={setSearchTerm}
+            resetPage={() => setCurrentPage(1)}
+            placeholder="Search by demand, customer, category..."
+            inputClassName="regal-input w-full sm:w-72 pl-10 pr-4 py-4"
+            boxClassName="relative flex-1 sm:flex-none"
+            autoFocus
+          />
         </div>
       )}
 

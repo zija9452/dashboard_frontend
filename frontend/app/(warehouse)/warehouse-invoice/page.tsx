@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
@@ -61,7 +61,8 @@ interface Product {
   id?: string;
   product_name?: string;
   category?: string;
-  price?: number;
+  price?: number; // shop cost in the customer's branch
+  shop_price?: number; // shop selling price in the customer's branch
   stock?: number;
   barcode?: string;
 }
@@ -71,6 +72,7 @@ interface CartItem {
   product_name: string;
   category: string;
   unit_price: number;
+  shop_price: number;
   quantity: number;
   price: number;
   discount: number;
@@ -111,10 +113,13 @@ const WarehouseInvoicePage: React.FC = () => {
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [defaultProducts, setDefaultProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const latestCustomerRef = useRef('');
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
 
   // Item form state
   const [unitPrice, setUnitPrice] = useState<number | ''>('');
+  const [shopPrice, setShopPrice] = useState<number | ''>('');
   const [quantity, setQuantity] = useState<number | ''>('');
   const [price, setPrice] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
@@ -124,7 +129,7 @@ const WarehouseInvoicePage: React.FC = () => {
   
   // Payment state
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [paymentMethod, setPaymentMethod] = useState('Credit');
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [amountPaid, setAmountPaid] = useState<number>(0);
   const [submitting, setSubmitting] = useState(false);
@@ -138,25 +143,42 @@ const WarehouseInvoicePage: React.FC = () => {
 
   // Update amountPaid when finalAmount changes if modal is open
   useEffect(() => {
-    if (showPaymentModal && amountPaid === 0) {
+    // Credit (default): nothing paid now
+    if (showPaymentModal && amountPaid === 0 && paymentMethod !== 'Credit') {
       setAmountPaid(finalAmount);
     }
   }, [finalAmount, showPaymentModal]);
 
-  // Fetch products (only warehouse products with stock > 0)
-  const fetchProducts = async () => {
+  // Fetch products (only warehouse products with stock > 0) with the selected
+  // customer's branch shop prices
+  const fetchProducts = async (clearFirst = false) => {
+    if (!selectedCustomer) return;
+    const customerId = selectedCustomer;
+    latestCustomerRef.current = customerId;
+    // New customer: hide the previous branch's prices until this branch's arrive
+    if (clearFirst) {
+      setDefaultProducts([]);
+      setSelectedProduct(null);
+      setSelectedRowId(null);
+      setUnitPrice('');
+      setShopPrice('');
+    }
+    setProductsLoading(true);
     try {
-      const response = await fetch('/api/warehouse-invoice', {
+      const response = await fetch(`/api/warehouse-invoice?customer_id=${encodeURIComponent(customerId)}`, {
         method: 'GET',
         credentials: 'include',
       });
 
-      if (response.ok) {
+      // Ignore a late reply for a customer that is no longer selected
+      if (response.ok && latestCustomerRef.current === customerId) {
         const data = await response.json();
         setDefaultProducts(data);
       }
     } catch (error) {
       console.error('Error fetching warehouse products:', error);
+    } finally {
+      if (latestCustomerRef.current === customerId) setProductsLoading(false);
     }
   };
 
@@ -198,9 +220,12 @@ const WarehouseInvoicePage: React.FC = () => {
 
   // Fetch data on mount
   useEffect(() => {
-    fetchProducts();
     fetchCustomers();
   }, []);
+
+  useEffect(() => {
+    fetchProducts(true);
+  }, [selectedCustomer]);
 
   // Fetch customers
   const fetchCustomers = async () => {
@@ -238,7 +263,8 @@ const WarehouseInvoicePage: React.FC = () => {
 
     setSelectedProduct(product);
     setSelectedRowId(product.id || null);
-    setUnitPrice(product.price || 0);
+    setUnitPrice(product.price || '');
+    setShopPrice(product.shop_price || '');
     setQuantity('');
     setPrice(0);
     setSearchTerm(product.product_name || '');
@@ -264,8 +290,12 @@ const WarehouseInvoicePage: React.FC = () => {
       showToast('Product not found. Please select from the list.', 'error');
       return;
     }
-    if (unitPrice === '' || Number(unitPrice) < 0) {
-      showToast('Please enter a valid unit price', 'error');
+    if (unitPrice === '' || Number(unitPrice) <= 0) {
+      showToast('Please enter Rate (shop cost)', 'error');
+      return;
+    }
+    if (shopPrice === '' || Number(shopPrice) <= 0) {
+      showToast('Please enter Shop Selling Price', 'error');
       return;
     }
     if (!quantity || Number(quantity) < 1) {
@@ -282,6 +312,7 @@ const WarehouseInvoicePage: React.FC = () => {
       product_name: selectedProduct.product_name || '',
       category: selectedProduct.category || '',
       unit_price: Number(unitPrice),
+      shop_price: Number(shopPrice),
       quantity: Number(quantity),
       price: price,
       discount: discount * Number(quantity),
@@ -295,6 +326,7 @@ const WarehouseInvoicePage: React.FC = () => {
     setSelectedProduct(null);
     setSelectedRowId(null);
     setUnitPrice('');
+    setShopPrice('');
     setQuantity('');
     setPrice(0);
     setDiscount(0);
@@ -338,6 +370,7 @@ const WarehouseInvoicePage: React.FC = () => {
             pro_name: item.product_name,
             pro_quantity: item.quantity,
             unit_price: item.unit_price,
+            shop_price: item.shop_price,
             discount: item.discount / item.quantity,
             cat_name: item.category
           })),
@@ -372,6 +405,7 @@ const WarehouseInvoicePage: React.FC = () => {
         setShowPaymentModal(false);
         setManualDiscount(0);
         setAmountPaid(0);
+        setPaymentMethod('Credit');
         fetchProducts(); // Refresh stock
       } else {
         const errorData = await response.json();
@@ -406,6 +440,25 @@ const WarehouseInvoicePage: React.FC = () => {
             <div className="regal-card p-3 md:p-6">
               <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Add Product</h2>
 
+              {/* Customer first: the prices shown are that customer's branch prices */}
+              <div className="mb-3 md:mb-4">
+                <label className="block text-sm font-medium mb-1">Target Customer</label>
+                <select
+                  value={selectedCustomer}
+                  onChange={(e) => setSelectedCustomer(e.target.value)}
+                  className="regal-input w-full h-9 py-1 disabled:bg-gray-100"
+                  disabled={selectedItems.length > 0}
+                >
+                  <option value="">Select Customer</option>
+                  {customers.map((customer) => (
+                    <option key={customer.cus_id} value={customer.cus_id}>{customer.cus_name}</option>
+                  ))}
+                </select>
+                {selectedItems.length > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">Clear the items to change customer</p>
+                )}
+              </div>
+
               <div className="mb-3 md:mb-4">
                 <label className="block text-sm font-medium mb-1">Product Name</label>
                 <input
@@ -418,14 +471,26 @@ const WarehouseInvoicePage: React.FC = () => {
               </div>
 
               <div className="mb-3 md:mb-4">
-                <label className="block text-sm font-medium mb-1">Unit Price</label>
+                <label className="block text-sm font-medium mb-1">Rate (Shop Cost)</label>
                 <input
                   type="number"
                   min="0"
                   value={unitPrice}
                   onChange={(e) => setUnitPrice(e.target.value === '' ? '' : Number(e.target.value))}
                   className="regal-input w-full h-9"
-                  placeholder="Unit Price"
+                  placeholder="Rate"
+                />
+              </div>
+
+              <div className="mb-3 md:mb-4">
+                <label className="block text-sm font-medium mb-1">Shop Selling Price</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={shopPrice}
+                  onChange={(e) => setShopPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                  className="regal-input w-full h-9"
+                  placeholder="Shop Selling Price"
                 />
               </div>
 
@@ -521,11 +586,17 @@ const WarehouseInvoicePage: React.FC = () => {
                       <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">#</th>
                       <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Product Name</th>
                       <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                      <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
+                      <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Shop Cost</th>
+                      <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Shop Price</th>
                       <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">W-Stock</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
+                    {productsLoading && defaultProducts.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-8 text-center text-gray-500 italic">Loading prices...</td>
+                      </tr>
+                    )}
                     {(searchResults.length > 0 ? searchResults : defaultProducts).map((product, index) => (
                       <tr
                         key={product.id || index}
@@ -537,7 +608,12 @@ const WarehouseInvoicePage: React.FC = () => {
                         <td className="px-4 py-4 text-sm text-gray-900">{index + 1}</td>
                         <td className="px-4 py-4 text-sm font-medium text-gray-900">{product.product_name}</td>
                         <td className="px-4 py-4 text-sm text-gray-900">{product.category || '-'}</td>
-                        <td className="px-4 py-4 text-sm font-semibold text-gray-900">{product.price || 0}</td>
+                        <td className="px-4 py-4 text-sm font-semibold text-gray-900">
+                          {product.price ? product.price : <span className="text-red-600">Not set yet</span>}
+                        </td>
+                        <td className="px-4 py-4 text-sm font-semibold text-gray-900">
+                          {product.shop_price ? product.shop_price : <span className="text-red-600">Not set yet</span>}
+                        </td>
                         <td className="px-4 py-4 text-sm text-gray-900 font-bold">{product.stock || 0}</td>
                       </tr>
                     ))}
@@ -554,7 +630,8 @@ const WarehouseInvoicePage: React.FC = () => {
                   <thead className="bg-gray-100 sticky top-0">
                     <tr>
                       <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                      <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
+                      <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Rate</th>
+                      <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Shop Price</th>
                       <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
                       <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Discount</th>
                       <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
@@ -566,6 +643,7 @@ const WarehouseInvoicePage: React.FC = () => {
                       <tr key={index} className="hover:bg-gray-50">
                         <td className="px-3 py-4 text-sm">{item.product_name}</td>
                         <td className="px-3 py-4 text-sm">{item.unit_price}</td>
+                        <td className="px-3 py-4 text-sm">{item.shop_price}</td>
                         <td className="px-3 py-4 text-sm font-bold">{item.quantity}</td>
                         <td className="px-3 py-4 text-sm text-red-700">{item.discount}</td>
                         <td className="px-3 py-4 text-sm font-semibold">{item.price - item.discount}</td>
@@ -581,7 +659,7 @@ const WarehouseInvoicePage: React.FC = () => {
                     ))}
                     {selectedItems.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="px-3 py-8 text-center text-gray-500 italic">
+                        <td colSpan={7} className="px-3 py-8 text-center text-gray-500 italic">
                           No items added for transfer
                         </td>
                       </tr>
@@ -600,22 +678,18 @@ const WarehouseInvoicePage: React.FC = () => {
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-3 md:p-6">
             <div className="flex justify-between items-center mb-3 md:mb-4">
               <h2 className="text-lg md:text-xl font-bold uppercase">Complete Warehouse Invoice</h2>
-              <button onClick={() => setShowPaymentModal(false)} className="text-gray-500 hover:text-gray-700 text-2xl">×</button>
+              <button onClick={() => setShowPaymentModal(false)} disabled={submitting} className="text-gray-500 hover:text-gray-700 text-2xl disabled:opacity-50 disabled:cursor-not-allowed">×</button>
             </div>
 
             <div className="grid grid-cols-1 gap-3 md:gap-4 mb-3 md:mb-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Target Customer</label>
-                <select
-                  value={selectedCustomer}
-                  onChange={(e) => setSelectedCustomer(e.target.value)}
-                  className="regal-input w-full"
-                >
-                  <option value="">Select Customer</option>
-                  {customers.map((customer) => (
-                    <option key={customer.cus_id} value={customer.cus_id}>{customer.cus_name}</option>
-                  ))}
-                </select>
+                <input
+                  type="text"
+                  value={customers.find(c => c.cus_id === selectedCustomer)?.cus_name || ''}
+                  className="regal-input w-full bg-gray-100"
+                  readOnly
+                />
               </div>
             </div>
 
@@ -705,13 +779,14 @@ const WarehouseInvoicePage: React.FC = () => {
               <button
                 onClick={submitPayment}
                 disabled={submitting}
-                className="regal-btn bg-regal-yellow text-regal-black flex-1 hover:bg-yellow-600 shadow-md font-bold uppercase tracking-wider"
+                className="regal-btn bg-regal-yellow text-regal-black flex-1 hover:bg-yellow-600 shadow-md font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-regal-yellow"
               >
                 {submitting ? 'Transferring Stock...' : 'Confirm Transfer & Print'}
               </button>
               <button
                 onClick={() => setShowPaymentModal(false)}
-                className="regal-btn bg-gray-300 text-black flex-1"
+                disabled={submitting}
+                className="regal-btn bg-gray-300 text-black flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>

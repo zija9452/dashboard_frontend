@@ -54,7 +54,10 @@ export async function GET(request: NextRequest) {
   try {
     const cookieHeader = request.headers.get('cookie') || '';
 
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/warehouse-invoice/products`;
+    // customer_id: return that customer's branch shop prices
+    const customerId = new URL(request.url).searchParams.get('customer_id');
+    const query = customerId ? `?customer_id=${encodeURIComponent(customerId)}` : '';
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/warehouse-invoice/products${query}`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',

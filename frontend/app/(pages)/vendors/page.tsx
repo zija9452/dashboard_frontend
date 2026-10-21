@@ -8,6 +8,7 @@ import Pagination from '@/components/ui/Pagination';
 import ReportModal from '@/components/ui/ReportModal';
 import PageHeader from '@/components/ui/PageHeader';
 import { useBranch } from '@/lib/branch';
+import SearchBox from '@/components/ui/SearchBox';
 
 interface Vendor {
   ven_id: string;
@@ -300,35 +301,14 @@ const VendorsPage: React.FC = () => {
         </div>
 
         {/* Right side - Search */}
-        <div className="w-full sm:w-auto flex gap-2">
-          <div className="relative">
-            <input
-              id="vendorSearchInput"
-              type="text"
-              placeholder="Search vendors..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="regal-input w-full pl-10 pr-4 py-2"
-            />
-            <svg
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-          <button
-            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
-            onClick={() => {
-              setSearchTerm('');
-              document.getElementById('vendorSearchInput')?.focus();
-            }}
-          >
-            Clear
-          </button>
-        </div>
+        <SearchBox
+          value={searchTerm}
+          onChange={setSearchTerm}
+          resetPage={() => setCurrentPage(1)}
+          id="vendorSearchInput"
+          placeholder="Search vendors..."
+          clearWrapperClassName="w-full sm:w-auto flex gap-2"
+        />
       </div>
 
       {/* Add/Edit Form */}

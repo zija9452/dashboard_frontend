@@ -8,6 +8,7 @@ import Link from 'next/link';
 import PageHeader from '@/components/ui/PageHeader';
 import Pagination from '@/components/ui/Pagination';
 import ShopOrdersUnseenBadge from '@/components/ShopOrdersUnseenBadge';
+import SearchBox from '@/components/ui/SearchBox';
 
 interface CustomerOrder {
   orderid: string;
@@ -251,31 +252,15 @@ const ViewCustomerOrderPage: React.FC = () => {
           {/* Search Bar & Status Filter - Show on button click */}
           {showSearch && (
             <div className="flex gap-2 mt-2">
-              <div className="relative">
-                <input
-                  id="searchInput"
-                  type="text"
-                  placeholder="Search by invoice..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      setCurrentPage(1);
-                    }
-                  }}
-                  className="regal-input w-full pl-10 pr-4 py-4"
-                  autoFocus
-                />
-                <svg
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
+              <SearchBox
+                value={searchTerm}
+                onChange={setSearchTerm}
+                resetPage={() => setCurrentPage(1)}
+                id="searchInput"
+                placeholder="Search by invoice..."
+                inputClassName="regal-input w-full pl-10 pr-4 py-4"
+                autoFocus
+              />
               <select
                 value={statusFilter}
                 onChange={(e) => {

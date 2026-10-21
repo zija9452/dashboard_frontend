@@ -64,6 +64,7 @@ const DuplicateBillPage: React.FC = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchQuery);
+      setCurrentPage(1); // new search starts from page 1
     }, 300);
 
     return () => clearTimeout(timer);

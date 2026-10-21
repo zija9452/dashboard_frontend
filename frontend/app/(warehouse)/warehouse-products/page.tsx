@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import { productsApi, Product } from '@/lib/api/products';
 import PageHeader from '@/components/ui/PageHeader';
-import { useBranch } from '@/lib/branch';
+import SearchBox from '@/components/ui/SearchBox';
 
 const ShopWarehouseProductsPage: React.FC = () => {
   const router = useRouter();
@@ -36,27 +36,25 @@ const ShopWarehouseProductsPage: React.FC = () => {
 
   const totalPages = totalPagesFromApi;
 
-  // Branch options: the branch this user is logged into
-  const currentBranch = useBranch();
-  const branchOptions = currentBranch ? [currentBranch.name] : [];
+  const [vendors, setVendors] = useState<any[]>([]);
 
-  // Form state
+  // Form state. No price/cost/branch: shop prices are set by the warehouse invoice
+  // and the warehouse product is saved in the logged-in branch by the backend.
   const [formData, setFormData] = useState({
     name: '',
-    unit_price: 0,
-    cost_price: 0,
     barcode: '',
     discount: 0,
     limited_qty: 0,
     category: '',
-    branch: '',
     brand_action: '',
     sku: '',
     attributes: '',
-    // Warehouse fields (only article_no and warehouse_limited_qty, no warehouse_stock)
     article_no: '',
     warehouse_limited_qty: 0,
-    warehouse_cost: 0
+    warehouse_cost: 0,
+    // Add only: optional opening warehouse stock-in (same as the Stock In page)
+    initial_stock: 0,
+    vendor_id: ''
   });
 
   // Generate barcode from backend
@@ -106,6 +104,19 @@ const ShopWarehouseProductsPage: React.FC = () => {
     }
   };
 
+  // Fetch warehouse vendors (for the opening stock-in)
+  const fetchVendors = async () => {
+    try {
+      const response = await fetch('/api/warehouse-vendors/', { method: 'GET', credentials: 'include' });
+      if (response.ok) {
+        const data = await response.json();
+        setVendors(Array.isArray(data) ? data : []);
+      }
+    } catch (error) {
+      console.error('Error fetching warehouse vendors:', error);
+    }
+  };
+
   // Fetch user role
   useEffect(() => {
     const fetchUserRole = async () => {
@@ -127,6 +138,7 @@ const ShopWarehouseProductsPage: React.FC = () => {
     fetchUserRole();
     fetchCategories();
     fetchBrands();
+    fetchVendors();
   }, []);
 
   // Fetch products (only where is_warehouse_product = true)
@@ -193,19 +205,18 @@ const ShopWarehouseProductsPage: React.FC = () => {
     const newBarcode = await generateBarcode();
     setFormData({
       name: '',
-      unit_price: 0,
-      cost_price: 0,
       barcode: newBarcode,
       discount: 0,
       limited_qty: 0,
       category: '',
-      branch: '',
       brand_action: '',
       sku: '',
       attributes: '',
       article_no: '',
       warehouse_limited_qty: 0,
-      warehouse_cost: 0
+      warehouse_cost: 0,
+      initial_stock: 0,
+      vendor_id: ''
     });
     setEditingProduct(null);
     setShowAddForm(false);
@@ -223,18 +234,21 @@ const ShopWarehouseProductsPage: React.FC = () => {
 
     if (submitting) return;
 
+    if (!editingProduct && formData.vendor_id && !(Number(formData.initial_stock) > 0)) {
+      showToast('Enter Warehouse Stock for the selected vendor', 'error');
+      return;
+    }
+
     setSubmitting(true);
 
     try {
+      // Price/cost/branch are not sent: an edit keeps the shop prices as they are
       const basePayload = {
         sku: formData.sku || `SKU-${Date.now()}`,
         name: formData.name,
-        unit_price: Number(formData.unit_price),
-        cost_price: Number(formData.cost_price),
         barcode: formData.barcode,
         discount: Number(formData.discount),
         category: formData.category,
-        branch: formData.branch,
         limited_qty: Number(formData.limited_qty),
         brand_action: formData.brand_action,
         is_warehouse_product: true, // Auto-set to true
@@ -255,15 +269,44 @@ const ShopWarehouseProductsPage: React.FC = () => {
           showConfirmButton: false
         });
       } else {
-        await productsApi.createProduct({ ...basePayload, stock_level: 0 });
-        Swal.fire({
-          title: 'Created!',
-          text: 'Warehouse product has been created successfully.',
-          icon: 'success',
-          timer: 2000,
-          timerProgressBar: true,
-          showConfirmButton: false
-        });
+        // Shop prices start at 0; the first warehouse invoice to a shop sets them
+        const created: any = await productsApi.createProduct({
+          ...basePayload, unit_price: 0, cost_price: 0, stock_level: 0
+        } as any);
+
+        const initialStock = Number(formData.initial_stock);
+        let stockMessage = '';
+        if (initialStock > 0 && created?.id) {
+          const response = await fetch('/api/warehouse-stock?action=in', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              product_id: created.id,
+              qty: initialStock,
+              vendor_id: formData.vendor_id || null,
+              cost_price: Number(formData.warehouse_cost),
+              ref: `W_IN_${new Date().toISOString().split('T')[0].replace(/-/g, '')}`,
+            }),
+          });
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            stockMessage = ` But stock was not added: ${errorData.error || errorData.detail || 'failed'}. Add it from Stock In.`;
+          }
+        }
+
+        if (stockMessage) {
+          Swal.fire('Created, stock not added', `Warehouse product has been created.${stockMessage}`, 'warning');
+        } else {
+          Swal.fire({
+            title: 'Created!',
+            text: 'Warehouse product has been created successfully.',
+            icon: 'success',
+            timer: 2000,
+            timerProgressBar: true,
+            showConfirmButton: false
+          });
+        }
       }
 
       await fetchProducts();
@@ -305,20 +348,19 @@ const ShopWarehouseProductsPage: React.FC = () => {
       setEditingProduct(fullProduct);
       setFormData({
         name: fullProduct.pro_name,
-        unit_price: fullProduct.pro_price,
-        cost_price: fullProduct.pro_cost,
         barcode: fullProduct.pro_barcode,
         discount: fullProduct.pro_dis,
         limited_qty: fullProduct.limitedquan,
         category: fullProduct.cat_id_fk,
-        branch: fullProduct.branch,
         brand_action: fullProduct.brand,
         sku: '',
         attributes: fullProduct.pro_image,
         // Warehouse fields
         article_no: fullProduct.article_no || '',
         warehouse_limited_qty: fullProduct.warehouse_limited_qty || 0,
-        warehouse_cost: fullProduct.warehouse_cost || 0
+        warehouse_cost: fullProduct.warehouse_cost || 0,
+        initial_stock: 0,
+        vendor_id: ''
       });
       setShowAddForm(true);
 
@@ -415,19 +457,18 @@ const ShopWarehouseProductsPage: React.FC = () => {
                   const newBarcode = await generateBarcode();
                   setFormData({
                     name: '',
-                    unit_price: 0,
-                    cost_price: 0,
                     barcode: newBarcode,
                     discount: 0,
                     limited_qty: 0,
                     category: '',
-                    branch: '',
                     brand_action: '',
                     sku: '',
                     attributes: '',
                     article_no: '',
                     warehouse_limited_qty: 0,
-                    warehouse_cost: 0
+                    warehouse_cost: 0,
+                    initial_stock: 0,
+                    vendor_id: ''
                   });
                   setEditingProduct(null);
                   setShowAddForm(true);
@@ -460,42 +501,15 @@ const ShopWarehouseProductsPage: React.FC = () => {
         </div>
 
         {/* Search */}
-        <div className="flex gap-2 w-full sm:w-auto">
-          <div className="relative flex-1">
-            <input
-              id="searchInput"
-              type="text"
-              placeholder="Search by name or barcode..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  setCurrentPage(1);
-                }
-              }}
-              className="regal-input w-full pl-10 pr-4 py-2"
-            />
-            <svg
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-          <button
-            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
-            onClick={() => {
-              setSearchTerm('');
-              setCurrentPage(1);
-              document.getElementById('searchInput')?.focus();
-            }}
-          >
-            Clear
-          </button>
-        </div>
+        <SearchBox
+          value={searchTerm}
+          onChange={setSearchTerm}
+          resetPage={() => setCurrentPage(1)}
+          id="searchInput"
+          placeholder="Search by name or barcode..."
+          boxClassName="relative flex-1"
+          clearWrapperClassName="flex gap-2 w-full sm:w-auto"
+        />
       </div>
 
       {/* Add/Edit Form */}
@@ -515,36 +529,6 @@ const ShopWarehouseProductsPage: React.FC = () => {
                   onChange={handleInputChange}
                   className="regal-input w-full"
                   placeholder="Enter product name"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Price *</label>
-                <input
-                  type="number"
-                  name="unit_price"
-                  value={formData.unit_price || ''}
-                  onChange={handleInputChange}
-                  className="regal-input w-full"
-                  placeholder="Enter price"
-                  step="1"
-                  min="0"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Cost *</label>
-                <input
-                  type="number"
-                  name="cost_price"
-                  value={formData.cost_price || ''}
-                  onChange={handleInputChange}
-                  className="regal-input w-full"
-                  placeholder="Enter cost"
-                  step="1"
-                  min="0"
                   required
                 />
               </div>
@@ -611,22 +595,6 @@ const ShopWarehouseProductsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Select Branch *</label>
-                <select
-                  name="branch"
-                  value={formData.branch}
-                  onChange={handleInputChange}
-                  className="regal-input w-full"
-                  required
-                >
-                  <option value="">Select Branch</option>
-                  {branchOptions.map(branch => (
-                    <option key={branch} value={branch}>{branch}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
                 <label className="block text-sm font-medium mb-1">Select Brand *</label>
                 <select
                   name="brand_action"
@@ -683,6 +651,39 @@ const ShopWarehouseProductsPage: React.FC = () => {
                       required
                     />
                   </div>
+
+                  {!editingProduct && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Warehouse Stock (Optional)</label>
+                        <input
+                          type="number"
+                          name="initial_stock"
+                          value={formData.initial_stock || ''}
+                          onChange={handleInputChange}
+                          className="regal-input w-full"
+                          placeholder="Opening warehouse stock"
+                          step="1"
+                          min="0"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Warehouse Vendor (Optional)</label>
+                        <select
+                          name="vendor_id"
+                          value={formData.vendor_id}
+                          onChange={handleInputChange}
+                          className="regal-input w-full"
+                        >
+                          <option value="">No Vendor</option>
+                          {vendors.map(vendor => (
+                            <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
+                  )}
            
             </div>
 
@@ -735,8 +736,6 @@ const ShopWarehouseProductsPage: React.FC = () => {
                 <tr className='text-xs text-gray-900 uppercase tracking-wider font-semibold'>
                   <th className="px-3 py-5 text-left w-12">S.No</th>
                   <th className="px-2 py-5 text-left w-40">Product</th>
-                  <th className="px-2 py-5 w-20">Price</th>
-                  <th className="px-2 py-5 w-20">Cost</th>
                   <th className="px-2 py-5 text-left w-24">Barcode</th>
                   <th className="px-2 py-5 w-20">Discount</th>
                   <th className="px-2 py-5 text-left w-28">Category</th>
@@ -755,8 +754,6 @@ const ShopWarehouseProductsPage: React.FC = () => {
                   <tr key={product.pro_id} className="hover:bg-gray-50 text-sm text-gray-900">
                     <td className="px-3 py-4">{(currentPage - 1) * pageSize + index + 1}</td>
                     <td className="px-2 py-4">{product.pro_name}</td>
-                    <td className="px-2 py-4  text-center">{product.pro_price}</td>
-                    <td className="px-2 py-4 text-center">{product.pro_cost}</td>
                     <td className="px-2 py-4">{product.pro_barcode || '-'}</td>
                     <td className="px-2 py-4  text-center">{product.pro_dis !== undefined && product.pro_dis !== null ? `${product.pro_dis}%` : '0%'}</td>
                     <td className="px-2 py-4">{product.cat_id_fk || '-'}</td>

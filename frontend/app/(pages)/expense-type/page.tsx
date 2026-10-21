@@ -6,6 +6,7 @@ import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import PageHeader from '@/components/ui/PageHeader';
+import SearchBox from '@/components/ui/SearchBox';
 
 interface ExpenseType {
   id: string;
@@ -249,35 +250,15 @@ const ExpenseTypePage: React.FC = () => {
         </div>
 
         {/* Right side - Search */}
-        <div className="w-full sm:w-auto flex gap-2">
-          <div className="relative">
-            <input
-              id="expenseTypeSearchInput"
-              type="text"
-              placeholder="Search expense types..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="regal-input w-full pl-10 pr-4 py-2"
-            />
-            <svg
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-          <button
-            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
-            onClick={() => {
-              setSearchTerm('');
-              document.getElementById('expenseTypeSearchInput')?.focus();
-            }}
-          >
-            Search
-          </button>
-        </div>
+        <SearchBox
+          value={searchTerm}
+          onChange={setSearchTerm}
+          resetPage={() => setCurrentPage(1)}
+          id="expenseTypeSearchInput"
+          placeholder="Search expense types..."
+          clearWrapperClassName="w-full sm:w-auto flex gap-2"
+          clearLabel="Search"
+        />
       </div>
 
       {/* Add/Edit Form */}

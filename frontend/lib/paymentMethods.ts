@@ -41,6 +41,7 @@ export interface PaymentProof {
   reviewed_by_name: string | null;
   reviewed_at: string | null;
   reject_reason: string | null;
+  notes: string | null;
   images: { id: string; file_url: string }[];
 }
 

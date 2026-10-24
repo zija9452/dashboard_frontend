@@ -38,8 +38,8 @@ const ShopWarehouseProductsPage: React.FC = () => {
 
   const [vendors, setVendors] = useState<any[]>([]);
 
-  // Form state. No price/cost/branch: shop prices are set by the warehouse invoice
-  // and the warehouse product is saved in the logged-in branch by the backend.
+  // Form state. Shop cost / selling price are optional (same in both branches); if left
+  // empty the warehouse invoice sets them. The branch is set by the backend.
   const [formData, setFormData] = useState({
     name: '',
     barcode: '',
@@ -52,6 +52,8 @@ const ShopWarehouseProductsPage: React.FC = () => {
     article_no: '',
     warehouse_limited_qty: 0,
     warehouse_cost: 0,
+    cost_price: 0,
+    unit_price: 0,
     // Add only: optional opening warehouse stock-in (same as the Stock In page)
     initial_stock: 0,
     vendor_id: ''
@@ -215,6 +217,8 @@ const ShopWarehouseProductsPage: React.FC = () => {
       article_no: '',
       warehouse_limited_qty: 0,
       warehouse_cost: 0,
+      cost_price: 0,
+      unit_price: 0,
       initial_stock: 0,
       vendor_id: ''
     });
@@ -242,7 +246,6 @@ const ShopWarehouseProductsPage: React.FC = () => {
     setSubmitting(true);
 
     try {
-      // Price/cost/branch are not sent: an edit keeps the shop prices as they are
       const basePayload = {
         sku: formData.sku || `SKU-${Date.now()}`,
         name: formData.name,
@@ -258,8 +261,17 @@ const ShopWarehouseProductsPage: React.FC = () => {
       };
 
       if (editingProduct) {
-        // Do NOT include stock_level in update — stock is managed via stock-in/out
-        await productsApi.updateProduct(editingProduct.pro_id, basePayload);
+        // Do NOT include stock_level in update — stock is managed via stock-in/out.
+        // Shop cost / price are sent only when changed (the backend copies them to the
+        // other branch), so other edits keep a price a warehouse invoice set there.
+        const pricePayload: { cost_price?: number; unit_price?: number } = {};
+        if (Number(formData.cost_price) !== Number(editingProduct.pro_cost || 0)) {
+          pricePayload.cost_price = Number(formData.cost_price);
+        }
+        if (Number(formData.unit_price) !== Number(editingProduct.pro_price || 0)) {
+          pricePayload.unit_price = Number(formData.unit_price);
+        }
+        await productsApi.updateProduct(editingProduct.pro_id, { ...basePayload, ...pricePayload } as any);
         Swal.fire({
           title: 'Updated!',
           text: 'Warehouse product has been updated successfully.',
@@ -269,9 +281,13 @@ const ShopWarehouseProductsPage: React.FC = () => {
           showConfirmButton: false
         });
       } else {
-        // Shop prices start at 0; the first warehouse invoice to a shop sets them
+        // Shop prices left empty stay 0; the first warehouse invoice to a shop sets them.
+        // The backend copies the product (with these prices) to the other branch.
         const created: any = await productsApi.createProduct({
-          ...basePayload, unit_price: 0, cost_price: 0, stock_level: 0
+          ...basePayload,
+          unit_price: Number(formData.unit_price) || 0,
+          cost_price: Number(formData.cost_price) || 0,
+          stock_level: 0
         } as any);
 
         const initialStock = Number(formData.initial_stock);
@@ -359,6 +375,8 @@ const ShopWarehouseProductsPage: React.FC = () => {
         article_no: fullProduct.article_no || '',
         warehouse_limited_qty: fullProduct.warehouse_limited_qty || 0,
         warehouse_cost: fullProduct.warehouse_cost || 0,
+        cost_price: fullProduct.pro_cost || 0,
+        unit_price: fullProduct.pro_price || 0,
         initial_stock: 0,
         vendor_id: ''
       });
@@ -467,6 +485,8 @@ const ShopWarehouseProductsPage: React.FC = () => {
                     article_no: '',
                     warehouse_limited_qty: 0,
                     warehouse_cost: 0,
+                    cost_price: 0,
+                    unit_price: 0,
                     initial_stock: 0,
                     vendor_id: ''
                   });
@@ -649,6 +669,34 @@ const ShopWarehouseProductsPage: React.FC = () => {
                       step="1"
                       min="1"
                       required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Shop Cost (Optional)</label>
+                    <input
+                      type="number"
+                      name="cost_price"
+                      value={formData.cost_price || ''}
+                      onChange={handleInputChange}
+                      className="regal-input w-full"
+                      placeholder="Shop cost (both branches)"
+                      step="any"
+                      min="0"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Shop Selling Price (Optional)</label>
+                    <input
+                      type="number"
+                      name="unit_price"
+                      value={formData.unit_price || ''}
+                      onChange={handleInputChange}
+                      className="regal-input w-full"
+                      placeholder="Selling price (both branches)"
+                      step="any"
+                      min="0"
                     />
                   </div>
 

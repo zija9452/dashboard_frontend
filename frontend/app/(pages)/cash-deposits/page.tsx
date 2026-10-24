@@ -276,6 +276,7 @@ const CashDepositsPage: React.FC = () => {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectBox, setShowRejectBox] = useState(false);
+  const [proofComment, setProofComment] = useState(''); // reviewer comment, sent with Approve / Reject
   const [reviewing, setReviewing] = useState(false);
   const [zoomSrc, setZoomSrc] = useState<string | null>(null);
   // Share: slip URL being prepared, and photos already made (a second tap shares at once)
@@ -572,6 +573,7 @@ const CashDepositsPage: React.FC = () => {
     setIsPanelOpen(true);
     setRejectReason('');
     setShowRejectBox(false);
+    setProofComment('');
   };
 
   const closePanel = () => {
@@ -591,13 +593,17 @@ const CashDepositsPage: React.FC = () => {
     }
     const deposit = isDeposit(selected);
     const label = deposit ? selected.deposit_no : `${selected.invoice_no} payment`;
+    // Online payment: the optional comment is saved (and locked) with the decision
+    const body: Record<string, string> = {};
+    if (action === 'reject') body.reason = rejectReason.trim();
+    if (!deposit && proofComment.trim()) body.notes = proofComment.trim();
     try {
       setReviewing(true);
       const response = await fetch(`/api/${deposit ? 'cash-deposits' : 'payment-proofs'}/${selected.id}/${action}`, {
         method: 'POST',
         credentials: 'include',
-        ...(action === 'reject'
-          ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: rejectReason.trim() }) }
+        ...(Object.keys(body).length
+          ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
           : {}),
       });
       const data = await response.json();
@@ -1411,6 +1417,12 @@ const CashDepositsPage: React.FC = () => {
                   Follow up with the customer for this payment.
                 </p>
               )}
+              {(selected.status === 'APPROVED' || selected.status === 'REJECTED') && selected.notes && (
+                <div className="flex justify-between border-b border-gray-100 pb-3">
+                  <span className="text-sm text-gray-500">Comment</span>
+                  <span className="text-sm font-medium text-gray-900 text-right ml-4 whitespace-pre-wrap">{selected.notes}</span>
+                </div>
+              )}
 
               {/* Screenshots: original URL (sharp text), click to zoom */}
               <div>
@@ -1517,6 +1529,25 @@ const CashDepositsPage: React.FC = () => {
                   </div>
                 )}
               </div>
+
+              {/* Reviewer comment once a pay slip is attached: saved with Approve / Reject,
+                  then read-only (Comment row above) */}
+              {canReview && selected.status === 'PENDING' && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Comment <span className="font-normal text-gray-400">(Optional)</span>
+                  </label>
+                  <textarea
+                    value={proofComment}
+                    onChange={(e) => setProofComment(e.target.value)}
+                    className="regal-input w-full"
+                    rows={2}
+                    maxLength={500}
+                    placeholder="e.g. Received in Easypaisa Zohaib"
+                    disabled={reviewing}
+                  />
+                </div>
+              )}
 
               {canReview && (selected.status === 'PENDING' || selected.status === 'MISSING') && showRejectBox && (
                 <div>

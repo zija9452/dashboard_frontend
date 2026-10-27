@@ -22,6 +22,7 @@ interface WalkInInvoice {
   total_discount: number;
   cost: number;
   created_at: string;
+  payment_date?: string;
   // Refund tracking fields
   is_refunded?: boolean;
   refund_records?: Array<{
@@ -631,7 +632,7 @@ const SalesViewPage: React.FC = () => {
                           <td className="px-3 py-4 relative">
                             <div className="flex items-center gap-2">
                               {(() => {
-                                const date = new Date(invoice.created_at);
+                                const date = new Date(invoice.payment_date || invoice.created_at);
                                 const hours = date.getHours();
                                 const minutes = date.getMinutes();
                                 const seconds = date.getSeconds();

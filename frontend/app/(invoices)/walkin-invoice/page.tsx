@@ -180,7 +180,10 @@ const WalkInInvoicePage: React.FC = () => {
 
   // Cart state
   const [selectedItems, setSelectedItems] = useState<CartItem[]>([]);
-  
+  // Latest cart, so back-to-back scans each see the previous scan's result
+  const selectedItemsRef = useRef<CartItem[]>([]);
+  selectedItemsRef.current = selectedItems;
+
   // Payment state
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('Cash');
@@ -266,6 +269,17 @@ const WalkInInvoicePage: React.FC = () => {
         const data = await response.json();
         // Filter only products with stock > 0
         const products = (data.data || data.products || []).filter((p: any) => (p.stock_level || p.stock || 0) > 0);
+
+        // Whole barcode scanned/pasted: add 1 piece straight to the cart
+        const code = search.trim().toLowerCase();
+        const scanned = products.find((p: Product) => (p.barcode || p.pro_barcode || '').trim().toLowerCase() === code);
+        if (scanned) {
+          if (latestSearchTermRef.current.trim().toLowerCase() === code) {
+            addScannedProduct(scanned);
+          }
+          return;
+        }
+
         setSearchResults(products);
 
         // Nothing came back with stock > 0 for this search - figure out why
@@ -748,6 +762,67 @@ const WalkInInvoicePage: React.FC = () => {
     setSearchResults([]);
   };
 
+  // Add a scanned product to the cart with quantity 1 (or +1 if already in the cart)
+  const addScannedProduct = (product: Product) => {
+    const stockQty = product.stock_level || product.stock || 0;
+    const barcode = product.barcode || product.pro_barcode || '';
+    const name = (product.product_name || '').trim().toLowerCase();
+    const items = selectedItemsRef.current;
+    const existingIndex = items.findIndex(item =>
+      (barcode && item.barcode === barcode) || (name && item.product_name.trim().toLowerCase() === name)
+    );
+
+    if (existingIndex >= 0) {
+      const existing = items[existingIndex];
+      const mergedQty = existing.quantity + 1;
+      if (mergedQty > stockQty) {
+        showToast(`Cannot add more quantity. Available quantity: ${stockQty}`, 'error');
+      } else {
+        const mergedPrice = existing.unit_price * mergedQty;
+        const updated = [...items];
+        updated[existingIndex] = {
+          ...existing,
+          quantity: mergedQty,
+          price: mergedPrice,
+          total: mergedPrice,
+          discount: Math.min(existing.unit_discount * mergedQty, mergedPrice),
+          stock: stockQty
+        };
+        selectedItemsRef.current = updated;
+        setSelectedItems(updated);
+        showToast(`${existing.product_name} already in cart - quantity updated to ${mergedQty}`, 'success');
+      }
+    } else {
+      const unit = Number(product.price || 0);
+      const updated = [...items, {
+        id: product.id || product.pro_id || '',
+        product_name: product.product_name || '',
+        category: product.category || '',
+        unit_price: unit,
+        quantity: 1,
+        price: unit,
+        discount: 0,
+        total: unit,
+        barcode,
+        stock: stockQty,
+        unit_discount: 0
+      }];
+      selectedItemsRef.current = updated;
+      setSelectedItems(updated);
+      showToast(`${product.product_name} added to cart`, 'success');
+    }
+
+    // Reset form, ready for the next scan
+    setSelectedProduct(null);
+    setSelectedRowId(null);
+    setUnitPrice('');
+    setQuantity('');
+    setPrice(0);
+    setDiscount(0);
+    setSearchTerm('');
+    setSearchResults([]);
+  };
+
   // Edit unit price / quantity / discount of a cart row; invalid input is ignored
   const updateCartItem = (index: number, field: 'unit_price' | 'quantity' | 'discount', raw: string) => {
     if (raw.trim() === '') return;
@@ -906,7 +981,11 @@ const WalkInInvoicePage: React.FC = () => {
         clearAll();
         setShowPaymentModal(false);
         setAmountPaid('');
-        setSelectedCustomer('');
+        const walkInCustomerAfterSave = customers.find((c) =>
+          c.cus_name.toLowerCase().includes('walk-in') ||
+          c.cus_name.toLowerCase().includes('walk in')
+        );
+        setSelectedCustomer(walkInCustomerAfterSave ? walkInCustomerAfterSave.cus_id : '');
         const defaultSalesmanAfterSave = salesmans.find(
           (s) => s.sal_name?.toLowerCase() === 'suleman'
         );

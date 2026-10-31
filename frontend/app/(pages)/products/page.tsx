@@ -10,6 +10,7 @@ import PageHeader from '@/components/ui/PageHeader';
 import ImageZoomViewer from '@/components/ui/ImageZoomViewer';
 import { useBranch } from '@/lib/branch';
 import SearchBox from '@/components/ui/SearchBox';
+import { useBatchLines, shopLinesUrl, ShopBatchLine, rangeText, plainAmount } from '@/lib/batchLines';
 
 interface Category {
   id: string;
@@ -58,6 +59,8 @@ const ProductsPage: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+  // Rows with batches open on click to their Old Stock + batch lines (this branch's stock)
+  const { lines: openLines, toggle: toggleBatches } = useBatchLines<ShopBatchLine>((message) => showToast(message, 'error'), shopLinesUrl);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -828,12 +831,24 @@ const ProductsPage: React.FC = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {products.map((product, index) => (
-                  <tr key={product.pro_id} className="hover:bg-gray-50 text-sm text-gray-900">
-                    <td className="px-3 py-4 text-sm text-gray-900 whitespace-nowrap">{((currentPage - 1) * pageSize) + index + 1}</td>
-                    <td className="px-3 py-4">{product.pro_name}</td>
-                    <td className="px-2 py-4 whitespace-nowrap">{product.pro_price.toFixed(2)}</td>
+                  <React.Fragment key={product.pro_id}>
+                  <tr
+                    onClick={() => product.batch_count && toggleBatches(product.pro_id)}
+                    className={`text-sm text-gray-900 ${product.batch_count ? 'cursor-pointer' : ''} ${product.pro_id in openLines ? 'bg-yellow-50' : 'hover:bg-gray-50'}`}
+                  >
+                    <td className={`px-3 py-4 text-sm text-gray-900 whitespace-nowrap ${product.pro_id in openLines ? 'border-l-4 border-regal-yellow' : ''}`}>{((currentPage - 1) * pageSize) + index + 1}</td>
+                    <td className="px-3 py-4">
+                      {product.pro_name}
+                      {!!product.batch_count && (
+                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-regal-black whitespace-nowrap">
+                          {product.batch_count} batch{product.batch_count > 1 ? 'es' : ''} {product.pro_id in openLines ? '▲' : '▼'}
+                        </span>
+                      )}
+                    </td>
+                    {/* With batches: lowest – highest of its lines (each line's own values below) */}
+                    <td className="px-2 py-4 whitespace-nowrap">{product.price_range ? rangeText(product.price_range, plainAmount) : plainAmount(product.pro_price)}</td>
                     {!roleLoading && userRole !== 'cashier' && (
-                      <td className="px-2 py-4 whitespace-nowrap">{product.pro_cost.toFixed(2)}</td>
+                      <td className="px-2 py-4 whitespace-nowrap">{product.cost_range ? rangeText(product.cost_range, plainAmount) : plainAmount(product.pro_cost)}</td>
                     )}
                     <td className="px-2 py-4 whitespace-nowrap">{product.pro_barcode || 'N/A'}</td>
                     <td className="px-2 py-4 text-center whitespace-nowrap">{product.pro_dis}%</td>
@@ -842,7 +857,8 @@ const ProductsPage: React.FC = () => {
                     <td className="px-2 py-4">{product.cat_id_fk || 'N/A'}</td>
                     <td className="px-2 py-4">{product.branch || 'N/A'}</td>
                     <td className="px-2 py-4">{product.brand || 'N/A'}</td>
-                    <td className="px-2 py-4 text-center">
+                    {/* Edit / Delete don't open the batch lines */}
+                    <td className="px-2 py-4 text-center" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-center items-center gap-3">
                         <button
                           onClick={() => handleEdit(product)}
@@ -883,6 +899,40 @@ const ProductsPage: React.FC = () => {
                       </div>
                     </td>
                   </tr>
+                  {/* Batch lines under the same columns: Old Stock + each batch */}
+                  {product.pro_id in openLines && openLines[product.pro_id] === null && (
+                    <tr className="bg-gray-50 text-sm text-gray-500">
+                      <td></td>
+                      <td colSpan={11} className="px-2 py-2">Loading batches...</td>
+                    </tr>
+                  )}
+                  {(openLines[product.pro_id] || []).map((line, lineIndex) => (
+                    <tr key={line.label + (line.barcode || '')} className="bg-gray-50 text-sm text-gray-700">
+                      {/* 1.1, 1.2 ... under the product's S.No; ├ / └ ties the line to the product above */}
+                      <td className="px-3 py-2 text-gray-500 whitespace-nowrap border-l-4 border-regal-yellow">
+                        <span className="font-mono text-gray-400 mr-1">{lineIndex === (openLines[product.pro_id] || []).length - 1 ? '└' : '├'}</span>
+                        {((currentPage - 1) * pageSize) + index + 1}.{lineIndex + 1}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div>{product.pro_name}</div>
+                        <span className="text-xs font-semibold text-regal-black">{line.label}</span>
+                        {line.vendor_name && <span className="ml-1 text-xs text-gray-500">({line.vendor_name})</span>}
+                      </td>
+                      <td className="px-2 py-2 whitespace-nowrap">{plainAmount(line.selling_price)}</td>
+                      {!roleLoading && userRole !== 'cashier' && (
+                        <td className="px-2 py-2 whitespace-nowrap">{plainAmount(line.cost)}</td>
+                      )}
+                      <td className="px-2 py-2 font-mono text-xs whitespace-nowrap">{line.barcode || '-'}</td>
+                      <td className="px-2 py-2"></td>
+                      <td className="px-2 py-2 text-center font-semibold">{line.stock}</td>
+                      <td className="px-2 py-2"></td>
+                      <td className="px-2 py-2"></td>
+                      <td className="px-2 py-2"></td>
+                      <td className="px-2 py-2"></td>
+                      <td className="px-2 py-2"></td>
+                    </tr>
+                  ))}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>

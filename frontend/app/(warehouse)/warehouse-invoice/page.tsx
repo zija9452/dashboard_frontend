@@ -51,14 +51,24 @@ const printStyles = `
   }
 `;
 
+// Payment methods: a branch transfer (shop pays later) vs a direct sale (same as walk-in,
+// plus Credit for what stays on the customer's balance)
+const TRANSFER_METHODS = ['Cash', 'Bank', 'Credit'];
+const DIRECT_SALE_METHODS = ['Cash', 'Easypaisa Zohaib', 'Easypaisa Yasir', 'Faysal Bank', 'Credit'];
+
 interface Customer {
   cus_id: string;
   cus_name: string;
   cus_phone: string;
+  destination_branch?: string; // '' = direct customer (buys from the warehouse, no shop)
 }
 
+// One stock line: a product's stock outside batches, or one batch (own barcode / stock)
 interface Product {
   id?: string;
+  product_id?: string;
+  product_batch_id?: string | null;
+  batch_label?: string | null; // "Batch 001" / "Old Stock"; none for a product without batches
   product_name?: string;
   category?: string;
   price?: number; // shop cost in the customer's branch
@@ -69,6 +79,9 @@ interface Product {
 
 interface CartItem {
   id: string;
+  product_id?: string;
+  product_batch_id?: string | null;
+  batch_label?: string | null;
   product_name: string;
   category: string;
   unit_price: number;
@@ -120,6 +133,8 @@ const WarehouseInvoicePage: React.FC = () => {
   // Item form state
   const [unitPrice, setUnitPrice] = useState<number | ''>('');
   const [shopPrice, setShopPrice] = useState<number | ''>('');
+  // Direct customer: a sale - Rate is the price it is sold at, no shop price
+  const isDirect = !!selectedCustomer && customers.find((c) => c.cus_id === selectedCustomer)?.destination_branch === '';
   const [quantity, setQuantity] = useState<number | ''>('');
   const [price, setPrice] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
@@ -291,10 +306,10 @@ const WarehouseInvoicePage: React.FC = () => {
       return;
     }
     if (unitPrice === '' || Number(unitPrice) <= 0) {
-      showToast('Please enter Rate (shop cost)', 'error');
+      showToast(isDirect ? 'Please enter the Sale Price' : 'Please enter Rate (shop cost)', 'error');
       return;
     }
-    if (shopPrice === '' || Number(shopPrice) <= 0) {
+    if (!isDirect && (shopPrice === '' || Number(shopPrice) <= 0)) {
       showToast('Please enter Shop Selling Price', 'error');
       return;
     }
@@ -302,17 +317,22 @@ const WarehouseInvoicePage: React.FC = () => {
       showToast('Quantity must be at least 1', 'error');
       return;
     }
-    if (Number(quantity) > (selectedProduct.stock || 0)) {
-      showToast(`Only ${selectedProduct.stock} items available in warehouse`, 'error');
+    // The same line may already be in the list
+    const inList = selectedItems.filter(i => i.id === selectedProduct.id).reduce((sum, i) => sum + i.quantity, 0);
+    if (Number(quantity) + inList > (selectedProduct.stock || 0)) {
+      showToast(`Only ${(selectedProduct.stock || 0) - inList} more available in warehouse for this barcode`, 'error');
       return;
     }
 
     const newItem: CartItem = {
       id: selectedProduct.id || '',
+      product_id: selectedProduct.product_id,
+      product_batch_id: selectedProduct.product_batch_id,
+      batch_label: selectedProduct.batch_label,
       product_name: selectedProduct.product_name || '',
       category: selectedProduct.category || '',
       unit_price: Number(unitPrice),
-      shop_price: Number(shopPrice),
+      shop_price: isDirect ? 0 : Number(shopPrice),
       quantity: Number(quantity),
       price: price,
       discount: discount * Number(quantity),
@@ -348,6 +368,14 @@ const WarehouseInvoicePage: React.FC = () => {
       showToast('Please add items to the invoice', 'error');
       return;
     }
+    // Direct sale: walk-in payment methods, paid in full by default; transfer: Credit
+    if (isDirect) {
+      setPaymentMethod('Cash');
+      setAmountPaid(finalAmount);
+    } else if (!TRANSFER_METHODS.includes(paymentMethod)) {
+      setPaymentMethod('Credit');
+      setAmountPaid(0);
+    }
     setShowPaymentModal(true);
   };
 
@@ -368,6 +396,8 @@ const WarehouseInvoicePage: React.FC = () => {
         body: JSON.stringify({
           items: selectedItems.map(item => ({
             pro_name: item.product_name,
+            product_id: item.product_id,
+            product_batch_id: item.product_batch_id || null,
             pro_quantity: item.quantity,
             unit_price: item.unit_price,
             shop_price: item.shop_price,
@@ -429,7 +459,7 @@ const WarehouseInvoicePage: React.FC = () => {
   
         <div className="absolute left-1/2 transform -translate-x-1/2 text-center">
           <div className="text-lg md:text-2xl font-bold text-regal-black uppercase whitespace-nowrap">Warehouse Invoice</div>
-          <div className="text-[10px] md:text-xs font-medium text-regal-black opacity-70">(Stock Transfer)</div>
+          <div className="text-[10px] md:text-xs font-medium text-regal-black opacity-70">{isDirect ? '(Direct Sale)' : '(Stock Transfer)'}</div>
         </div>
       </nav>
 
@@ -451,9 +481,14 @@ const WarehouseInvoicePage: React.FC = () => {
                 >
                   <option value="">Select Customer</option>
                   {customers.map((customer) => (
-                    <option key={customer.cus_id} value={customer.cus_id}>{customer.cus_name}</option>
+                    <option key={customer.cus_id} value={customer.cus_id}>
+                      {customer.cus_name}{customer.destination_branch === '' ? '  (Direct customer)' : '  (Branch)'}
+                    </option>
                   ))}
                 </select>
+                {isDirect && (
+                  <p className="text-xs text-blue-700 mt-1">Direct sale - stock leaves the warehouse, goes to no shop.</p>
+                )}
                 {selectedItems.length > 0 && (
                   <p className="text-xs text-gray-500 mt-1">Clear the items to change customer</p>
                 )}
@@ -470,8 +505,20 @@ const WarehouseInvoicePage: React.FC = () => {
                 />
               </div>
 
+              {/* Which barcode (batch) is being sent - several lines can share a name */}
               <div className="mb-3 md:mb-4">
-                <label className="block text-sm font-medium mb-1">Rate (Shop Cost)</label>
+                <label className="block text-sm font-medium mb-1">Barcode</label>
+                <input
+                  type="text"
+                  value={selectedProduct ? `${selectedProduct.barcode || '-'}${selectedProduct.batch_label ? `  (${selectedProduct.batch_label})` : ''}` : ''}
+                  readOnly
+                  placeholder="Select or scan a product"
+                  className="regal-input w-full h-9 font-mono bg-gray-50 cursor-not-allowed"
+                />
+              </div>
+
+              <div className="mb-3 md:mb-4">
+                <label className="block text-sm font-medium mb-1">{isDirect ? 'Sale Price' : 'Rate (Shop Cost)'}</label>
                 <input
                   type="number"
                   min="0"
@@ -482,17 +529,20 @@ const WarehouseInvoicePage: React.FC = () => {
                 />
               </div>
 
-              <div className="mb-3 md:mb-4">
-                <label className="block text-sm font-medium mb-1">Shop Selling Price</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={shopPrice}
-                  onChange={(e) => setShopPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                  className="regal-input w-full h-9"
-                  placeholder="Shop Selling Price"
-                />
-              </div>
+              {/* A direct sale goes to no shop: no shop price */}
+              {!isDirect && (
+                <div className="mb-3 md:mb-4">
+                  <label className="block text-sm font-medium mb-1">Shop Selling Price</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={shopPrice}
+                    onChange={(e) => setShopPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="regal-input w-full h-9"
+                    placeholder="Shop Selling Price"
+                  />
+                </div>
+              )}
 
               <div className="mb-3 md:mb-4">
                 <label className="block text-sm font-medium mb-1">Quantity</label>
@@ -579,22 +629,24 @@ const WarehouseInvoicePage: React.FC = () => {
                 />
               </div>
 
-              <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '200px' }}>
+              {/* Fixed height: the side scroll bar stays at the card's bottom, not under a short list */}
+              <div className="overflow-x-auto overflow-y-auto" style={{ height: '280px' }}>
                 <table className="w-full min-w-[600px]">
                   <thead className="bg-gray-100 sticky top-0 z-10">
                     <tr>
                       <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">#</th>
                       <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Product Name</th>
                       <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                      <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Shop Cost</th>
-                      <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Shop Price</th>
+                      <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">{isDirect ? 'Price' : 'Shop Cost'}</th>
+                      {!isDirect && <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Shop Price</th>}
                       <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">W-Stock</th>
+                      <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Barcode</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {productsLoading && defaultProducts.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-gray-500 italic">Loading prices...</td>
+                        <td colSpan={7} className="px-4 py-8 text-center text-gray-500 italic">Loading prices...</td>
                       </tr>
                     )}
                     {(searchResults.length > 0 ? searchResults : defaultProducts).map((product, index) => (
@@ -606,15 +658,23 @@ const WarehouseInvoicePage: React.FC = () => {
                         } cursor-pointer hover:bg-yellow-50`}
                       >
                         <td className="px-4 py-4 text-sm text-gray-900">{index + 1}</td>
-                        <td className="px-4 py-4 text-sm font-medium text-gray-900">{product.product_name}</td>
+                        <td className="px-4 py-4 text-sm font-medium text-gray-900">
+                          {product.product_name}
+                          {product.batch_label && (
+                            <div className="text-xs font-semibold text-regal-black">{product.batch_label}</div>
+                          )}
+                        </td>
                         <td className="px-4 py-4 text-sm text-gray-900">{product.category || '-'}</td>
                         <td className="px-4 py-4 text-sm font-semibold text-gray-900">
                           {product.price ? product.price : <span className="text-red-600">Not set yet</span>}
                         </td>
-                        <td className="px-4 py-4 text-sm font-semibold text-gray-900">
-                          {product.shop_price ? product.shop_price : <span className="text-red-600">Not set yet</span>}
-                        </td>
+                        {!isDirect && (
+                          <td className="px-4 py-4 text-sm font-semibold text-gray-900">
+                            {product.shop_price ? product.shop_price : <span className="text-red-600">Not set yet</span>}
+                          </td>
+                        )}
                         <td className="px-4 py-4 text-sm text-gray-900 font-bold">{product.stock || 0}</td>
+                        <td className="px-4 py-4 text-xs font-mono text-gray-700 whitespace-nowrap">{product.barcode || '-'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -624,29 +684,35 @@ const WarehouseInvoicePage: React.FC = () => {
 
             {/* Selected Items Table */}
             <div className="regal-card p-3 md:p-6" style={{ minHeight: '330px' }}>
-              <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Selected Transfer Items ({selectedItems.length})</h2>
-              <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '230px' }}>
-                <table className="w-full min-w-[700px]">
+              <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">{isDirect ? 'Selected Sale Items' : 'Selected Transfer Items'} ({selectedItems.length})</h2>
+              {/* Fixed height: the side scroll bar stays at the card's bottom, not under a short table */}
+              <div className="overflow-x-auto overflow-y-auto" style={{ height: '230px' }}>
+                <table className="w-full min-w-[600px]">
                   <thead className="bg-gray-100 sticky top-0">
                     <tr>
                       <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                      <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Rate</th>
-                      <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Shop Price</th>
+                      <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">{isDirect ? 'Price' : 'Rate'}</th>
+                      {!isDirect && <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Shop Price</th>}
                       <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
                       <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Discount</th>
                       <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                      <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Barcode</th>
                       <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {selectedItems.map((item, index) => (
                       <tr key={index} className="hover:bg-gray-50">
-                        <td className="px-3 py-4 text-sm">{item.product_name}</td>
+                        <td className="px-3 py-4 text-sm">
+                          {item.product_name}
+                          {item.batch_label && <div className="text-[11px] text-gray-400">{item.batch_label}</div>}
+                        </td>
                         <td className="px-3 py-4 text-sm">{item.unit_price}</td>
-                        <td className="px-3 py-4 text-sm">{item.shop_price}</td>
+                        {!isDirect && <td className="px-3 py-4 text-sm">{item.shop_price}</td>}
                         <td className="px-3 py-4 text-sm font-bold">{item.quantity}</td>
                         <td className="px-3 py-4 text-sm text-red-700">{item.discount}</td>
                         <td className="px-3 py-4 text-sm font-semibold">{item.price - item.discount}</td>
+                        <td className="px-3 py-4 text-xs font-mono text-gray-600 whitespace-nowrap">{item.barcode || '-'}</td>
                         <td className="px-3 py-4 text-sm">
                           <button
                             onClick={() => removeFromSelected(index)}
@@ -659,8 +725,8 @@ const WarehouseInvoicePage: React.FC = () => {
                     ))}
                     {selectedItems.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="px-3 py-8 text-center text-gray-500 italic">
-                          No items added for transfer
+                        <td colSpan={8} className="px-3 py-8 text-center text-gray-500 italic">
+                          {isDirect ? 'No items added for sale' : 'No items added for transfer'}
                         </td>
                       </tr>
                     )}
@@ -695,9 +761,9 @@ const WarehouseInvoicePage: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Transfer Logic</label>
+                <label className="block text-sm font-medium mb-1">{isDirect ? 'Sale' : 'Transfer Logic'}</label>
                 <div className="p-2 bg-blue-50 text-blue-800 rounded text-xs font-semibold">
-                  Decrease Warehouse Stock → Increase Shop Stock
+                  {isDirect ? 'Decrease Warehouse Stock (sold - no shop)' : 'Decrease Warehouse Stock → Increase Shop Stock'}
                 </div>
               </div>
               <div>
@@ -764,13 +830,19 @@ const WarehouseInvoicePage: React.FC = () => {
                   }} 
                   className="regal-input w-full"
                 >
-                  <option value="Cash">Cash</option>
-                  <option value="Bank">Bank Transfer</option>
-                  <option value="Credit">Credit</option>
+                  {isDirect
+                    ? DIRECT_SALE_METHODS.map((m) => <option key={m} value={m}>{m}</option>)
+                    : (
+                      <>
+                        <option value="Cash">Cash</option>
+                        <option value="Bank">Bank Transfer</option>
+                        <option value="Credit">Credit</option>
+                      </>
+                    )}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Transfer Date</label>
+                <label className="block text-sm font-medium mb-1">{isDirect ? 'Sale Date' : 'Transfer Date'}</label>
                 <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="regal-input w-full" />
               </div>
             </div>
@@ -781,7 +853,7 @@ const WarehouseInvoicePage: React.FC = () => {
                 disabled={submitting}
                 className="regal-btn bg-regal-yellow text-regal-black flex-1 hover:bg-yellow-600 shadow-md font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-regal-yellow"
               >
-                {submitting ? 'Transferring Stock...' : 'Confirm Transfer & Print'}
+                {submitting ? (isDirect ? 'Saving Sale...' : 'Transferring Stock...') : (isDirect ? 'Confirm Sale & Print' : 'Confirm Transfer & Print')}
               </button>
               <button
                 onClick={() => setShowPaymentModal(false)}

@@ -69,6 +69,8 @@ interface Salesman {
 interface Product {
   id?: string;
   pro_id?: string;
+  product_batch_id?: string | null;
+  batch_label?: string | null; // "Batch 001" / "Old Stock"; none for a product without batches
   product_name?: string;
   category?: string;
   price?: number;
@@ -81,6 +83,8 @@ interface Product {
 
 interface CartItem {
   id: string;
+  product_batch_id?: string | null;
+  batch_label?: string | null;
   product_name: string;
   category: string;
   unit_price: number;
@@ -259,6 +263,7 @@ const WalkInInvoicePage: React.FC = () => {
       const params = new URLSearchParams();
       params.append('search_string', search);
       params.append('limit', '500');
+      params.append('batch_lines', 'true'); // each batch its own line (barcode / price / stock)
 
       const response = await fetch(`/api/stock/viewstock?${params.toString()}`, {
         method: 'GET',
@@ -579,6 +584,7 @@ const WalkInInvoicePage: React.FC = () => {
       const params = new URLSearchParams();
       params.append('page', '1');
       params.append('limit', '100');
+      params.append('batch_lines', 'true'); // each batch its own line (barcode / price / stock)
 
       const response = await fetch(`/api/stock/viewstock?${params.toString()}`, {
         method: 'GET',
@@ -701,12 +707,13 @@ const WalkInInvoicePage: React.FC = () => {
       return;
     }
 
-    // Same product already in the cart (same barcode or same name): merge into that row.
+    // Same line already in the cart (same barcode, else same name): merge into that row.
+    // Batches of one product share the name, so a barcode never merges by name.
     // The row keeps its unit price; this add's discount is added on top.
     const barcode = selectedProduct.barcode || selectedProduct.pro_barcode || '';
     const name = (selectedProduct.product_name || '').trim().toLowerCase();
     const existingIndex = selectedItems.findIndex(item =>
-      (barcode && item.barcode === barcode) || (name && item.product_name.trim().toLowerCase() === name)
+      barcode ? item.barcode === barcode : (name && item.product_name.trim().toLowerCase() === name)
     );
     const alreadyInCart = existingIndex >= 0 ? selectedItems[existingIndex].quantity : 0;
 
@@ -736,6 +743,8 @@ const WalkInInvoicePage: React.FC = () => {
     } else {
       const newItem: CartItem = {
         id: selectedProduct.id || selectedProduct.pro_id || '',
+        product_batch_id: selectedProduct.product_batch_id,
+        batch_label: selectedProduct.batch_label,
         product_name: selectedProduct.product_name || '',
         category: selectedProduct.category || '',
         unit_price: Number(unitPrice),
@@ -769,7 +778,7 @@ const WalkInInvoicePage: React.FC = () => {
     const name = (product.product_name || '').trim().toLowerCase();
     const items = selectedItemsRef.current;
     const existingIndex = items.findIndex(item =>
-      (barcode && item.barcode === barcode) || (name && item.product_name.trim().toLowerCase() === name)
+      barcode ? item.barcode === barcode : (name && item.product_name.trim().toLowerCase() === name)
     );
 
     if (existingIndex >= 0) {
@@ -796,6 +805,8 @@ const WalkInInvoicePage: React.FC = () => {
       const unit = Number(product.price || 0);
       const updated = [...items, {
         id: product.id || product.pro_id || '',
+        product_batch_id: product.product_batch_id,
+        batch_label: product.batch_label,
         product_name: product.product_name || '',
         category: product.category || '',
         unit_price: unit,
@@ -919,6 +930,7 @@ const WalkInInvoicePage: React.FC = () => {
         body: JSON.stringify({
           items: selectedItems.map(item => ({
             pro_name: item.product_name,
+            product_batch_id: item.product_batch_id || null, // the batch whose stock is sold
             pro_quantity: item.quantity,
             unit_price: item.unit_price,
             discount: item.discount,
@@ -1366,6 +1378,19 @@ const WalkInInvoicePage: React.FC = () => {
               />
             </div>
 
+            {/* Which barcode (batch) is being sold - several lines can share a name */}
+            <div className="mb-3 md:mb-4">
+              <label className="block text-sm font-medium mb-1">Barcode</label>
+              <input
+                type="text"
+                value={selectedProduct ? `${selectedProduct.barcode || selectedProduct.pro_barcode || '-'}${selectedProduct.batch_label ? `  (${selectedProduct.batch_label})` : ''}` : ''}
+                readOnly
+                tabIndex={-1}
+                placeholder="Select or scan a product"
+                className="regal-input w-full h-9 font-mono text-xs bg-gray-50 cursor-not-allowed"
+              />
+            </div>
+
             {/* Unit Price */}
             <div className="mb-3 md:mb-4">
               <label className="block text-sm font-medium mb-1">Unit Price</label>
@@ -1386,7 +1411,8 @@ const WalkInInvoicePage: React.FC = () => {
                 min="1"
                 step="1"
                 value={quantity}
-                onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
+                // Empty while retyping (forcing 1 made backspace + "2" read 12); never below 1
+                onChange={(e) => setQuantity(e.target.value === '' ? '' : Math.max(1, Math.floor(Number(e.target.value))))}
                 className="regal-input w-full h-9"
                 placeholder="Quantity"
               />
@@ -1480,7 +1506,8 @@ const WalkInInvoicePage: React.FC = () => {
               />
             </div>
 
-            <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '200px' }}>
+            {/* Fixed height: the side scroll bar stays at the card's bottom, not under a short list */}
+            <div className="overflow-x-auto overflow-y-auto" style={{ height: '280px' }}>
               <table className="w-full min-w-[600px]">
                 <thead className="bg-gray-100 sticky top-0 z-10">
                   <tr>
@@ -1492,6 +1519,7 @@ const WalkInInvoicePage: React.FC = () => {
                       <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Cost</th>
                     )}
                     <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Stock</th>
+                    <th className="px-4 py-4 text-left text-xs font-medium text-gray-500 uppercase">Barcode</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -1504,13 +1532,17 @@ const WalkInInvoicePage: React.FC = () => {
                       } cursor-pointer bg-yellow-50`}
                     >
                       <td className="px-4 py-4 text-sm text-gray-900">{index + 1}</td>
-                      <td className="px-4 py-4 text-sm font-medium text-gray-900">{product.product_name}</td>
+                      <td className="px-4 py-4 text-sm font-medium text-gray-900">
+                        {product.product_name}
+                        {product.batch_label && <div className="text-[11px] font-normal text-gray-500">{product.batch_label}</div>}
+                      </td>
                       <td className="px-4 py-4 text-sm text-gray-900">{product.category || '-'}</td>
                       <td className="px-4 py-4 text-sm font-semibold text-gray-900">{product.price || 0}</td>
                       {!roleLoading && userRole !== 'cashier' && (
                         <td className="px-4 py-4 text-sm font-semibold text-gray-900">{product.cost || 0}</td>
                       )}
                       <td className="px-4 py-4 text-sm text-gray-900">{product.stock_level || product.stock || 0}</td>
+                      <td className="px-4 py-4 text-xs font-mono text-gray-700 whitespace-nowrap">{product.barcode || product.pro_barcode || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1521,8 +1553,9 @@ const WalkInInvoicePage: React.FC = () => {
           {/* Selected Items (Bottom) */}
           <div className="regal-card p-3 md:p-6" style={{ minHeight: '330px' }}>
             <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">Selected Items ({selectedItems.length})</h2>
-            <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '230px' }}>
-              <table className="w-full min-w-[700px]">
+            {/* Fixed height: the side scroll bar stays at the card's bottom, not under a short table */}
+            <div className="overflow-x-auto overflow-y-auto" style={{ height: '230px' }}>
+              <table className="w-full min-w-[600px]">
                 <thead className="bg-gray-100 sticky top-0">
                   <tr>
                     <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase w-[22%]">Product</th>
@@ -1531,13 +1564,17 @@ const WalkInInvoicePage: React.FC = () => {
                     <th className="px-3 py-4 text-center text-xs font-medium text-gray-500 uppercase">Discount</th>
                     <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
                     <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">After Discount</th>
+                    <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Barcode</th>
                     <th className="px-3 py-4 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {selectedItems.map((item, index) => (
                     <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-3 py-4 text-sm">{item.product_name}</td>
+                      <td className="px-3 py-4 text-sm">
+                        {item.product_name}
+                        {item.batch_label && <div className="text-[11px] text-gray-400">{item.batch_label}</div>}
+                      </td>
                       <td className="px-3 py-4 text-sm">
                         <EditableCell
                           value={item.unit_price}
@@ -1562,6 +1599,7 @@ const WalkInInvoicePage: React.FC = () => {
                       </td>
                       <td className="px-3 py-4 text-sm">{item.price}</td>
                       <td className="px-3 py-4 text-sm font-semibold text-green-700 text-center">{item.price - item.discount}</td>
+                      <td className="px-3 py-4 text-xs font-mono text-gray-600 whitespace-nowrap">{item.barcode || '-'}</td>
                       <td className="px-3 py-4 text-sm">
                         <button
                           onClick={() => removeFromSelected(index)}
@@ -1574,7 +1612,7 @@ const WalkInInvoicePage: React.FC = () => {
                   ))}
                   {selectedItems.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-3 py-8 text-center text-gray-500">
+                      <td colSpan={8} className="px-3 py-8 text-center text-gray-500">
                         No selected items
                       </td>
                     </tr>

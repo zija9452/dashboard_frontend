@@ -63,6 +63,9 @@ function WarehouseSidebarLayoutContent({ children }: { children: React.ReactNode
                   <SidebarLink href="/warehouse-vendors" className="text-base py-3 border-b border-gray-200">
                     Warehouse Vendors
                   </SidebarLink>
+                  <SidebarLink href="/warehouse-batches" className="text-base py-3 border-b border-gray-200">
+                    Warehouse Batches
+                  </SidebarLink>
                   <SidebarLink href="/warehouse-customers" className="text-base py-3 border-b border-gray-200">
                     Warehouse Customers
                   </SidebarLink>

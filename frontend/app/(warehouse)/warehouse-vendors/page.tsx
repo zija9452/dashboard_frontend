@@ -13,6 +13,7 @@ import SearchBox from '@/components/ui/SearchBox';
 interface Vendor {
   ven_id: string;
   ven_name: string;
+  vendor_code?: string | null;
   ven_phone: string;
   ven_address: string;
   branch: string;
@@ -278,7 +279,7 @@ const WarehouseVendorsPage: React.FC = () => {
           onChange={setSearchTerm}
           resetPage={() => setCurrentPage(1)}
           id="vendorSearchInput"
-          placeholder="Search vendors..."
+          placeholder="Search name or code..."
           clearWrapperClassName="w-full sm:w-auto flex gap-2"
         />
       </div>
@@ -382,6 +383,7 @@ const WarehouseVendorsPage: React.FC = () => {
             <table className="w-full table-fixed">
               <thead className="bg-gray-100 border-b">
                 <tr className='text-xs text-gray-900 uppercase tracking-wider font-semibold'>
+                  <th className="px-4 py-5 text-left w-20">Code</th>
                   <th className="px-4 py-5 text-left w-48">Name</th>
                   <th className="px-4 py-5 text-left w-32">Phone</th>
                   <th className="px-4 py-5 text-left w-40">Address</th>
@@ -393,6 +395,7 @@ const WarehouseVendorsPage: React.FC = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {vendors.map((vendor) => (
                   <tr key={vendor.ven_id} className="hover:bg-gray-50 text-sm">
+                    <td className="px-4 py-4 font-mono">{vendor.vendor_code || '-'}</td>
                     <td className="px-4 py-4">{vendor.ven_name}</td>
                     <td className="px-4 py-4 whitespace-nowrap">{vendor.ven_phone}</td>
                     <td className="px-4 py-4">{vendor.ven_address || '-'}</td>

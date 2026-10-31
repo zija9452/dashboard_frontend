@@ -23,6 +23,7 @@ const protectedRoutes = [
   '/warehouse-stock',
   '/warehouse-customers',
   '/warehouse-vendors',
+  '/warehouse-batches',
   '/warehouse-vendor-payment',
   '/warehouse-vendor-payment-history'
 ];

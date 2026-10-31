@@ -6,6 +6,8 @@ import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/ui/PageHeader';
 import { printZplLabels } from '@/lib/qzPrint';
+import { OpenBatch, batchNo, batchOption, batchPrices, batchPriceBreakdown, billOf, fetchOpenBatches } from '@/lib/batchLines';
+import VendorBillModal from '@/components/VendorBillModal';
 
 interface WarehouseStockInItem {
   product_id: string;
@@ -18,6 +20,9 @@ interface WarehouseStockInItem {
   date: string;
   vendor_id?: string;
   vendor_name?: string;
+  batch_id?: string;
+  batch_no?: number;
+  batch_barcode?: string; // known after the Stock In is saved
 }
 
 interface Product {
@@ -35,10 +40,14 @@ interface Product {
 interface WarehouseVendor {
   id: string;
   name: string;
+  vendor_code?: string | null;
   balance: number;
 }
 
+
 type SearchMode = 'barcode' | 'name';
+
+const vendorLabel = (v: WarehouseVendor) => `${v.name.trim()}${v.vendor_code ? ` (${v.vendor_code})` : ''}`;
 
 const WarehouseStockInPage: React.FC = () => {
   const router = useRouter();
@@ -61,6 +70,12 @@ const WarehouseStockInPage: React.FC = () => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [vendors, setVendors] = useState<WarehouseVendor[]>([]);
   const [selectedVendorId, setSelectedVendorId] = useState('');
+  const [allOpenBatches, setAllOpenBatches] = useState<OpenBatch[]>([]);
+  const [selectedBatchId, setSelectedBatchId] = useState(''); // '' = no batch (old way)
+  const [sellingEdited, setSellingEdited] = useState(false); // typed by hand: stop auto-filling
+  const [billModalOpen, setBillModalOpen] = useState(false); // add / edit the vendor's bill in the batch
+  // Where the chosen product came from last time (shown under Batch; picked as the default)
+  const [lastSource, setLastSource] = useState<{ batch_no: number | null; warehouse_vendor_id: string | null } | null>(null);
 
   const [stockInItems, setStockInItems] = useState<WarehouseStockInItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -69,6 +84,33 @@ const WarehouseStockInPage: React.FC = () => {
   useEffect(() => {
     fetchVendors();
   }, []);
+
+  // All open batches (lots) with their vendors' bills, loaded once; the newest is picked
+  useEffect(() => {
+    fetchOpenBatches().then(setAllOpenBatches).catch((error) => showToast(error.message, 'error'));
+  }, []);
+
+  useEffect(() => {
+    setSelectedBatchId((current) => (allOpenBatches.some((b) => b.id === current) ? current : allOpenBatches[0]?.id || ''));
+  }, [allOpenBatches]);
+
+  const selectedBatch = allOpenBatches.find((b) => b.id === selectedBatchId) || null;
+  // The vendor's bill in this batch; none until the vendor is added to the batch
+  const selectedBill = billOf(selectedBatch, selectedVendorId);
+  const prices = selectedBill && parseFloat(costPrice) > 0 ? batchPrices(parseFloat(costPrice), selectedBill) : null;
+  const replaceBatch = (updated: OpenBatch) =>
+    setAllOpenBatches((list) => list.map((b) => (b.id === updated.id ? updated : b)));
+
+  // Batch price follows the cost until typed by hand
+  useEffect(() => {
+    if (prices && !sellingEdited) setSellingPrice(String(prices.selling));
+  }, [prices?.selling, sellingEdited, selectedProduct?.pro_id]);
+
+  // A new product / batch / vendor starts with the worked-out price again
+  useEffect(() => {
+    setSellingEdited(false);
+  }, [selectedProduct?.pro_id, selectedBatchId, selectedVendorId]);
+
 
   useEffect(() => {
     if (searchMode === 'barcode') barcodeInputRef.current?.focus();
@@ -139,6 +181,28 @@ const WarehouseStockInPage: React.FC = () => {
     }
   };
 
+  // The product's last batch + vendor become the defaults - only while no vendor is chosen:
+  // a vendor picked by hand is never changed (its goods must go to its own line / barcode)
+  const applyLastSource = async (productId: string) => {
+    setLastSource(null);
+    try {
+      const response = await fetch(`/api/warehouse-batches/product/${productId}/last`, { credentials: 'include' });
+      if (!response.ok) return;
+      const last = await response.json();
+      if (!selectedVendorId) {
+        if (last.warehouse_vendor_id && vendors.some((v) => v.id === last.warehouse_vendor_id)) {
+          setSelectedVendorId(last.warehouse_vendor_id);
+        }
+        if (last.batch_id && last.batch_status === 'OPEN' && allOpenBatches.some((b) => b.id === last.batch_id)) {
+          setSelectedBatchId(last.batch_id);
+        }
+      }
+      if (last.warehouse_vendor_id) setLastSource({ batch_no: last.batch_no, warehouse_vendor_id: last.warehouse_vendor_id });
+    } catch {
+      // Defaults only - the page works without them
+    }
+  };
+
   const handleSelectFromDropdown = (product: Product) => {
     setSelectedProduct(product);
     setQuantity('');
@@ -146,6 +210,7 @@ const WarehouseStockInPage: React.FC = () => {
     setSellingPrice(product.pro_price?.toString() || '0');
     setNameSearch(product.pro_name);
     setShowDropdown(false);
+    applyLastSource(product.pro_id);
     showToast(`Product found: ${product.pro_name}`, 'success');
     setTimeout(() => document.getElementById('quantity-input')?.focus(), 100);
   };
@@ -199,6 +264,7 @@ const WarehouseStockInPage: React.FC = () => {
           setQuantity('');
           setCostPrice(product.warehouse_cost?.toString() || product.pro_cost?.toString() || '0');
           setSellingPrice(product.pro_price?.toString() || '0');
+          applyLastSource(product.pro_id);
           showToast(`Product found: ${product.pro_name}`, 'success');
           setTimeout(() => document.getElementById('quantity-input')?.focus(), 100);
         } else {
@@ -237,9 +303,26 @@ const WarehouseStockInPage: React.FC = () => {
       date: date,
       vendor_id: selectedVendorId,
       vendor_name: vendor?.name,
+      batch_id: selectedBatch?.id,
+      batch_no: selectedBatch?.batch_no,
     };
 
-    setStockInItems([...stockInItems, newItem]);
+    if (selectedBatch) {
+      if (!selectedBill) { showToast(`Add ${vendor?.name || 'the vendor'}'s bill to ${batchNo(selectedBatch.batch_no)} first`, 'error'); return; }
+      if (cost <= 0) { showToast('Enter the cost from the bill', 'error'); return; }
+      if (!(newItem.selling_price > 0)) { showToast('Selling price must be more than 0', 'error'); return; }
+    }
+
+    // Same product of the same vendor twice in one batch: one line (one barcode), qty added, latest cost / price
+    const same = selectedBatch
+      ? stockInItems.findIndex((i) => i.product_id === newItem.product_id && i.batch_id === newItem.batch_id && i.vendor_id === newItem.vendor_id)
+      : -1;
+    if (same >= 0) {
+      const qtyTotal = stockInItems[same].quantity + qty;
+      setStockInItems(stockInItems.map((item, i) => (i === same ? { ...newItem, quantity: qtyTotal, total_cost: qtyTotal * cost } : item)));
+    } else {
+      setStockInItems([...stockInItems, newItem]);
+    }
     setSelectedProduct(null);
     setBarcode('');
     setNameSearch('');
@@ -268,7 +351,9 @@ const WarehouseStockInPage: React.FC = () => {
       body: JSON.stringify(items.map(item => ({
         product_id: item.product_id,
         quantity: item.quantity,
-        vendor_name: item.vendor_name || '',
+        // Batch label: "Ali - Batch 001" under the name, batch barcode
+        vendor_name: item.batch_no ? `${(item.vendor_name || '').trim()} - ${batchNo(item.batch_no)}` : item.vendor_name || '',
+        batch_barcode: item.batch_barcode || null,
       }))),
     });
     if (!response.ok) {
@@ -292,6 +377,11 @@ const WarehouseStockInPage: React.FC = () => {
   const handlePrintBarcodesOnly = async () => {
     if (stockInItems.length === 0) { showToast('Please add at least one item', 'error'); return; }
     if (submitting) return;
+    // The batch barcode is made when the Stock In is saved
+    if (stockInItems.some(item => item.batch_id && !item.batch_barcode)) {
+      showToast('Batch barcodes are made on save - use "Stock In + Print Barcodes"', 'error');
+      return;
+    }
     setSubmitting(true);
     try {
       await printLabels(stockInItems);
@@ -311,6 +401,7 @@ const WarehouseStockInPage: React.FC = () => {
       const errors: string[] = [];
       const succeeded: WarehouseStockInItem[] = [];
       const failed: WarehouseStockInItem[] = [];
+      const overBill: Record<string, string> = {}; // batch label -> "stocked / invoice"
 
       for (const item of stockInItems) {
         try {
@@ -324,12 +415,21 @@ const WarehouseStockInPage: React.FC = () => {
               vendor_id: item.vendor_id,
               cost_price: item.cost_price,
               ref: `W_IN_${new Date().toISOString().split('T')[0].replace(/-/g, '')}`,
+              batch_id: item.batch_id || null,
+              selling_price: item.batch_id ? item.selling_price : null,
             }),
           });
 
           if (response.ok) {
+            const data = await response.json();
             successCount++;
-            succeeded.push(item);
+            succeeded.push(data.batch_barcode ? { ...item, batch_barcode: data.batch_barcode } : item);
+            // New batch line not copied to the other branch (it is made there on its first invoice)
+            (data.branch_warnings || []).forEach((w: string) => showToast(`${item.product_name}: ${w}`, 'warning'));
+            if (data.over_bill) {
+              overBill[data.batch_label] =
+                `Rs. ${Number(data.stocked_total).toLocaleString()} / Rs. ${Number(data.invoice_total).toLocaleString()}`;
+            }
           } else {
             const errorData = await response.json();
             errors.push(`${item.product_name}: ${errorData.error || errorData.detail || 'Failed'}`);
@@ -341,6 +441,16 @@ const WarehouseStockInPage: React.FC = () => {
           errorCount++;
           failed.push(item);
         }
+      }
+
+      // Warning only - the stock is saved
+      if (Object.keys(overBill).length > 0) {
+        await Swal.fire({
+          title: 'More than the bill',
+          html: `<p>Stock in these batches is now more than their bill total:</p><div class="mt-2 text-left text-sm">${Object.entries(overBill).map(([label, amounts]) => `<p class="mt-1">• <b>${label}</b>: ${amounts}</p>`).join('')}</div>`,
+          icon: 'warning',
+          confirmButtonText: 'OK',
+        });
       }
 
       if (successCount > 0 && errorCount > 0) {
@@ -602,6 +712,30 @@ const WarehouseStockInPage: React.FC = () => {
             </div>
 
             <div>
+              <label className="block text-sm font-medium mb-1">Batch</label>
+              <select
+                value={selectedBatchId}
+                onChange={(e) => setSelectedBatchId(e.target.value)}
+                className="regal-input w-full"
+              >
+                {allOpenBatches.map((b) => (
+                  <option key={b.id} value={b.id}>{batchOption(b)}</option>
+                ))}
+                <option value="">No batch (old way)</option>
+              </select>
+              {allOpenBatches.length === 0 && (
+                <p className="text-xs text-gray-500 mt-1">No open batch - make one on Warehouse Batches.</p>
+              )}
+              {lastSource && (
+                // Amber when the chosen vendor is not where it came from last time
+                <p className={`text-xs mt-1 ${selectedVendorId && selectedVendorId !== lastSource.warehouse_vendor_id ? 'text-amber-700' : 'text-gray-500'}`}>
+                  Last time: {lastSource.batch_no ? `${batchNo(lastSource.batch_no)} · ` : ''}
+                  {vendors.find((v) => v.id === lastSource.warehouse_vendor_id)?.name || ''}
+                </p>
+              )}
+            </div>
+
+            <div>
               <label className="block text-sm font-medium mb-1">Warehouse Vendor *</label>
               <select
                 value={selectedVendorId}
@@ -611,11 +745,21 @@ const WarehouseStockInPage: React.FC = () => {
               >
                 <option value="">Select Vendor</option>
                 {vendors.map((vendor) => (
-                  <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
+                  <option key={vendor.id} value={vendor.id}>{vendorLabel(vendor)}</option>
                 ))}
               </select>
               {vendors.length === 0 && (
                 <p className="text-xs text-red-600 mt-1">No warehouse vendors found.</p>
+              )}
+              {/* The vendor's bill in the batch: added once, when its goods of this lot arrive
+                  (its figures show on Warehouse Batches; "more than the bill" warns on save) */}
+              {selectedBatch && selectedVendorId && !selectedBill && (
+                <div className="mt-1 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs flex items-center justify-between gap-2">
+                  <span>Not in {batchNo(selectedBatch.batch_no)} yet</span>
+                  <button type="button" onClick={() => setBillModalOpen(true)} className="regal-btn bg-regal-yellow text-regal-black !px-2 !py-1 text-xs whitespace-nowrap">
+                    + Add bill
+                  </button>
+                </div>
               )}
             </div>
 
@@ -647,12 +791,35 @@ const WarehouseStockInPage: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium mb-1">Selling Price (Rs.)</label>
-              <input
-                type="text"
-                value={sellingPrice}
-                disabled
-                className="regal-input w-full bg-gray-100"
-              />
+              {selectedBill ? (
+                <>
+                  <input
+                    type="number"
+                    value={sellingPrice}
+                    onChange={(e) => { setSellingPrice(e.target.value); setSellingEdited(true); }}
+                    className="regal-input w-full"
+                    min="1"
+                    step="1"
+                  />
+                  {prices && (
+                    <p className="text-xs text-gray-500 mt-1" title={batchPriceBreakdown(parseFloat(costPrice), selectedBill).full}>
+                      {batchPriceBreakdown(parseFloat(costPrice), selectedBill).short}
+                      {sellingEdited && Number(sellingPrice) !== prices.selling && (
+                        <button type="button" onClick={() => setSellingEdited(false)} className="ml-2 text-blue-600 hover:underline">
+                          Use Rs. {prices.selling.toLocaleString()}
+                        </button>
+                      )}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <input
+                  type="text"
+                  value={sellingPrice}
+                  disabled
+                  className="regal-input w-full bg-gray-100"
+                />
+              )}
             </div>
 
             <div>
@@ -724,8 +891,10 @@ const WarehouseStockInPage: React.FC = () => {
                   <th className="px-4 py-3 text-left">#</th>
                   <th className="px-4 py-3 text-left">Product</th>
                   <th className="px-4 py-3 text-left">Vendor</th>
+                  <th className="px-4 py-3 text-left">Batch</th>
                   <th className="px-4 py-3 text-center">Qty</th>
                   <th className="px-4 py-3 text-right">Warehouse Cost</th>
+                  <th className="px-4 py-3 text-right">Selling</th>
                   <th className="px-4 py-3 text-right">Total</th>
                   <th className="px-4 py-3 text-center">Action</th>
                 </tr>
@@ -739,12 +908,14 @@ const WarehouseStockInPage: React.FC = () => {
                       <div className="text-xs text-gray-400 mt-0.5">{item.barcode}</div>
                     </td>
                     <td className="px-4 py-3 text-gray-700">{item.vendor_name || '-'}</td>
+                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{item.batch_no ? batchNo(item.batch_no) : '-'}</td>
                     <td className="px-4 py-3 text-center">
                       <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-amber-100 text-amber-800 font-semibold text-sm">
                         {item.quantity}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right text-gray-700">Rs. {item.cost_price.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right text-gray-700">{item.batch_id ? `Rs. ${item.selling_price.toLocaleString()}` : '-'}</td>
                     <td className="px-4 py-3 text-right font-semibold text-gray-900">Rs. {item.total_cost.toLocaleString()}</td>
                     <td className="px-4 py-3 text-center">
                       <button
@@ -762,7 +933,7 @@ const WarehouseStockInPage: React.FC = () => {
               </tbody>
               <tfoot>
                 <tr className="bg-gray-50 border-t-2 border-gray-200 font-semibold text-sm">
-                  <td colSpan={5} className="px-4 py-3 text-right text-gray-600">Grand Total ({totalUnits} units):</td>
+                  <td colSpan={7} className="px-4 py-3 text-right text-gray-600">Grand Total ({totalUnits} units):</td>
                   <td className="px-4 py-3 text-right text-lg font-bold text-regal-black">Rs. {totalCost.toLocaleString()}</td>
                   <td></td>
                 </tr>
@@ -802,6 +973,16 @@ const WarehouseStockInPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <VendorBillModal
+        isOpen={billModalOpen}
+        onClose={() => setBillModalOpen(false)}
+        batch={selectedBatch}
+        bill={selectedBill}
+        vendorId={selectedVendorId}
+        vendorName={vendors.find((v) => v.id === selectedVendorId)?.name || ''}
+        onSaved={replaceBatch}
+      />
 
       {/* Empty state */}
       {stockInItems.length === 0 && !selectedProduct && (

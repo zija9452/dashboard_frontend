@@ -9,9 +9,15 @@ import DateRangeModal from '@/components/ui/DateRangeModal';
 import PageHeader from '@/components/ui/PageHeader';
 import { useBranch } from '@/lib/branch';
 import SearchBox from '@/components/ui/SearchBox';
+import { useBatchLines, shopLinesUrl, ShopBatchLine, rangeText, plainAmount } from '@/lib/batchLines';
 
 interface StockItem {
   pro_id: string;
+  batch_count?: number;
+  // Lowest / highest over the batch lines (only with batches)
+  price_range?: [number, number] | null;
+  cost_range?: [number, number] | null;
+  margin_range?: [number, number] | null;
   vendor_name: string;
   product_name: string;
   category: string;
@@ -35,6 +41,8 @@ const StockPage: React.FC = () => {
   const [showReportModal, setShowReportModal] = useState(false);
   const [showStockInReportModal, setShowStockInReportModal] = useState(false);
   const [stockInReportUrl, setStockInReportUrl] = useState<string>('');
+  // Rows with batches open on click to their Old Stock + batch lines (this branch's stock)
+  const { lines: openLines, toggle: toggleBatches } = useBatchLines<ShopBatchLine>((message) => showToast(message, 'error'), shopLinesUrl);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -278,29 +286,72 @@ const StockPage: React.FC = () => {
                   <th className="px-2 py-5 text-left w-44">Product</th>
                   <th className="px-2 py-5 text-left w-40">Category</th>
                   <th className="px-2 py-5 w-20">Stock</th>
-                  <th className="px-2 py-5 w-24">Price</th>
-                  <th className="px-2 py-5 w-24">Cost</th>
-                  <th className="px-2 py-5 text-left w-24">Barcode</th>
-                  <th className="px-2 py-5 w-24">Margin (%)</th>
+                  {/* Wide enough for a batch range "1210.00 – 2930.00" */}
+                  <th className="px-2 py-5 w-40">Price</th>
+                  <th className="px-2 py-5 w-40">Cost</th>
+                  <th className="px-2 py-5 text-left w-32">Barcode</th>
+                  <th className="px-2 py-5 w-32">Margin (%)</th>
                   <th className="px-2 py-5 text-left w-28">Brand</th>
                   <th className="px-2 py-5 text-left w-32">Branch</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {stockItems.map((item, index) => (
-                  <tr key={item.pro_id} className="hover:bg-gray-50 text-sm text-gray-900">
-                    <td className="px-3 py-4">{(currentPage - 1) * pageSize + index + 1}</td>
+                  <React.Fragment key={item.pro_id}>
+                  <tr
+                    onClick={() => item.batch_count && toggleBatches(item.pro_id)}
+                    className={`text-sm text-gray-900 ${item.batch_count ? 'cursor-pointer' : ''} ${item.pro_id in openLines ? 'bg-yellow-50' : 'hover:bg-gray-50'}`}
+                  >
+                    <td className={`px-3 py-4 ${item.pro_id in openLines ? 'border-l-4 border-regal-yellow' : ''}`}>{(currentPage - 1) * pageSize + index + 1}</td>
                     <td className="px-2 py-4">{item.vendor_name || '-'}</td>
-                    <td className="px-2 py-4">{item.product_name}</td>
+                    <td className="px-2 py-4">
+                      {item.product_name}
+                      {!!item.batch_count && (
+                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-regal-black whitespace-nowrap">
+                          {item.batch_count} batch{item.batch_count > 1 ? 'es' : ''} {item.pro_id in openLines ? '▲' : '▼'}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-2 py-4 whitespace-nowrap">{item.category || '-'}</td>
                     <td className="px-2 py-4 whitespace-nowrap text-center">{item.stock}</td>
-                    <td className="px-2 py-4 whitespace-nowrap text-center">{item.price.toFixed(2)}</td>
-                    <td className="px-2 py-4 whitespace-nowrap text-center">{item.cost.toFixed(2)}</td>
+                    {/* With batches: lowest – highest of its lines (each line's own values below) */}
+                    <td className="px-2 py-4 whitespace-nowrap text-center">{item.price_range ? rangeText(item.price_range, plainAmount) : plainAmount(item.price)}</td>
+                    <td className="px-2 py-4 whitespace-nowrap text-center">{item.cost_range ? rangeText(item.cost_range, plainAmount) : plainAmount(item.cost)}</td>
                     <td className="px-2 py-4 whitespace-nowrap">{item.barcode || '-'}</td>
-                    <td className="px-2 py-4 whitespace-nowrap text-center">{item.margin.toFixed(1)}%</td>
+                    <td className="px-2 py-4 whitespace-nowrap text-center">{item.margin_range ? rangeText(item.margin_range, (n) => `${n.toFixed(1)}%`) : `${item.margin.toFixed(1)}%`}</td>
                     <td className="px-2 py-4">{item.brand || '-'}</td>
                     <td className="px-2 py-4">{item.branch || '-'}</td>
                   </tr>
+                  {/* Batch lines under the same columns: Old Stock + each batch */}
+                  {item.pro_id in openLines && openLines[item.pro_id] === null && (
+                    <tr className="bg-gray-50 text-sm text-gray-500">
+                      <td></td>
+                      <td colSpan={10} className="px-2 py-2">Loading batches...</td>
+                    </tr>
+                  )}
+                  {(openLines[item.pro_id] || []).map((line, lineIndex) => (
+                    <tr key={line.label + (line.barcode || '')} className="bg-gray-50 text-sm text-gray-700">
+                      {/* 1.1, 1.2 ... under the product's S.No; ├ / └ ties the line to the product above */}
+                      <td className="px-3 py-2 text-gray-500 whitespace-nowrap border-l-4 border-regal-yellow">
+                        <span className="font-mono text-gray-400 mr-1">{lineIndex === (openLines[item.pro_id] || []).length - 1 ? '└' : '├'}</span>
+                        {(currentPage - 1) * pageSize + index + 1}.{lineIndex + 1}
+                      </td>
+                      <td className="px-2 py-2">{line.vendor_name || '-'}</td>
+                      <td className="px-2 py-2">
+                        <div>{item.product_name}</div>
+                        <span className="text-xs font-semibold text-regal-black">{line.label}</span>
+                      </td>
+                      <td className="px-2 py-2"></td>
+                      <td className="px-2 py-2 text-center font-semibold">{line.stock}</td>
+                      <td className="px-2 py-2 text-center">{plainAmount(line.selling_price)}</td>
+                      <td className="px-2 py-2 text-center">{plainAmount(line.cost)}</td>
+                      <td className="px-2 py-2 font-mono text-xs whitespace-nowrap">{line.barcode || '-'}</td>
+                      <td className="px-2 py-2"></td>
+                      <td className="px-2 py-2"></td>
+                      <td className="px-2 py-2"></td>
+                    </tr>
+                  ))}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>

@@ -9,6 +9,7 @@ import ReportModal from '@/components/ui/ReportModal';
 import DateRangeModal from '@/components/ui/DateRangeModal';
 import { warehouseStockApi, StockItem } from '@/lib/api/warehouse-stock';
 import SearchBox from '@/components/ui/SearchBox';
+import { useBatchLines, rangeText } from '@/lib/batchLines';
 
 const WarehouseStockPage: React.FC = () => {
   const router = useRouter();
@@ -23,6 +24,9 @@ const WarehouseStockPage: React.FC = () => {
   const [totalItems, setTotalItems] = useState(0);
   const [totalPagesFromApi, setTotalPagesFromApi] = useState(0);
   const totalPages = totalPagesFromApi;
+
+  // Rows with batches open on click to their Old Stock + batch lines
+  const { lines: openLines, toggle: toggleBatches } = useBatchLines((message) => showToast(message, 'error'));
 
   const [showStockInReportModal, setShowStockInReportModal] = useState(false);
   const [stockInReportUrl, setStockInReportUrl] = useState<string>('');
@@ -117,20 +121,32 @@ const WarehouseStockPage: React.FC = () => {
                   <th className="px-3 py-5 text-left w-12">S.No</th>
                   <th className="px-2 py-5 text-left w-32">Vendor</th>
                   <th className="px-2 py-5 text-left w-52">Product</th>
+                  <th className="px-2 py-5 text-left w-36">Barcode</th>
                   <th className="px-2 py-5 text-left w-28">Category</th>
                   <th className="px-2 py-5 w-24">Warehouse Stock</th>
                   <th className="px-2 py-5 w-24">Warehouse Cost</th>
                   <th className="px-2 py-5 w-28">Warehouse Limited Qty</th>
-                  <th className="px-2 py-5 text-left w-24">Barcode</th>
                   <th className="px-2 py-5 text-left w-28">Article No</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {stockItems.map((item, index) => (
-                  <tr key={item.id} className="hover:bg-gray-50 text-sm text-gray-900">
-                    <td className="px-3 py-4">{(currentPage - 1) * pageSize + index + 1}</td>
+                  <React.Fragment key={item.id}>
+                  <tr
+                    onClick={() => item.batch_count && toggleBatches(item.id)}
+                    className={`text-sm text-gray-900 ${item.batch_count ? 'cursor-pointer' : ''} ${item.id in openLines ? 'bg-yellow-50' : 'hover:bg-gray-50'}`}
+                  >
+                    <td className={`px-3 py-4 ${item.id in openLines ? 'border-l-4 border-regal-yellow' : ''}`}>{(currentPage - 1) * pageSize + index + 1}</td>
                     <td className="px-2 py-4">{item.vendor_name || '-'}</td>
-                    <td className="px-2 py-4">{item.name}</td>
+                    <td className="px-2 py-4">
+                      {item.name}
+                      {!!item.batch_count && (
+                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-regal-black whitespace-nowrap">
+                          {item.batch_count} batch{item.batch_count > 1 ? 'es' : ''} {item.id in openLines ? '▲' : '▼'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-2 py-4">{item.barcode || '-'}</td>
                     <td className="px-2 py-4">{item.category || '-'}</td>
                     <td className="px-2 py-4 text-center">
                       <span className={`font-semibold ${
@@ -141,11 +157,44 @@ const WarehouseStockPage: React.FC = () => {
                         {item.warehouse_stock || 0}
                       </span>
                     </td>
-                    <td className="px-2 py-4 text-center">{item.warehouse_cost || 0}</td>
+                    {/* With batches: lowest – highest cost of its lines (each line's own cost below) */}
+                    <td className="px-2 py-4 text-center whitespace-nowrap">{item.warehouse_cost_range ? rangeText(item.warehouse_cost_range) : item.warehouse_cost || 0}</td>
                     <td className="px-2 py-4 text-center">{item.warehouse_limited_qty || 0}</td>
-                    <td className="px-2 py-4">{item.barcode || '-'}</td>
                     <td className="px-2 py-4 text-center">{item.article_no || '-'}</td>
                   </tr>
+                  {/* Batch lines under the same columns: Old Stock + each vendor batch */}
+                  {item.id in openLines && openLines[item.id] === null && (
+                    <tr className="bg-gray-50 text-sm text-gray-500">
+                      <td></td>
+                      <td colSpan={8} className="px-2 py-2">Loading batches...</td>
+                    </tr>
+                  )}
+                  {(openLines[item.id] || []).map((line, lineIndex) => (
+                    <tr key={line.label + (line.barcode || '')} className="bg-gray-50 text-sm text-gray-700">
+                      {/* 1.1, 1.2 ... under the product's S.No */}
+                      <td className="px-3 py-2 text-gray-500 whitespace-nowrap border-l-4 border-regal-yellow">
+                        {/* ├ / └ ties the line to the product above */}
+                        <span className="font-mono text-gray-400 mr-1">{lineIndex === (openLines[item.id] || []).length - 1 ? '└' : '├'}</span>
+                        {(currentPage - 1) * pageSize + index + 1}.{lineIndex + 1}
+                      </td>
+                      <td className="px-2 py-2">{line.vendor_name || '-'}</td>
+                      <td className="px-2 py-2">
+                        <div>{item.name}</div>
+                        <span className="text-xs font-semibold text-regal-black">{line.label}</span>
+                        {line.status === 'CLOSED' && <span className="ml-1 text-xs text-gray-500">(closed)</span>}
+                      </td>
+                      <td className="px-2 py-2 font-mono text-xs whitespace-nowrap">{line.barcode || '-'}</td>
+                      <td className="px-2 py-2"></td>
+                      <td className="px-2 py-2 text-center font-semibold">{line.warehouse_stock}</td>
+                      <td className="px-2 py-2 text-center">
+                        {/* The cost as entered; freight / cartage / markup only go into the selling price */}
+                        {line.cost.toLocaleString()}
+                      </td>
+                      <td className="px-2 py-2"></td>
+                      <td className="px-2 py-2"></td>
+                    </tr>
+                  ))}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>

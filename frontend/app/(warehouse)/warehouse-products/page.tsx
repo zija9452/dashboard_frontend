@@ -8,6 +8,8 @@ import Pagination from '@/components/ui/Pagination';
 import { productsApi, Product } from '@/lib/api/products';
 import PageHeader from '@/components/ui/PageHeader';
 import SearchBox from '@/components/ui/SearchBox';
+import { useBatchLines, OpenBatch, batchNo, batchOption, batchPrices, batchPriceBreakdown, billOf, fetchOpenBatches, rangeText } from '@/lib/batchLines';
+import VendorBillModal from '@/components/VendorBillModal';
 
 const ShopWarehouseProductsPage: React.FC = () => {
   const router = useRouter();
@@ -37,6 +39,19 @@ const ShopWarehouseProductsPage: React.FC = () => {
   const totalPages = totalPagesFromApi;
 
   const [vendors, setVendors] = useState<any[]>([]);
+
+  // Rows with batches open on click to their Old Stock + batch lines
+  const { lines: openLines, toggle: toggleBatches } = useBatchLines((message) => showToast(message, 'error'));
+
+  // Add only: the opening stock can go into an open batch of the chosen vendor
+  const [allOpenBatches, setAllOpenBatches] = useState<OpenBatch[]>([]);
+  const [batchId, setBatchId] = useState(''); // '' = no batch
+  const [batchSelling, setBatchSelling] = useState('');
+  const [batchSellingEdited, setBatchSellingEdited] = useState(false);
+  const [billModalOpen, setBillModalOpen] = useState(false); // add / edit the vendor's bill in the batch
+  // Shop price follows the warehouse cost / batch price while ticked (new product only)
+  const [shopCostSame, setShopCostSame] = useState(true);
+  const [shopSellSame, setShopSellSame] = useState(true);
 
   // Form state. Shop cost / selling price are optional (same in both branches); if left
   // empty the warehouse invoice sets them. The branch is set by the backend.
@@ -118,6 +133,42 @@ const ShopWarehouseProductsPage: React.FC = () => {
       console.error('Error fetching warehouse vendors:', error);
     }
   };
+
+  // All open batches (lots) with their vendors' bills, loaded once when the Add form opens;
+  // the newest is picked
+  useEffect(() => {
+    if (!showAddForm || editingProduct) return;
+    fetchOpenBatches().then(setAllOpenBatches).catch((error) => showToast(error.message, 'error'));
+  }, [showAddForm, editingProduct]);
+
+  useEffect(() => {
+    setBatchId((current) => (allOpenBatches.some((b) => b.id === current) ? current : allOpenBatches[0]?.id || ''));
+  }, [allOpenBatches]);
+
+  const selectedBatch = allOpenBatches.find((b) => b.id === batchId) || null;
+  // The vendor's bill in this batch; none until the vendor is added to the batch
+  const selectedBill = billOf(selectedBatch, formData.vendor_id);
+  const replaceBatch = (updated: OpenBatch) =>
+    setAllOpenBatches((list) => list.map((b) => (b.id === updated.id ? updated : b)));
+  // Opening stock goes into a batch: then there is one selling price, the batch's
+  const batchActive = !editingProduct && Number(formData.initial_stock) > 0 && !!selectedBill;
+  // What is saved as the shop cost / selling price (both branches)
+  const costLinked = !editingProduct && shopCostSame;
+  const sellLinked = batchActive && shopSellSame;
+  const shopCost = costLinked ? Number(formData.warehouse_cost) || 0 : Number(formData.cost_price) || 0;
+  const shopSell = sellLinked ? Number(batchSelling) || 0 : Number(formData.unit_price) || 0;
+  const batchPrice = selectedBill && Number(formData.warehouse_cost) > 0
+    ? batchPrices(Number(formData.warehouse_cost), selectedBill)
+    : null;
+
+  // Batch price follows the warehouse cost until typed by hand
+  useEffect(() => {
+    if (batchPrice && !batchSellingEdited) setBatchSelling(String(batchPrice.selling));
+  }, [batchPrice?.selling, batchSellingEdited]);
+
+  useEffect(() => {
+    setBatchSellingEdited(false);
+  }, [batchId, formData.vendor_id]);
 
   // Fetch user role
   useEffect(() => {
@@ -204,6 +255,8 @@ const ShopWarehouseProductsPage: React.FC = () => {
 
   // Reset form
   const resetForm = async () => {
+    setShopCostSame(true);
+    setShopSellSame(true);
     const newBarcode = await generateBarcode();
     setFormData({
       name: '',
@@ -238,8 +291,14 @@ const ShopWarehouseProductsPage: React.FC = () => {
 
     if (submitting) return;
 
-    if (!editingProduct && formData.vendor_id && !(Number(formData.initial_stock) > 0)) {
-      showToast('Enter Warehouse Stock for the selected vendor', 'error');
+    // A batch with a vendor chosen: the vendor's bill must be in the batch first
+    if (!editingProduct && Number(formData.initial_stock) > 0 && selectedBatch && formData.vendor_id && !selectedBill) {
+      showToast(`Add the vendor's bill to ${batchNo(selectedBatch.batch_no)} first`, 'error');
+      return;
+    }
+
+    if (batchActive && !(Number(batchSelling) > 0)) {
+      showToast('Batch selling price must be more than 0', 'error');
       return;
     }
 
@@ -285,8 +344,10 @@ const ShopWarehouseProductsPage: React.FC = () => {
         // The backend copies the product (with these prices) to the other branch.
         const created: any = await productsApi.createProduct({
           ...basePayload,
-          unit_price: Number(formData.unit_price) || 0,
-          cost_price: Number(formData.cost_price) || 0,
+          // Left empty with a batch: the batch's selling price, so it is never 0
+          // With a batch the one selling price is the batch's
+          unit_price: shopSell,
+          cost_price: shopCost,
           stock_level: 0
         } as any);
 
@@ -303,11 +364,16 @@ const ShopWarehouseProductsPage: React.FC = () => {
               vendor_id: formData.vendor_id || null,
               cost_price: Number(formData.warehouse_cost),
               ref: `W_IN_${new Date().toISOString().split('T')[0].replace(/-/g, '')}`,
+              batch_id: batchActive && selectedBatch ? selectedBatch.id : null,
+              selling_price: batchActive ? Number(batchSelling) : null,
             }),
           });
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             stockMessage = ` But stock was not added: ${errorData.error || errorData.detail || 'failed'}. Add it from Stock In.`;
+          } else {
+            const data = await response.json().catch(() => ({}));
+            (data.branch_warnings || []).forEach((w: string) => showToast(w, 'warning'));
           }
         }
 
@@ -570,35 +636,6 @@ const ShopWarehouseProductsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Discount (%)</label>
-                <input
-                  type="number"
-                  name="discount"
-                  value={formData.discount}
-                  onChange={handleInputChange}
-                  className="regal-input w-full"
-                  placeholder="Enter discount"
-                  step="0.01"
-                  min="0"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Limited Quantity *</label>
-                <input
-                  type="number"
-                  name="limited_qty"
-                  value={formData.limited_qty || ''}
-                  onChange={handleInputChange}
-                  className="regal-input w-full"
-                  placeholder="Enter limited quantity"
-                  step="1"
-                  min="0"
-                  required
-                />
-              </div>
-
-              <div>
                 <label className="block text-sm font-medium mb-1">Select Category *</label>
                 <select
                   name="category"
@@ -630,109 +667,233 @@ const ShopWarehouseProductsPage: React.FC = () => {
                 </select>
               </div>
 
+              <div>
+                <label className="block text-sm font-medium mb-1">Article No (Optional)</label>
+                <input
+                  type="text"
+                  name="article_no"
+                  value={formData.article_no}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                  placeholder="Enter article number"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Discount (%)</label>
+                <input
+                  type="number"
+                  name="discount"
+                  value={formData.discount}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                  placeholder="Enter discount"
+                  step="0.01"
+                  min="0"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Limited Quantity *</label>
+                <input
+                  type="number"
+                  name="limited_qty"
+                  value={formData.limited_qty || ''}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                  placeholder="Enter limited quantity"
+                  step="1"
+                  min="0"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Warehouse Limited Qty</label>
+                <input
+                  type="number"
+                  name="warehouse_limited_qty"
+                  value={formData.warehouse_limited_qty || ''}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                  placeholder="Enter warehouse limited qty"
+                  step="1"
+                  min="0"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Warehouse Cost *</label>
+                <input
+                  type="number"
+                  name="warehouse_cost"
+                  value={formData.warehouse_cost || ''}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                  placeholder="Enter warehouse cost"
+                  step="1"
+                  min="1"
+                  required
+                />
+              </div>
+
+              {!editingProduct && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Warehouse Stock</label>
+                  <input
+                    type="number"
+                    name="initial_stock"
+                    value={formData.initial_stock || ''}
+                    onChange={handleInputChange}
+                    className="regal-input w-full"
+                    placeholder="Opening warehouse stock"
+                    step="1"
+                    min="0"
+                  />
+                </div>
+              )}
+
+
+              {/* Step 2 - only when opening stock is entered: where it came from */}
+              {!editingProduct && Number(formData.initial_stock) > 0 && (
+                <>
+                  <div className="md:col-span-3 border-t pt-3 mt-1">
+                    <h4 className="text-sm font-semibold text-gray-700">Opening Stock</h4>
+                  </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Article No (Optional)</label>
-                    <input
-                      type="text"
-                      name="article_no"
-                      value={formData.article_no}
-                      onChange={handleInputChange}
-                      className="regal-input w-full"
-                      placeholder="Enter article number"
-                    />
+                    <label className="block text-sm font-medium mb-1">Batch</label>
+                    <select value={batchId} onChange={(e) => setBatchId(e.target.value)} className="regal-input w-full">
+                      {allOpenBatches.map((b) => (
+                        <option key={b.id} value={b.id}>{batchOption(b)}</option>
+                      ))}
+                      <option value="">No batch (old way)</option>
+                    </select>
+                    {allOpenBatches.length === 0 && (
+                      <p className="text-xs text-gray-500 mt-1">No open batch - make one on Warehouse Batches.</p>
+                    )}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium mb-1">Warehouse Limited Qty</label>
-                    <input
-                      type="number"
-                      name="warehouse_limited_qty"
-                      value={formData.warehouse_limited_qty || ''}
+                    <label className="block text-sm font-medium mb-1">Warehouse Vendor</label>
+                    <select
+                      name="vendor_id"
+                      value={formData.vendor_id}
                       onChange={handleInputChange}
                       className="regal-input w-full"
-                      placeholder="Enter warehouse limited qty"
-                      step="1"
-                      min="0"
-                      required
-                    />
+                    >
+                      <option value="">No Vendor</option>
+                      {vendors.map(vendor => (
+                        <option key={vendor.id} value={vendor.id}>
+                          {vendor.name}{vendor.vendor_code ? ` (${vendor.vendor_code})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {/* The vendor's bill in the batch: added once, when its goods of this lot arrive */}
+                    {selectedBatch && formData.vendor_id && (
+                      selectedBill ? (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Bill Rs. {selectedBill.invoice_total.toLocaleString()} · F {selectedBill.freight_pct}% · C {selectedBill.cartage_pct}% · M {selectedBill.markup_pct}%
+                          {selectedBill.locked && <span className="ml-2 text-gray-500">🔒 Locked</span>}
+                        </p>
+                      ) : (
+                        <div className="mt-1 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs flex items-center justify-between gap-2">
+                          <span>Not in {batchNo(selectedBatch.batch_no)} yet</span>
+                          <button type="button" onClick={() => setBillModalOpen(true)} className="regal-btn bg-regal-yellow text-regal-black !px-2 !py-1 text-xs whitespace-nowrap">
+                            + Add bill
+                          </button>
+                        </div>
+                      )
+                    )}
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Warehouse Cost *</label>
-                    <input
-                      type="number"
-                      name="warehouse_cost"
-                      value={formData.warehouse_cost || ''}
-                      onChange={handleInputChange}
-                      className="regal-input w-full"
-                      placeholder="Enter warehouse cost"
-                      step="1"
-                      min="1"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Shop Cost (Optional)</label>
-                    <input
-                      type="number"
-                      name="cost_price"
-                      value={formData.cost_price || ''}
-                      onChange={handleInputChange}
-                      className="regal-input w-full"
-                      placeholder="Shop cost (both branches)"
-                      step="any"
-                      min="0"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Shop Selling Price (Optional)</label>
-                    <input
-                      type="number"
-                      name="unit_price"
-                      value={formData.unit_price || ''}
-                      onChange={handleInputChange}
-                      className="regal-input w-full"
-                      placeholder="Selling price (both branches)"
-                      step="any"
-                      min="0"
-                    />
-                  </div>
-
-                  {!editingProduct && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Warehouse Stock (Optional)</label>
-                        <input
-                          type="number"
-                          name="initial_stock"
-                          value={formData.initial_stock || ''}
-                          onChange={handleInputChange}
-                          className="regal-input w-full"
-                          placeholder="Opening warehouse stock"
-                          step="1"
-                          min="0"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Warehouse Vendor (Optional)</label>
-                        <select
-                          name="vendor_id"
-                          value={formData.vendor_id}
-                          onChange={handleInputChange}
-                          className="regal-input w-full"
-                        >
-                          <option value="">No Vendor</option>
-                          {vendors.map(vendor => (
-                            <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </>
+                  {selectedBill && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Batch Selling Price</label>
+                      <input
+                        type="number"
+                        value={batchSelling}
+                        onChange={(e) => { setBatchSelling(e.target.value); setBatchSellingEdited(true); }}
+                        className="regal-input w-full"
+                        min="1"
+                        step="1"
+                        placeholder="Enter warehouse cost first"
+                      />
+                      {batchPrice && (
+                        <p className="text-xs text-gray-500 mt-1" title={batchPriceBreakdown(Number(formData.warehouse_cost), selectedBill).full}>
+                          {batchPriceBreakdown(Number(formData.warehouse_cost), selectedBill).short}
+                          {batchSellingEdited && Number(batchSelling) !== batchPrice.selling && (
+                            <button type="button" onClick={() => setBatchSellingEdited(false)} className="ml-2 text-blue-600 hover:underline">
+                              Use Rs. {batchPrice.selling.toLocaleString()}
+                            </button>
+                          )}
+                        </p>
+                      )}
+                    </div>
                   )}
-           
+                </>
+              )}
+
+              {/* Shop price - always last */}
+              <div className="md:col-span-3 border-t pt-3 mt-1">
+                <h4 className="text-sm font-semibold text-gray-700">Shop Price</h4>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Shop Cost</label>
+                <input
+                  type="number"
+                  name="cost_price"
+                  value={costLinked ? formData.warehouse_cost || '' : formData.cost_price || ''}
+                  onChange={handleInputChange}
+                  className={`regal-input w-full ${costLinked ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                  placeholder="Shop cost (both branches)"
+                  step="any"
+                  min="0"
+                  disabled={costLinked}
+                />
+                {!editingProduct && (
+                  <label className="mt-1 flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={shopCostSame}
+                      onChange={(e) => {
+                        setShopCostSame(e.target.checked);
+                        if (!e.target.checked) setFormData(prev => ({ ...prev, cost_price: prev.warehouse_cost }));
+                      }}
+                    />
+                    Same as warehouse cost
+                  </label>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Shop Selling Price</label>
+                <input
+                  type="number"
+                  name="unit_price"
+                  value={sellLinked ? batchSelling : formData.unit_price || ''}
+                  onChange={handleInputChange}
+                  className={`regal-input w-full ${sellLinked ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                  placeholder="Selling price (both branches)"
+                  step="any"
+                  min="0"
+                  disabled={sellLinked}
+                />
+                {batchActive && (
+                  <label className="mt-1 flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={shopSellSame}
+                      onChange={(e) => {
+                        setShopSellSame(e.target.checked);
+                        if (!e.target.checked) setFormData(prev => ({ ...prev, unit_price: Number(batchSelling) || 0 }));
+                      }}
+                    />
+                    Same as batch selling price
+                  </label>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-2 mt-4">
@@ -784,36 +945,43 @@ const ShopWarehouseProductsPage: React.FC = () => {
                 <tr className='text-xs text-gray-900 uppercase tracking-wider font-semibold'>
                   <th className="px-3 py-5 text-left w-12">S.No</th>
                   <th className="px-2 py-5 text-left w-40">Product</th>
-                  <th className="px-2 py-5 text-left w-24">Barcode</th>
+                  <th className="px-2 py-5 text-left w-40">Barcode</th>
+                  <th className="px-2 py-5 w-24">Warehouse Cost</th>
+                  <th className="px-2 py-5 w-24">Warehouse Stock</th>
+                  <th className="px-2 py-5 w-28">Warehouse Limited Qty</th>
                   <th className="px-2 py-5 w-20">Discount</th>
                   <th className="px-2 py-5 text-left w-28">Category</th>
                   <th className="px-2 py-5 text-left w-28">Brand</th>
                   <th className="px-2 py-5 text-left w-24">Article No</th>
-                  <th className="px-2 py-5 w-24">Warehouse Stock</th>
-                  <th className="px-2 py-5 w-24">Warehouse Cost</th>
-                  <th className="px-2 py-5 w-28">Warehouse Limited Qty</th>
-                 
-               
                   <th className="px-2 py-5 w-24">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {products.map((product, index) => (
-                  <tr key={product.pro_id} className="hover:bg-gray-50 text-sm text-gray-900">
-                    <td className="px-3 py-4">{(currentPage - 1) * pageSize + index + 1}</td>
-                    <td className="px-2 py-4">{product.pro_name}</td>
+                  <React.Fragment key={product.pro_id}>
+                  <tr
+                    onClick={() => product.batch_count && toggleBatches(product.pro_id)}
+                    className={`text-sm text-gray-900 ${product.batch_count ? 'cursor-pointer' : ''} ${product.pro_id in openLines ? 'bg-yellow-50' : 'hover:bg-gray-50'}`}
+                  >
+                    <td className={`px-3 py-4 ${product.pro_id in openLines ? 'border-l-4 border-regal-yellow' : ''}`}>{(currentPage - 1) * pageSize + index + 1}</td>
+                    <td className="px-2 py-4">
+                      {product.pro_name}
+                      {!!product.batch_count && (
+                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-regal-black whitespace-nowrap">
+                          {product.batch_count} batch{product.batch_count > 1 ? 'es' : ''} {product.pro_id in openLines ? '▲' : '▼'}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-2 py-4">{product.pro_barcode || '-'}</td>
+                    {/* With batches: lowest – highest cost of its lines (each line's own cost below) */}
+                    <td className="px-2 py-4 text-center whitespace-nowrap">{product.warehouse_cost_range ? rangeText(product.warehouse_cost_range) : product.warehouse_cost ?? 0}</td>
+                    <td className="px-2 py-4 text-center">{product.warehouse_stock ?? 0}</td>
+                    <td className="px-2 py-4 text-center">{product.warehouse_limited_qty ?? 0}</td>
                     <td className="px-2 py-4  text-center">{product.pro_dis !== undefined && product.pro_dis !== null ? `${product.pro_dis}%` : '0%'}</td>
                     <td className="px-2 py-4">{product.cat_id_fk || '-'}</td>
                     <td className="px-2 py-4">{product.brand || '-'}</td>
-                    
                     <td className="px-2 py-4 text-center">{product.article_no || '-'}</td>
-                        <td className="px-2 py-4 text-center">{product.warehouse_stock ?? 0}</td>
-                        <td className="px-2 py-4 text-center">{product.warehouse_cost ?? 0}</td>
-                        <td className="px-2 py-4 text-center">{product.warehouse_limited_qty ?? 0}</td>
-                    
-                  
-                    <td className="px-2 py-4">
+                    <td className="px-2 py-4" onClick={(e) => e.stopPropagation()}>
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleEdit(product)}
@@ -854,6 +1022,41 @@ const ShopWarehouseProductsPage: React.FC = () => {
                       </div>
                     </td>
                   </tr>
+                  {/* Batch lines under the same columns: Old Stock + each vendor batch */}
+                  {product.pro_id in openLines && openLines[product.pro_id] === null && (
+                    <tr className="bg-gray-50 text-sm text-gray-500">
+                      <td></td>
+                      <td colSpan={10} className="px-2 py-2">Loading batches...</td>
+                    </tr>
+                  )}
+                  {(openLines[product.pro_id] || []).map((line, lineIndex) => (
+                    <tr key={line.label + (line.barcode || '')} className="bg-gray-50 text-sm text-gray-700">
+                      <td className="px-3 py-2 text-gray-500 whitespace-nowrap border-l-4 border-regal-yellow">
+                        {/* ├ / └ ties the line to the product above */}
+                        <span className="font-mono text-gray-400 mr-1">{lineIndex === (openLines[product.pro_id] || []).length - 1 ? '└' : '├'}</span>
+                        {(currentPage - 1) * pageSize + index + 1}.{lineIndex + 1}
+                      </td>
+                      <td className="px-2 py-2">
+                        <div>{product.pro_name}</div>
+                        <span className="text-xs font-semibold text-regal-black">{line.label}</span>
+                        {line.vendor_name && <span className="ml-1 text-xs text-gray-500">({line.vendor_name})</span>}
+                        {line.status === 'CLOSED' && <span className="ml-1 text-xs text-gray-500">(closed)</span>}
+                      </td>
+                      <td className="px-2 py-2 font-mono text-xs whitespace-nowrap">{line.barcode || '-'}</td>
+                      <td className="px-2 py-2 text-center">
+                        {/* The cost as entered; freight / cartage / markup only go into the selling price */}
+                        {line.cost.toLocaleString()}
+                      </td>
+                      <td className="px-2 py-2 text-center font-semibold">{line.warehouse_stock}</td>
+                      <td></td>
+                      <td></td>
+                      <td></td>
+                      <td></td>
+                      <td></td>
+                      <td></td>
+                    </tr>
+                  ))}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
@@ -880,6 +1083,16 @@ const ShopWarehouseProductsPage: React.FC = () => {
           />
         </div>
       )}
+
+      <VendorBillModal
+        isOpen={billModalOpen}
+        onClose={() => setBillModalOpen(false)}
+        batch={selectedBatch}
+        bill={selectedBill}
+        vendorId={formData.vendor_id}
+        vendorName={vendors.find((v) => v.id === formData.vendor_id)?.name || ''}
+        onSaved={replaceBatch}
+      />
     </div>
   );
 };

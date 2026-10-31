@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import ReportModal from '@/components/ui/ReportModal';
 import PageHeader from '@/components/ui/PageHeader';
-import { useBranch } from '@/lib/branch';
+import { useBranch, BRANCHES } from '@/lib/branch';
 import SearchBox from '@/components/ui/SearchBox';
 
 interface Customer {
@@ -18,7 +18,13 @@ interface Customer {
   cus_address: string;
   cus_balance: number;
   branch: string;
+  destination_branch: string; // '' = direct customer, else the branch whose shop gets the stock
 }
+
+// Customer type: a branch's shop gets the warehouse invoice stock, or a direct customer
+// buys straight from the warehouse (no shop gets it)
+const customerTypeLabel = (code: string) =>
+  code ? `Branch - ${BRANCHES.find((b) => b.code === code)?.name || code}` : 'Direct customer';
 
 const WarehouseCustomersPage: React.FC = () => {
   const router = useRouter();
@@ -47,7 +53,8 @@ const WarehouseCustomersPage: React.FC = () => {
     cus_phone: '',
     cus_cnic: '',
     cus_address: '',
-    branch: ''
+    branch: '',
+    destination_branch: ''
   });
 
   // Branch options: the branch this user is logged into, plus the warehouse
@@ -119,7 +126,8 @@ const WarehouseCustomersPage: React.FC = () => {
       cus_phone: '',
       cus_cnic: '',
       cus_address: '',
-      branch: ''
+      branch: '',
+      destination_branch: ''
     });
     setEditingCustomer(null);
     setShowAddForm(false);
@@ -139,7 +147,8 @@ const WarehouseCustomersPage: React.FC = () => {
           address: formData.cus_address
         }),
         cnic: formData.cus_cnic,
-        branch: formData.branch || null
+        branch: formData.branch || null,
+        destination_branch: formData.destination_branch || null
       };
 
       let response;
@@ -188,7 +197,8 @@ const WarehouseCustomersPage: React.FC = () => {
       cus_phone: customer.cus_phone,
       cus_cnic: customer.cus_cnic || '',
       cus_address: customer.cus_address || '',
-      branch: customer.branch || ''
+      branch: customer.branch || '',
+      destination_branch: customer.destination_branch || ''
     });
     setShowAddForm(true);
   };
@@ -362,6 +372,24 @@ const WarehouseCustomersPage: React.FC = () => {
                   {branchOptions.map(b => <option key={b} value={b}>{b}</option>)}
                 </select>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Customer Type *</label>
+                <select
+                  name="destination_branch"
+                  value={formData.destination_branch}
+                  onChange={handleInputChange}
+                  className="regal-input w-full"
+                >
+                  <option value="">Direct customer</option>
+                  {BRANCHES.map(b => <option key={b.code} value={b.code}>Branch - {b.name}</option>)}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  {formData.destination_branch
+                    ? 'Warehouse invoice moves the stock to this branch\'s shop.'
+                    : 'Buys straight from the warehouse - the stock goes to no shop.'}
+                </p>
+              </div>
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
@@ -402,6 +430,7 @@ const WarehouseCustomersPage: React.FC = () => {
                   <th className="px-4 py-5 text-left w-32">CNIC</th>
                   <th className="px-4 py-5 text-left w-48">Address</th>
                   <th className="px-4 py-5 text-left w-40">Branch</th>
+                  <th className="px-4 py-5 text-left w-48">Type</th>
                   <th className="px-4 py-5 text-left w-24">Balance</th>
                   <th className="px-4 py-5 text-left w-32">Actions</th>
                 </tr>
@@ -414,6 +443,7 @@ const WarehouseCustomersPage: React.FC = () => {
                     <td className="px-4 py-4">{c.cus_cnic || '-'}</td>
                     <td className="px-4 py-4 overflow-hidden text-ellipsis whitespace-nowrap">{c.cus_address || '-'}</td>
                     <td className="px-4 py-4">{c.branch || '-'}</td>
+                    <td className="px-4 py-4 text-xs">{customerTypeLabel(c.destination_branch)}</td>
                     <td className="px-4 py-4 font-semibold text-gray-900">{c.cus_balance.toFixed(2)}</td>
                     <td className="px-4 py-4">
                       <div className="flex gap-2">

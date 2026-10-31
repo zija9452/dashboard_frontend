@@ -9,6 +9,7 @@ import ReportModal from '@/components/ui/ReportModal';
 interface WarehouseInvoiceRow {
   id: string;
   invoice_no: string;
+  batch: string; // "Vendor\nBatch 001", or "Old Stock"
   product_name: string;
   total_amount: number;
   amount_paid: number;
@@ -314,6 +315,7 @@ const WarehouseSalesViewPage: React.FC = () => {
               <thead className="bg-gray-100 sticky top-0 z-10">
                 <tr className="text-gray-700 font-semibold text-xs uppercase tracking-wider">
                   <th className="px-3 py-5 text-left w-20">Order ID</th>
+                  <th className="px-3 py-5 text-left w-32">Batch</th>
                   <th className="px-3 py-5 text-left w-40">Product</th>
                   <th className="px-3 py-5 text-left w-32">Customer</th>
                   <th className="px-3 py-5 text-left w-20">Cost</th>
@@ -327,7 +329,7 @@ const WarehouseSalesViewPage: React.FC = () => {
               <tbody className="bg-white">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="px-3 py-8 text-center">
+                    <td colSpan={10} className="px-3 py-8 text-center">
                       <div className="animate-pulse">
                         {[...Array(5)].map((_, i) => (
                           <div key={i} className="h-10 bg-gray-100 mb-2 rounded"></div>
@@ -337,7 +339,7 @@ const WarehouseSalesViewPage: React.FC = () => {
                   </tr>
                 ) : invoices.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-28 text-center text-gray-500">
+                    <td colSpan={10} className="py-28 text-center text-gray-500">
                       No warehouse invoices found
                     </td>
                   </tr>
@@ -352,6 +354,8 @@ const WarehouseSalesViewPage: React.FC = () => {
                         <td className="px-3 py-4 font-mono text-xs">
                           {invoice.invoice_no}
                         </td>
+                        {/* Vendor, batch no under it */}
+                        <td className={`px-3 py-4 text-xs whitespace-pre-line ${invoice.batch === 'Old Stock' ? 'text-gray-400' : ''}`}>{invoice.batch}</td>
                         <td className="px-3 py-4">{invoice.product_name}</td>
                         <td className="px-3 py-4">{invoice.customer_name}</td>
                         <td className="px-2 py-4 text-left">{invoice.cost.toLocaleString()}</td>

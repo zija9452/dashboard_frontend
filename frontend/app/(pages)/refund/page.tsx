@@ -19,6 +19,8 @@ interface WalkinInvoice {
   items: Array<{
     product_name: string;
     product_id?: string;
+    product_batch_id?: string | null; // sold from this batch: the refund goes back into it
+    batch_label?: string | null;
     quantity: number;
     unit_price: number;
     total_price: number;
@@ -33,6 +35,7 @@ interface WalkinInvoice {
 interface RefundItem {
   product_name: string;
   product_id?: string;
+  product_batch_id?: string | null;
   quantity_returned: number;
   unit_price: number;
   total_amount: number;
@@ -41,6 +44,7 @@ interface RefundItem {
 interface SelectedItem {
   product_name: string;
   product_id?: string;
+  product_batch_id?: string | null;
   quantity: number;
   unit_price: number;
   total_price?: number;
@@ -389,6 +393,7 @@ const RefundPage: React.FC = () => {
       const refundItems: RefundItem[] = [{
         product_name: selectedItem.product_name,
         product_id: selectedItem.product_id,
+        product_batch_id: selectedItem.product_batch_id || null, // back into the batch it was sold from
         quantity_returned: qty,
         unit_price: perUnitPrice,
         total_amount: enteredAmount
@@ -602,6 +607,7 @@ const RefundPage: React.FC = () => {
                         </td>
                         <td className="px-3 py-4 text-sm text-gray-900">
                           <span className="font-medium">{item.product_name}</span>
+                          {item.batch_label && <div className="text-[11px] text-gray-400">{item.batch_label}</div>}
                         </td>
                         <td className="px-3 py-4 text-sm text-gray-900">
                           Rs. {item.total_price?.toFixed(2) || (item.quantity * item.unit_price).toFixed(2)}

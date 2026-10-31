@@ -20,6 +20,11 @@ export interface Product {
   article_no?: string;
   warehouse_stock?: number;
   warehouse_cost?: number;
+  batch_count?: number; // vendor batches (Warehouse Batches) - the warehouse list opens to show them
+  // Lowest / highest over the batch lines (only with batches): warehouse list / shop list
+  warehouse_cost_range?: [number, number] | null;
+  price_range?: [number, number] | null;
+  cost_range?: [number, number] | null;
   warehouse_limited_qty?: number;
 }
 

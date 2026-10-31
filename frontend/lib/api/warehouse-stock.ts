@@ -40,6 +40,8 @@ export interface StockItem {
   unit_price: number;
   cost_price: number;
   is_warehouse_product: boolean;
+  batch_count?: number; // batch lines (Warehouse Batches) - the row opens to show them
+  warehouse_cost_range?: [number, number] | null; // lowest / highest cost over the batch lines
 }
 
 export interface StockEntry {

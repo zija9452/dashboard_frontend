@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { apiErrorMessage } from '@/lib/apiError';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
@@ -343,10 +343,12 @@ const CustomerInvoicePage: React.FC = () => {
   // Whenever the selected combination (or the quantity, which can flip the bulk
   // tier) resolves to a fixed price, it's filled straight into the editable Rate
   // field below - no separate read-only "ideal price" box. Staff can type over it.
-  const handleIdealPriceChange = (price: number) => {
+  // Stable (useCallback): a new function every render re-ran the fill on every keystroke,
+  // so a typed rate (1000 -> 950) went straight back to the ideal price.
+  const handleIdealPriceChange = useCallback((price: number) => {
     setUnitPrice(price);
     setPriceWasAutoFilled(true);
-  };
+  }, []);
 
   // Teams in the order they were first added; a team leaves when its last line is removed.
   const teams = teamsIn(cart);

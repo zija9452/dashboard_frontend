@@ -380,7 +380,7 @@ const CustomerInvoicePage: React.FC = () => {
 
   // MOQ Charges of the line being entered = what it adds to its team + category's flat
   // (0 when that flat is already in the cart, or for a free kit line). Price (Total) adds it.
-  const moq = (() => {
+  const moqCalc = (() => {
     if (!activeTeam || !selectedCategory || quantity === '' || quantity <= 0) return { amount: 0, reason: '' };
     const key = mockupKey(activeTeam, selectedCategory);
     const before = mockups.find(m => m.key === key);
@@ -396,6 +396,14 @@ const CustomerInvoicePage: React.FC = () => {
     const kit = flatDefault(selectedCategory, activeTeam, withLine);
     return { amount: 0, reason: kit.amount === 0 && findArticle(articles, activeTeam) ? kit.reason : '' };
   })();
+  // A line that brings its team + category's MOQ can have it typed here (0 = waived), like
+  // in the cart; null = the default. Kept as the cart's MOQ amount when the line is added.
+  const [moqOverride, setMoqOverride] = useState<number | null>(null);
+  useEffect(() => {
+    setMoqOverride(null);
+  }, [activeTeam, selectedCategory]);
+  const moqEditable = moqCalc.amount > 0;
+  const moq = { ...moqCalc, amount: moqEditable && moqOverride !== null ? moqOverride : moqCalc.amount };
 
   // Per team: its lines (display order), pieces, flat charges and total (lines + flat + DTF).
   const teamBlocks = teams.map(team => {
@@ -868,6 +876,10 @@ const CustomerInvoicePage: React.FC = () => {
     };
 
     updateCart([...cart, newItem]);
+    // MOQ typed in the form becomes this team + category's MOQ in the cart
+    if (moqEditable && moqOverride !== null) {
+      setMockupAmounts(prev => ({ ...prev, [mockupKey(activeTeam, selectedCategory)]: moqOverride }));
+    }
 
     // Clear form - Team Name stays (shown with its spelling), so the rest of the kit -
     // Short, Trouser - goes to the same team; clicking into the box selects it to type
@@ -939,6 +951,7 @@ const CustomerInvoicePage: React.FC = () => {
     // Clear dynamic category fields
     setDynamicCategoryFields({});
     setDtfLogos([]);
+    setMoqOverride(null);
   };
 
   // Remove item from cart. A first line removed: its first "+ Similar" line takes its
@@ -1352,10 +1365,22 @@ const CustomerInvoicePage: React.FC = () => {
                 </div>
 
                 {/* MOQ Charges - the flat charge this line brings (once per team + category,
-                    1-4 pcs; kit rule), editable later in the cart */}
+                    1-4 pcs; kit rule): editable here when the line brings it, and later in the cart */}
                 <div>
                   <label htmlFor="invoice-moq" className="block text-xs font-medium text-gray-600 mb-1">MOQ Charges</label>
-                  <input id="invoice-moq" type="text" value={moq.amount ? `Rs. ${moq.amount}` : '0'} readOnly className="regal-input w-full bg-gray-100 text-gray-700" />
+                  {moqEditable ? (
+                    <input
+                      id="invoice-moq"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={moq.amount}
+                      onChange={(e) => setMoqOverride(e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)))}
+                      className="regal-input w-full"
+                    />
+                  ) : (
+                    <input id="invoice-moq" type="text" value={moq.amount ? `Rs. ${moq.amount}` : '0'} readOnly className="regal-input w-full bg-gray-100 text-gray-700" />
+                  )}
                   {moq.reason && <p className="text-[11px] text-gray-500 mt-1">{moq.reason}</p>}
                 </div>
 

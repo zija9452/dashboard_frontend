@@ -5,9 +5,12 @@ import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/ui/PageHeader';
-import ProductSearchTabs, { SearchProduct } from '@/components/ProductSearchTabs';
+import StockLineSearchTabs, { SearchLine } from '@/components/StockLineSearchTabs';
 
 interface WarehouseAdjustItem {
+  key: string; // product + line: a product can be in the list once per batch
+  product_batch_id: string | null; // none = Old Stock
+  batch_label: string | null; // shown only for a product with batches
   product_id: string;
   product_name: string;
   barcode: string;
@@ -23,27 +26,27 @@ const WarehouseAdjustStockPage: React.FC = () => {
   const [adjustItems, setAdjustItems] = useState<WarehouseAdjustItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // Product picked by barcode scan or name search
-  const addProduct = (product: SearchProduct) => {
-    if (adjustItems.some(item => item.product_id === product.pro_id)) {
-      showToast('Product already in list', 'warning');
-      return;
-    }
-    if (!product.is_warehouse_product) {
-      showToast('This is not a warehouse product', 'error');
+  // Product line picked by barcode scan or name search: a product with batches comes as
+  // "Old Stock" + one row per batch right in the list (a scanned batch barcode = its line)
+  const addLine = (line: SearchLine) => {
+    if (adjustItems.some(item => item.key === line.key)) {
+      showToast('Already in list', 'warning');
       return;
     }
     const newItem: WarehouseAdjustItem = {
-      product_id: product.pro_id,
-      product_name: product.pro_name,
-      barcode: product.pro_barcode,
-      current_stock: product.warehouse_stock || 0,
+      key: line.key,
+      product_batch_id: line.product_batch_id,
+      batch_label: line.has_batches ? line.label : null,
+      product_id: line.product_id,
+      product_name: line.product_name,
+      barcode: line.barcode || '',
+      current_stock: line.stock,
       action: 'increase',
       quantity: 0,
       reason: 'Stock count adjustment',
     };
     setAdjustItems(prev => [...prev, newItem]);
-    showToast(`Product added: ${product.pro_name}`, 'success');
+    showToast(`Product added: ${line.product_name}${line.has_batches ? ` (${line.label})` : ''}`, 'success');
   };
 
   // Update item field
@@ -100,7 +103,8 @@ const WarehouseAdjustStockPage: React.FC = () => {
               product_id: item.product_id,
               product_type: 'warehouse',
               qty: qty,
-              ref: item.reason
+              ref: item.reason,
+              product_batch_id: item.product_batch_id,
             })
           });
 
@@ -170,8 +174,17 @@ const WarehouseAdjustStockPage: React.FC = () => {
     <div className="p-6">
       <PageHeader title="Warehouse Adjust Stock" />
 
+      <div className="mb-4">
+        <button onClick={() => router.push('/warehouse-stock')} title="Back" aria-label="Back"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+      </div>
+
       {/* Barcode scan / name search (warehouse products only) */}
-      <ProductSearchTabs onSelect={addProduct} warehouseOnly />
+      <StockLineSearchTabs onSelect={addLine} warehouse />
 
       {/* Adjustment Items Table */}
       {adjustItems.length > 0 && (
@@ -193,9 +206,10 @@ const WarehouseAdjustStockPage: React.FC = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {adjustItems.map((item, index) => (
-                  <tr key={item.product_id} className="hover:bg-gray-50 text-sm">
+                  <tr key={item.key} className="hover:bg-gray-50 text-sm">
                     <td className="px-4 py-3">
                       <div className="font-medium">{item.product_name}</div>
+                      {item.batch_label && <div className="text-xs text-gray-500">{item.batch_label}</div>}
                     </td>
                     <td className="px-4 py-3">{item.barcode || '-'}</td>
                     <td className="px-4 py-3 text-right">
@@ -276,6 +290,7 @@ const WarehouseAdjustStockPage: React.FC = () => {
           <p className="text-sm mt-2">Scan a barcode or search by name to add warehouse products</p>
         </div>
       )}
+
     </div>
   );
 };

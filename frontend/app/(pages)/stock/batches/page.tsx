@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import { useToast } from '@/components/ui/Toast';
+import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/ui/PageHeader';
 import Pagination from '@/components/ui/Pagination';
 import SearchBox from '@/components/ui/SearchBox';
@@ -176,6 +177,7 @@ function BatchPicker({ value, batches, nextLabel, onChange, onCreated }: {
 }
 
 const ShopBatchesPage: React.FC = () => {
+  const router = useRouter();
   const { showToast } = useToast();
 
   const [batches, setBatches] = useState<ShopBatch[]>([]);
@@ -446,6 +448,15 @@ const ShopBatchesPage: React.FC = () => {
   return (
     <div className="p-2 py-5">
       <PageHeader title="Shop Batches" />
+
+      <div className="mb-4">
+        <button onClick={() => router.push('/stock')} title="Back" aria-label="Back"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+      </div>
 
       {/* Buttons; search + filters open on the Search button */}
       <div className="flex flex-col gap-2 mb-6">

@@ -522,6 +522,15 @@ const WarehouseStockInPage: React.FC = () => {
     <div className="p-2 py-5">
       <PageHeader title="Warehouse Stock In" />
 
+      <div className="mb-4">
+        <button onClick={() => router.push('/warehouse-stock')} title="Back" aria-label="Back"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+      </div>
+
       {/* Search Section */}
       <div className="regal-card md:p-4 p-2 mb-6">
         {/* Mode Tabs */}

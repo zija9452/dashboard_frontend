@@ -21,7 +21,8 @@ export interface SearchProduct {
 type SearchMode = 'barcode' | 'name';
 
 interface ProductSearchTabsProps {
-  onSelect: (product: SearchProduct) => void;
+  // scannedCode: the barcode scanned (a batch barcode picks that batch's line)
+  onSelect: (product: SearchProduct, scannedCode?: string) => void;
   warehouseOnly?: boolean; // Name search lists warehouse products only, showing warehouse stock
 }
 
@@ -110,7 +111,7 @@ const ProductSearchTabs: React.FC<ProductSearchTabsProps> = ({ onSelect, warehou
       });
       if (response.ok) {
         const product = await response.json();
-        if (product && product.pro_id) onSelect(product);
+        if (product && product.pro_id) onSelect(product, barcode.trim());
         else showToast('Product not found', 'error');
       } else {
         const errorData = await response.json();

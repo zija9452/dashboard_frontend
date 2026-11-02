@@ -3,7 +3,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
+import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/ui/PageHeader';
+import { StockLine } from '@/components/StockLinePicker';
+import StockLineSearchTabs, { SearchLine } from '@/components/StockLineSearchTabs';
 
 // Shop -> shop stock transfer (STOCK_TRANSFER_PLAN.md). Works like Stock In:
 // stock goes down in this branch and up in the other branch. Products are
@@ -12,6 +15,9 @@ import PageHeader from '@/components/ui/PageHeader';
 type CheckStatus = 'checking' | 'ok' | 'warning' | 'error';
 
 interface TransferItem {
+  key: string; // product + line ("Old Stock" or a batch) - one row each
+  product_batch_id: string | null;
+  batch_label: string | null;
   product_id: string;
   product_name: string;
   barcode: string;
@@ -23,6 +29,7 @@ interface TransferItem {
 }
 
 interface ItemCheck {
+  key: string;
   product_id: string;
   my_stock: number;
   dest_stock: number | null;
@@ -42,10 +49,9 @@ interface Product {
   pro_name: string;
   pro_barcode: string;
   pro_price: number;
+  pro_cost?: number;
   stock: number;
 }
-
-type SearchMode = 'barcode' | 'name';
 
 const STATUS_STYLE: Record<CheckStatus, string> = {
   checking: 'bg-gray-100 text-gray-600',
@@ -56,23 +62,16 @@ const STATUS_STYLE: Record<CheckStatus, string> = {
 
 const StockTransferPage: React.FC = () => {
   const { showToast } = useToast();
-  const barcodeInputRef = useRef<HTMLInputElement>(null);
-  const nameSearchRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
   const checkSeq = useRef(0);
 
   const [target, setTarget] = useState<Target | null>(null);
   const [targetError, setTargetError] = useState('');
 
-  const [searchMode, setSearchMode] = useState<SearchMode>('barcode');
-  const [barcode, setBarcode] = useState('');
-  const [nameSearch, setNameSearch] = useState('');
-  const [searchResults, setSearchResults] = useState<Product[]>([]);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [nameSearching, setNameSearching] = useState(false);
-  const [searching, setSearching] = useState(false);
 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  // A product with batches: the line sent (Old Stock or a batch), picked right in the search list
+  const [selectedLine, setSelectedLine] = useState<StockLine | null>(null);
   const [quantity, setQuantity] = useState('');
 
   const [items, setItems] = useState<TransferItem[]>([]);
@@ -80,38 +79,6 @@ const StockTransferPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => { fetchTarget(); }, []);
-
-  useEffect(() => {
-    if (searchMode === 'barcode') barcodeInputRef.current?.focus();
-    else nameSearchRef.current?.focus();
-    setSelectedProduct(null);
-    setBarcode('');
-    setNameSearch('');
-    setSearchResults([]);
-    setShowDropdown(false);
-  }, [searchMode]);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node) &&
-          nameSearchRef.current && !nameSearchRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Debounced name search
-  useEffect(() => {
-    if (!nameSearch.trim() || nameSearch.length < 2) {
-      setSearchResults([]);
-      setShowDropdown(false);
-      return;
-    }
-    const timer = setTimeout(() => { performNameSearch(nameSearch); }, 300);
-    return () => clearTimeout(timer);
-  }, [nameSearch]);
 
   const fetchTarget = async () => {
     setTargetError('');
@@ -127,9 +94,9 @@ const StockTransferPage: React.FC = () => {
 
   // Apply backend check results to the list (by product)
   const applyChecks = (checks: ItemCheck[]) => {
-    const byId = new Map(checks.map(c => [c.product_id, c]));
+    const byKey = new Map(checks.map(c => [c.key, c]));
     setItems(prev => prev.map(item => {
-      const check = byId.get(item.product_id);
+      const check = byKey.get(item.key);
       return check
         ? { ...item, my_stock: check.my_stock, dest_stock: check.dest_stock, status: check.status, message: check.message }
         : item;
@@ -146,7 +113,7 @@ const StockTransferPage: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ items: list.map(i => ({ product_id: i.product_id, quantity: i.quantity })) }),
+        body: JSON.stringify({ items: list.map(i => ({ product_id: i.product_id, product_batch_id: i.product_batch_id, quantity: i.quantity })) }),
       });
       const data = await response.json();
       if (seq !== checkSeq.current) return; // a newer check is running
@@ -166,85 +133,35 @@ const StockTransferPage: React.FC = () => {
 
   // Only the added/edited item shows "Checking..."; the others keep their status
   // while the whole list is re-checked in the background (Save stays disabled meanwhile)
-  const updateList = (list: TransferItem[], changedId?: string) => {
-    const marked = list.map(i => i.product_id === changedId
+  const updateList = (list: TransferItem[], changedKey?: string) => {
+    const marked = list.map(i => i.key === changedKey
       ? { ...i, status: 'checking' as CheckStatus, message: 'Checking...' }
       : i);
     setItems(marked);
     runCheck(marked);
   };
 
-  const performNameSearch = async (query: string) => {
-    setNameSearching(true);
-    try {
-      const response = await fetch(
-        `/api/products?search_string=${encodeURIComponent(query)}&page=1&limit=10`,
-        { method: 'GET', credentials: 'include' }
-      );
-      if (response.ok) {
-        const data = await response.json();
-        const products: Product[] = (data.data || []);
-        setSearchResults(products);
-        setShowDropdown(products.length > 0);
-      }
-    } catch {
-      setSearchResults([]);
-    } finally {
-      setNameSearching(false);
-    }
-  };
-
-  const selectProduct = (product: Product) => {
+  const chooseProduct = (product: Product, line: StockLine | null) => {
     setSelectedProduct(product);
+    setSelectedLine(line);
     setQuantity('');
-    showToast(`Product found: ${product.pro_name}`, 'success');
+    showToast(`Product found: ${product.pro_name}${line ? ` (${line.label})` : ''}`, 'success');
     setTimeout(() => document.getElementById('transfer-qty')?.focus(), 100);
   };
 
-  const handleSelectFromDropdown = (product: Product) => {
-    setNameSearch(product.pro_name);
-    setShowDropdown(false);
-    selectProduct(product);
-  };
-
-  const handleBarcodeSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!barcode.trim()) { showToast('Please enter a barcode', 'error'); return; }
-    if (searching) return;
-    setSearching(true);
-    try {
-      const response = await fetch(`/api/products/searchbybarcode?barcode=${encodeURIComponent(barcode)}`, {
-        method: 'GET', credentials: 'include',
-      });
-      if (response.ok) {
-        const product = await response.json();
-        if (product && product.pro_id) {
-          selectProduct(product);
-        } else {
-          showToast('Product not found', 'error');
-          setSelectedProduct(null);
-        }
-      } else {
-        const errorData = await response.json();
-        showToast(errorData.error || 'Error fetching product', 'error');
-      }
-    } catch {
-      showToast('Error fetching product', 'error');
-    } finally {
-      setSearching(false);
-      setBarcode('');
-    }
-  };
+  // Picked in the search list: a line of a product with batches, or a plain product
+  const pickLine = (line: SearchLine) => chooseProduct(
+    { pro_id: line.product_id, pro_name: line.product_name, pro_barcode: line.barcode || '', pro_price: line.price, stock: line.stock },
+    line.has_batches
+      ? { product_batch_id: line.product_batch_id, label: line.label || 'Old Stock', barcode: line.barcode, vendor_name: null,
+          cost: line.cost, selling_price: line.price, stock: line.stock }
+      : null,
+  );
 
   const resetSelection = () => {
     setSelectedProduct(null);
-    setBarcode('');
-    setNameSearch('');
+    setSelectedLine(null);
     setQuantity('');
-    setTimeout(() => {
-      if (searchMode === 'barcode') barcodeInputRef.current?.focus();
-      else nameSearchRef.current?.focus();
-    }, 100);
   };
 
   const handleAddItem = () => {
@@ -252,28 +169,32 @@ const StockTransferPage: React.FC = () => {
     const qty = parseInt(quantity) || 0;
     if (qty <= 0) { showToast('Quantity must be greater than 0', 'error'); return; }
 
-    // Same product added again: add to its qty instead of a second row
-    const existing = items.find(i => i.product_id === selectedProduct.pro_id);
+    // Same product + line added again: add to its qty instead of a second row
+    const key = `${selectedProduct.pro_id}|${selectedLine?.product_batch_id || ''}`;
+    const existing = items.find(i => i.key === key);
     const list = existing
-      ? items.map(i => i.product_id === selectedProduct.pro_id ? { ...i, quantity: i.quantity + qty } : i)
+      ? items.map(i => i.key === key ? { ...i, quantity: i.quantity + qty } : i)
       : [...items, {
+          key,
+          product_batch_id: selectedLine?.product_batch_id || null,
+          batch_label: selectedLine ? selectedLine.label : null,
           product_id: selectedProduct.pro_id,
           product_name: selectedProduct.pro_name,
-          barcode: selectedProduct.pro_barcode,
-          my_stock: selectedProduct.stock,
+          barcode: selectedLine?.barcode || selectedProduct.pro_barcode,
+          my_stock: selectedLine ? selectedLine.stock : selectedProduct.stock,
           quantity: qty,
           status: 'checking' as CheckStatus,
           message: 'Checking...',
           dest_stock: null,
         }];
-    updateList(list, selectedProduct.pro_id);
+    updateList(list, key);
     resetSelection();
     showToast('Item added to list', 'success');
   };
 
   const handleQtyChange = (index: number, value: string) => {
     const qty = parseInt(value) || 0;
-    updateList(items.map((item, i) => i === index ? { ...item, quantity: qty } : item), items[index].product_id);
+    updateList(items.map((item, i) => i === index ? { ...item, quantity: qty } : item), items[index].key);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -312,7 +233,7 @@ const StockTransferPage: React.FC = () => {
         credentials: 'include',
         body: JSON.stringify({
           to_branch: target.to_branch_code,
-          items: items.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
+          items: items.map(i => ({ product_id: i.product_id, product_batch_id: i.product_batch_id, quantity: i.quantity })),
         }),
       });
       const data = await response.json();
@@ -336,6 +257,15 @@ const StockTransferPage: React.FC = () => {
   return (
     <div className="p-2 py-5">
       <PageHeader title="Transfer Stock" />
+
+      <div className="mb-4">
+        <button onClick={() => router.push('/stock')} title="Back" aria-label="Back"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+      </div>
 
       {/* From -> To */}
       <div className="mb-4">
@@ -368,121 +298,8 @@ const StockTransferPage: React.FC = () => {
         )}
       </div>
 
-      {/* Search Section */}
-      <div className="regal-card md:p-4 p-2 mb-6">
-        {/* Mode Tabs */}
-        <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1 w-fit">
-          <button
-            onClick={() => setSearchMode('barcode')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
-              searchMode === 'barcode'
-                ? 'bg-regal-yellow text-regal-black shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-            </svg>
-            Scan Barcode
-          </button>
-          <button
-            onClick={() => setSearchMode('name')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
-              searchMode === 'name'
-                ? 'bg-regal-yellow text-regal-black shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            Search by Name
-          </button>
-        </div>
-
-        {/* Barcode Mode */}
-        {searchMode === 'barcode' && (
-          <div>
-            <p className="text-sm text-gray-500 mb-3">Scan or type barcode and press Enter / Search</p>
-            <form onSubmit={handleBarcodeSubmit} className="flex gap-3">
-              <div className="relative flex-grow">
-                <input
-                  ref={barcodeInputRef}
-                  type="text"
-                  value={barcode}
-                  onChange={(e) => setBarcode(e.target.value)}
-                  placeholder="Scan or enter barcode..."
-                  className="regal-input w-full"
-                  autoFocus
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={searching}
-                className={`regal-btn flex items-center justify-center min-w-[120px] transition-all ${
-                  searching ? 'bg-regal-yellow/50 cursor-not-allowed text-regal-black/60' : 'bg-regal-yellow text-regal-black'
-                }`}
-              >
-                {searching ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-regal-black/30 border-t-regal-black rounded-full animate-spin"></div>
-                    <span>Searching</span>
-                  </div>
-                ) : 'Search'}
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* Name Search Mode */}
-        {searchMode === 'name' && (
-          <div>
-            <p className="text-sm text-gray-500 mb-3">Type at least 2 characters to search products by name</p>
-            <div className="relative">
-              <input
-                ref={nameSearchRef}
-                type="text"
-                value={nameSearch}
-                onChange={(e) => { setNameSearch(e.target.value); if (selectedProduct) setSelectedProduct(null); }}
-                onFocus={() => { if (searchResults.length > 0) setShowDropdown(true); }}
-                placeholder="Type product name to search..."
-                className="regal-input w-full pr-10"
-                autoFocus
-                autoComplete="off"
-              />
-              {nameSearching && (
-                <div className="absolute inset-y-0 right-3 flex items-center">
-                  <div className="w-4 h-4 border-2 border-gray-300 border-t-regal-black rounded-full animate-spin"></div>
-                </div>
-              )}
-
-              {/* Dropdown Results */}
-              {showDropdown && (
-                <div
-                  ref={dropdownRef}
-                  className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl z-50 max-h-72 overflow-y-auto"
-                >
-                  {searchResults.map((product) => (
-                    <button
-                      key={product.pro_id}
-                      type="button"
-                      onClick={() => handleSelectFromDropdown(product)}
-                      className="w-full px-4 py-3 text-left hover:bg-amber-50 border-b border-gray-50 last:border-0 transition-colors"
-                    >
-                      <div className="font-medium text-gray-900 truncate text-sm">{product.pro_name}</div>
-                      <div className="flex items-center gap-3 mt-1">
-                        <span className="text-xs text-gray-400">#{product.pro_barcode}</span>
-                        <span className="text-xs text-gray-400">•</span>
-                        <span className="text-xs text-gray-500">Stock: <span className={`font-medium ${product.stock <= 0 ? 'text-red-500' : 'text-green-600'}`}>{product.stock}</span></span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Search: products line by line (Old Stock / each batch) */}
+      <StockLineSearchTabs onSelect={pickLine} />
 
       {/* Product Details Form */}
       {selectedProduct && (
@@ -493,10 +310,11 @@ const StockTransferPage: React.FC = () => {
             <div>
               <label className="block text-sm font-medium mb-1">Product</label>
               <input type="text" value={selectedProduct.pro_name} disabled className="regal-input w-full bg-gray-100" />
+              {selectedLine && <p className="text-xs text-gray-500 mt-1">{selectedLine.label} · {selectedLine.barcode}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">My Stock</label>
-              <input type="text" value={selectedProduct.stock} disabled className="regal-input w-full bg-gray-100" />
+              <input type="text" value={selectedLine ? selectedLine.stock : selectedProduct.stock} disabled className="regal-input w-full bg-gray-100" />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Quantity *</label>
@@ -554,11 +372,11 @@ const StockTransferPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {items.map((item, index) => (
-                  <tr key={item.product_id} className={`text-sm transition-colors ${item.status === 'error' ? 'bg-red-50/60' : 'hover:bg-gray-50'}`}>
+                  <tr key={item.key} className={`text-sm transition-colors ${item.status === 'error' ? 'bg-red-50/60' : 'hover:bg-gray-50'}`}>
                     <td className="px-4 py-3 text-gray-400 text-xs">{index + 1}</td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-gray-900">{item.product_name}</div>
-                      <div className="text-xs text-gray-400 mt-0.5">{item.barcode || 'No barcode'}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">{item.batch_label ? `${item.batch_label} · ` : ''}{item.barcode || 'No barcode'}</div>
                     </td>
                     <td className="px-4 py-3 text-center text-gray-700">{item.my_stock}</td>
                     <td className="px-4 py-3 text-center text-gray-700">{item.dest_stock ?? '-'}</td>
@@ -625,7 +443,7 @@ const StockTransferPage: React.FC = () => {
         <div className="regal-card p-8 text-center">
           <p className="text-gray-500 text-sm">No items added yet.</p>
           <p className="text-gray-400 text-xs mt-1">
-            {searchMode === 'barcode' ? 'Scan a barcode above to add products.' : 'Search by product name above to get started.'}
+            Scan a barcode or search by name above to add products.
           </p>
         </div>
       )}

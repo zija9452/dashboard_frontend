@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import { productsApi, Product } from '@/lib/api/products';
 import PageHeader from '@/components/ui/PageHeader';
+import ImageZoomViewer from '@/components/ui/ImageZoomViewer';
 import SearchBox from '@/components/ui/SearchBox';
 import { useBatchLines, OpenBatch, batchNo, batchOption, batchPrices, batchPriceBreakdown, billOf, fetchOpenBatches, rangeText } from '@/lib/batchLines';
 import VendorBillModal from '@/components/VendorBillModal';
@@ -257,8 +258,36 @@ const ShopWarehouseProductsPage: React.FC = () => {
     }));
   };
 
+  // Optional product picture, like the shop Products page: picked = local preview only,
+  // uploaded on Save (so Cancel leaves nothing on Cloudinary). The backend copies a changed
+  // picture to the other branch's copy too.
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string>('');
+  const [showImageModal, setShowImageModal] = useState(false); // full-size view, like the Products page
+  const clearImage = () => {
+    if (imagePreview.startsWith('blob:')) URL.revokeObjectURL(imagePreview);
+    setSelectedImage(null);
+    setImagePreview('');
+  };
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select an image file', 'error');
+      return;
+    }
+    if (imagePreview.startsWith('blob:')) URL.revokeObjectURL(imagePreview);
+    setSelectedImage(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+  const handleDeleteImage = () => {
+    clearImage();
+    setFormData(prev => ({ ...prev, attributes: '' }));
+  };
+
   // Reset form
   const resetForm = async () => {
+    clearImage();
     setShopCostSame(true);
     setShopSellSame(true);
     const newBarcode = await generateBarcode();
@@ -308,9 +337,26 @@ const ShopWarehouseProductsPage: React.FC = () => {
 
     setSubmitting(true);
 
+    // Picture saved on the product (edit only); deleted after a successful save if replaced / removed
+    const oldImageUrl = editingProduct?.pro_image?.startsWith('http') ? editingProduct.pro_image : '';
+    let uploadedUrl = '';
+
     try {
+      let imageUrl = formData.attributes || '';
+      if (selectedImage) {
+        try {
+          uploadedUrl = (await productsApi.uploadImage(selectedImage)).url;
+        } catch {
+          showToast('Failed to upload image', 'error');
+          setSubmitting(false);
+          return;
+        }
+        imageUrl = uploadedUrl;
+      }
+
       const basePayload = {
         sku: formData.sku || `SKU-${Date.now()}`,
+        attributes: imageUrl,
         name: formData.name,
         barcode: formData.barcode,
         discount: Number(formData.discount),
@@ -403,10 +449,20 @@ const ShopWarehouseProductsPage: React.FC = () => {
         }
       }
 
+      uploadedUrl = ''; // Saved: keep it even if the refresh below fails
+      // Old picture replaced or removed: delete it from Cloudinary only now that the save worked
+      if (oldImageUrl && oldImageUrl !== imageUrl) {
+        productsApi.deleteImage(oldImageUrl).catch((err) => console.error('Error deleting old image:', err));
+      }
+
       await fetchProducts();
       await resetForm();
       setSubmitting(false);
     } catch (error: any) {
+      // Save failed: remove the picture just uploaded so it isn't left on Cloudinary
+      if (uploadedUrl) {
+        productsApi.deleteImage(uploadedUrl).catch((err) => console.error('Error deleting uploaded image:', err));
+      }
       // Extract error message from response
       let errorMessage = 'Failed to save warehouse product';
       
@@ -440,6 +496,8 @@ const ShopWarehouseProductsPage: React.FC = () => {
       const fullProduct = await productsApi.getProductById(product.pro_id);
 
       setEditingProduct(fullProduct);
+      clearImage();
+      setImagePreview(fullProduct.pro_image?.startsWith('http') ? fullProduct.pro_image : '');
       setFormData({
         name: fullProduct.pro_name,
         barcode: fullProduct.pro_barcode,
@@ -551,6 +609,7 @@ const ShopWarehouseProductsPage: React.FC = () => {
                 setOpeningForm(true);
                 try {
                   const newBarcode = await generateBarcode();
+                  clearImage();
                   setFormData({
                     name: '',
                     barcode: newBarcode,
@@ -744,8 +803,8 @@ const ShopWarehouseProductsPage: React.FC = () => {
                   onChange={handleInputChange}
                   className="regal-input w-full"
                   placeholder="Enter warehouse cost"
-                  step="1"
-                  min="1"
+                  step="any"
+                  min="0.01"
                   required
                 />
               </div>
@@ -905,6 +964,55 @@ const ShopWarehouseProductsPage: React.FC = () => {
                     Same as batch selling price
                   </label>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Product Image</label>
+                <div className="flex items-start gap-2">
+                  {/* Image Preview with View/Delete Buttons (same as the Products page) */}
+                  {imagePreview && (
+                    <div className="flex items-center gap-2">
+                      <div className="relative group">
+                        <img
+                          src={imagePreview}
+                          alt="Product preview"
+                          className="h-32 w-32 object-cover rounded-lg border-2 border-gray-200 hover:border-regal-yellow transition-colors cursor-pointer"
+                        />
+                        {/* View Button */}
+                        <button
+                          type="button"
+                          onClick={() => setShowImageModal(true)}
+                          className="absolute top-1 right-1 bg-blue-500 hover:bg-blue-600 text-white rounded-full p-1.5 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="View image"
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                          </svg>
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleDeleteImage}
+                        disabled={submitting}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-md shadow-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Delete image"
+                      >
+                        <span>Delete Image</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Choose File Input (shown when no image) */}
+                  {!imagePreview && (
+                    <input
+                      type="file"
+                      name="product_image"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      className="w-full my-2"
+                    />
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1105,6 +1213,15 @@ const ShopWarehouseProductsPage: React.FC = () => {
         vendorName={vendors.find((v) => v.id === formData.vendor_id)?.name || ''}
         onSaved={replaceBatch}
       />
+
+      {/* Image Modal */}
+      {showImageModal && imagePreview && (
+        <ImageZoomViewer
+          src={imagePreview}
+          alt="Product preview"
+          onClose={() => setShowImageModal(false)}
+        />
+      )}
     </div>
   );
 };

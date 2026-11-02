@@ -811,8 +811,8 @@ const WarehouseStockInPage: React.FC = () => {
                   value={costPrice}
                   onChange={(e) => setCostPrice(e.target.value)}
                   className="regal-input w-full"
-                  step="1"
-                  min="1"
+                  step="any"
+                  min="0.01"
                   required
                 />
               )}

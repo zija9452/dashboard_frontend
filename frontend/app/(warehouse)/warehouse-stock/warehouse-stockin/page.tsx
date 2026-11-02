@@ -101,10 +101,34 @@ const WarehouseStockInPage: React.FC = () => {
   const replaceBatch = (updated: OpenBatch) =>
     setAllOpenBatches((list) => list.map((b) => (b.id === updated.id ? updated : b)));
 
-  // Batch price follows the cost until typed by hand
+  // The product already stocked in this batch from this vendor: its saved cost / price, locked
+  // (null = first time here - cost typed, price from the bill's formula, both editable)
+  const [savedLine, setSavedLine] = useState<{ cost: number; selling_price: number; barcode: string } | null>(null);
+  const [savedLoading, setSavedLoading] = useState(false);
+  const billId = selectedBill?.id;
   useEffect(() => {
-    if (prices && !sellingEdited) setSellingPrice(String(prices.selling));
-  }, [prices?.selling, sellingEdited, selectedProduct?.pro_id]);
+    setSavedLine(null);
+    if (!selectedProduct || !selectedBatchId || !selectedVendorId || !billId) return;
+    let cancelled = false;
+    setSavedLoading(true);
+    const params = new URLSearchParams({ batch_id: selectedBatchId, vendor_id: selectedVendorId });
+    fetch(`/api/warehouse-batches/product/${selectedProduct.pro_id}/saved?${params.toString()}`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data) => {
+        if (cancelled || !data.saved) return;
+        setSavedLine({ cost: data.cost, selling_price: data.selling_price, barcode: data.barcode });
+        setCostPrice(String(data.cost));
+        setSellingPrice(String(data.selling_price));
+      })
+      .catch(() => { if (!cancelled) showToast('Could not load the saved batch price', 'error'); })
+      .finally(() => { if (!cancelled) setSavedLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedProduct?.pro_id, selectedBatchId, selectedVendorId, billId]);
+
+  // Batch price follows the cost until typed by hand (not for a saved line: its price stays)
+  useEffect(() => {
+    if (prices && !sellingEdited && !savedLine) setSellingPrice(String(prices.selling));
+  }, [prices?.selling, sellingEdited, selectedProduct?.pro_id, savedLine]);
 
   // A new product / batch / vendor starts with the worked-out price again
   useEffect(() => {
@@ -308,6 +332,7 @@ const WarehouseStockInPage: React.FC = () => {
     };
 
     if (selectedBatch) {
+      if (savedLoading) { showToast('Loading the saved batch price, try again', 'error'); return; }
       if (!selectedBill) { showToast(`Add ${vendor?.name || 'the vendor'}'s bill to ${batchNo(selectedBatch.batch_no)} first`, 'error'); return; }
       if (cost <= 0) { showToast('Enter the cost from the bill', 'error'); return; }
       if (!(newItem.selling_price > 0)) { showToast('Selling price must be more than 0', 'error'); return; }
@@ -778,20 +803,31 @@ const WarehouseStockInPage: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium mb-1">Warehouse Cost (Rs.) *</label>
-              <input
-                type="number"
-                value={costPrice}
-                onChange={(e) => setCostPrice(e.target.value)}
-                className="regal-input w-full"
-                step="1"
-                min="1"
-                required
-              />
+              {savedLine ? (
+                <input type="text" value={costPrice} readOnly className="regal-input w-full bg-gray-100 cursor-not-allowed" />
+              ) : (
+                <input
+                  type="number"
+                  value={costPrice}
+                  onChange={(e) => setCostPrice(e.target.value)}
+                  className="regal-input w-full"
+                  step="1"
+                  min="1"
+                  required
+                />
+              )}
             </div>
 
             <div>
               <label className="block text-sm font-medium mb-1">Selling Price (Rs.)</label>
-              {selectedBill ? (
+              {savedLine && selectedBatch ? (
+                <>
+                  <input type="text" value={sellingPrice} readOnly className="regal-input w-full bg-gray-100 cursor-not-allowed" />
+                  <p className="text-xs text-gray-500 mt-1">
+                    🔒 Saved in {batchNo(selectedBatch.batch_no)} · {savedLine.barcode}
+                  </p>
+                </>
+              ) : selectedBill ? (
                 <>
                   <input
                     type="number"

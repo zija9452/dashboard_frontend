@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
@@ -35,6 +35,9 @@ const ProductsPage: React.FC = () => {
 
   // Generate unique barcode by calling backend API (production-ready approach)
   // Backend uses sequential auto-increment: 690000000, 690000001, etc.
+  // Barcode shown when the form opened: if untouched and someone else saves it first, the
+  // backend gives the next free one at save (and says so)
+  const lastGeneratedBarcode = useRef('');
   const generateBarcode = async (): Promise<string> => {
     const response = await fetch('/api/products/generatebarcode', {
       method: 'GET',
@@ -44,6 +47,7 @@ const ProductsPage: React.FC = () => {
       throw new Error('Failed to generate barcode');
     }
     const data = await response.json();
+    lastGeneratedBarcode.current = data.barcode;
     return data.barcode;
   };
 
@@ -325,7 +329,16 @@ const ProductsPage: React.FC = () => {
         });
       } else {
         // Also created (stock 0, same barcode) in the other branch; a failed copy comes back as a warning
-        const created = await productsApi.createProduct({ ...basePayload, stock_level: 0 }) as { branch_warnings?: string[] };
+        const created = await productsApi.createProduct({
+          ...basePayload, stock_level: 0, barcode_auto: formData.barcode === lastGeneratedBarcode.current,
+        } as any) as { branch_warnings?: string[]; barcode?: string; barcode_changed_from?: string | null };
+        if (created?.barcode_changed_from) {
+          await Swal.fire({
+            title: 'Barcode changed',
+            text: `Barcode ${created.barcode_changed_from} was just saved by someone else. This product's barcode is ${created.barcode}.`,
+            icon: 'info',
+          });
+        }
         const branchWarnings = created?.branch_warnings ?? [];
         if (branchWarnings.length) {
           Swal.fire({
@@ -810,22 +823,22 @@ const ProductsPage: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px]">
+            <table className="w-full table-fixed">
               <thead className="bg-gray-100 sticky top-0 z-10">
                 <tr className='text-black font-semibold text-xs uppercase'>
                   <th className="px-3 py-5 text-left w-12">S.No</th>
-                  <th className="px-2 py-5 text-left w-52">Name</th>
-                  <th className="px-2 py-5 text-left w-20">Price</th>
+                  <th className="px-2 py-5 text-left w-44">Name</th>
+                  <th className="px-2 py-5 text-center w-40">Price</th>
                   {!roleLoading && userRole !== 'cashier' && (
-                    <th className="px-2 py-5 text-left w-20">Cost</th>
+                    <th className="px-2 py-5 text-center w-40">Cost</th>
                   )}
-                  <th className="px-2 py-5 text-left w-28">Barcode</th>
-                  <th className="px-2 py-5 text-left w-20">Discount</th>
+                  <th className="px-2 py-5 text-left w-32">Barcode</th>
+                  <th className="px-2 py-5 text-left w-24">Discount</th>
                   <th className="px-2 py-5 w-20">Stock</th>
-                  <th className="px-2 py-5 text-left w-24">Limited Qty</th>
-                  <th className="px-2 py-5 text-left w-28">Category</th>
-                  <th className="px-2 py-5 text-left w-32">Branch</th>
-                  <th className="px-2 py-5 text-left w-24">Brand</th>
+                  <th className="px-2 py-5 text-center whitespace-nowrap w-32">Limited Qty</th>
+                  <th className="px-2 py-5 text-left w-40">Category</th>
+                  <th className="px-2 py-5 text-center w-32">Branch</th>
+                  <th className="px-2 py-5 text-left w-28">Brand</th>
                   <th className="px-2 py-5 text-center w-32">Actions</th>
                 </tr>
               </thead>
@@ -846,16 +859,16 @@ const ProductsPage: React.FC = () => {
                       )}
                     </td>
                     {/* With batches: lowest – highest of its lines (each line's own values below) */}
-                    <td className="px-2 py-4 whitespace-nowrap">{product.price_range ? rangeText(product.price_range, plainAmount) : plainAmount(product.pro_price)}</td>
+                    <td className="px-2 py-4 text-center whitespace-nowrap">{product.price_range ? rangeText(product.price_range, plainAmount) : plainAmount(product.pro_price)}</td>
                     {!roleLoading && userRole !== 'cashier' && (
-                      <td className="px-2 py-4 whitespace-nowrap">{product.cost_range ? rangeText(product.cost_range, plainAmount) : plainAmount(product.pro_cost)}</td>
+                      <td className="px-2 py-4 text-center whitespace-nowrap">{product.cost_range ? rangeText(product.cost_range, plainAmount) : plainAmount(product.pro_cost)}</td>
                     )}
                     <td className="px-2 py-4 whitespace-nowrap">{product.pro_barcode || 'N/A'}</td>
                     <td className="px-2 py-4 text-center whitespace-nowrap">{product.pro_dis}%</td>
                     <td className="px-2 py-4 text-center whitespace-nowrap">{product.stock || 0}</td>
-                    <td className="px-5 py-4 text-center whitespace-nowrap">{product.limitedquan || 0}</td>
+                    <td className="px-2 py-4 text-center whitespace-nowrap">{product.limitedquan || 0}</td>
                     <td className="px-2 py-4">{product.cat_id_fk || 'N/A'}</td>
-                    <td className="px-2 py-4">{product.branch || 'N/A'}</td>
+                    <td className="px-2 py-4 text-center">{product.branch || 'N/A'}</td>
                     <td className="px-2 py-4">{product.brand || 'N/A'}</td>
                     {/* Edit / Delete don't open the batch lines */}
                     <td className="px-2 py-4 text-center" onClick={(e) => e.stopPropagation()}>
@@ -918,9 +931,9 @@ const ProductsPage: React.FC = () => {
                         <span className="text-xs font-semibold text-regal-black">{line.label}</span>
                         {line.vendor_name && <span className="ml-1 text-xs text-gray-500">({line.vendor_name})</span>}
                       </td>
-                      <td className="px-2 py-2 whitespace-nowrap">{plainAmount(line.selling_price)}</td>
+                      <td className="px-2 py-2 text-center whitespace-nowrap">{plainAmount(line.selling_price)}</td>
                       {!roleLoading && userRole !== 'cashier' && (
-                        <td className="px-2 py-2 whitespace-nowrap">{plainAmount(line.cost)}</td>
+                        <td className="px-2 py-2 text-center whitespace-nowrap">{plainAmount(line.cost)}</td>
                       )}
                       <td className="px-2 py-2 font-mono text-xs whitespace-nowrap">{line.barcode || '-'}</td>
                       <td className="px-2 py-2"></td>

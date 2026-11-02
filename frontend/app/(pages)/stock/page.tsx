@@ -251,6 +251,13 @@ const StockPage: React.FC = () => {
           >
             Transfer Stock
           </button>
+
+          <button
+            onClick={() => router.push('/stock/batches')}
+            className="regal-btn bg-regal-yellow text-regal-black whitespace-nowrap"
+          >
+            Batches
+          </button>
         </div>
 
         {/* Right side - Search */}

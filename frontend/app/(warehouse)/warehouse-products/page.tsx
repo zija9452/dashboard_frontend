@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
@@ -75,6 +75,9 @@ const ShopWarehouseProductsPage: React.FC = () => {
   });
 
   // Generate barcode from backend
+  // Barcode shown when the form opened: if untouched and someone else saves it first, the
+  // backend gives the next free one at save (and says so)
+  const lastGeneratedBarcode = useRef('');
   const generateBarcode = async (): Promise<string> => {
     const response = await fetch('/api/products/generatebarcode', {
       method: 'GET',
@@ -84,6 +87,7 @@ const ShopWarehouseProductsPage: React.FC = () => {
       throw new Error('Failed to generate barcode');
     }
     const data = await response.json();
+    lastGeneratedBarcode.current = data.barcode;
     return data.barcode;
   };
 
@@ -348,9 +352,17 @@ const ShopWarehouseProductsPage: React.FC = () => {
           // With a batch the one selling price is the batch's
           unit_price: shopSell,
           cost_price: shopCost,
-          stock_level: 0
+          stock_level: 0,
+          barcode_auto: formData.barcode === lastGeneratedBarcode.current,
         } as any);
 
+        if (created?.barcode_changed_from) {
+          await Swal.fire({
+            title: 'Barcode changed',
+            text: `Barcode ${created.barcode_changed_from} was just saved by someone else. This product's barcode is ${created.barcode}.`,
+            icon: 'info',
+          });
+        }
         const initialStock = Number(formData.initial_stock);
         let stockMessage = '';
         if (initialStock > 0 && created?.id) {

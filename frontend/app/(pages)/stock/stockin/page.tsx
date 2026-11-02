@@ -5,6 +5,7 @@ import { useToast } from '@/components/ui/Toast';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/ui/PageHeader';
+import { ShopBatch, fetchShopBatches, shopBatchCall, shopVendorOf } from '@/lib/shopBatches';
 
 declare const qz: any;
 
@@ -19,6 +20,9 @@ interface StockInItem {
   selling_price: number;
   total_cost: number;
   date: string;
+  batch_id?: string; // shop batch; none = Old Stock
+  batch_label?: string;
+  batch_barcode?: string; // known when the line was saved before
 }
 
 interface Vendor {
@@ -68,11 +72,111 @@ const StockInPage: React.FC = () => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
   const [stockInItems, setStockInItems] = useState<StockInItem[]>([]);
+  // Shop batches (BATCH_COSTING_PLAN.md sec 12): '' = Old Stock (the product's own prices, locked)
+  const [openBatches, setOpenBatches] = useState<ShopBatch[]>([]);
+  const [selectedBatchId, setSelectedBatchId] = useState('');
+  // The product already stocked in this batch from this vendor: saved cost / price, locked
+  const [savedLine, setSavedLine] = useState<{ cost: number; selling_price: number; barcode: string } | null>(null);
+  const [savedLoading, setSavedLoading] = useState(false);
+  const [addingToBatch, setAddingToBatch] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [searching, setSearching] = useState(false);
   const [qzStatus, setQzStatus] = useState<'checking' | 'connected' | 'error'>('checking');
 
   useEffect(() => { fetchVendors(); }, []);
+
+  // Open shop batches, newest first, for the Batch dropdown; Old Stock stays the default
+  useEffect(() => {
+    fetchShopBatches('OPEN')
+      .then((list) => setOpenBatches(list))
+      .catch((error) => showToast(error.message, 'error'));
+  }, []);
+
+  // Default per product: the newest shop batch it has saved prices in (from this vendor);
+  // none, or that batch closed = Old Stock (closed: a note says where the last price was)
+  const [lastClosedNote, setLastClosedNote] = useState('');
+  // While asking: batch + prices show "Loading..." (not Old Stock first, then the batch)
+  const [defaultLoading, setDefaultLoading] = useState(false);
+  // The default batch's saved line came with the answer: no second request for it
+  const prefill = useRef<{ key: string; line: { cost: number; selling_price: number; barcode: string } } | null>(null);
+  useEffect(() => {
+    setSelectedBatchId('');
+    setLastClosedNote('');
+    prefill.current = null;
+    if (!selectedProduct || !selectedVendor) { setDefaultLoading(false); return; }
+    let cancelled = false;
+    setDefaultLoading(true);
+    const params = new URLSearchParams({ vendor_id: selectedVendor });
+    fetch(`/api/shop-batches/product/${selectedProduct.pro_id}/last?${params.toString()}`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.found) return;
+        if (data.status === 'OPEN') {
+          prefill.current = {
+            key: `${selectedProduct.pro_id}|${data.batch_id}|${selectedVendor}`,
+            line: { cost: data.cost, selling_price: data.selling_price, barcode: data.barcode },
+          };
+          setSelectedBatchId(data.batch_id);
+        } else {
+          setLastClosedNote(`Last price was in ${data.label} (closed): Rs. ${Number(data.selling_price).toLocaleString()}`);
+        }
+      })
+      .catch(() => undefined) // default only - Old Stock stays
+      .finally(() => { if (!cancelled) setDefaultLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedProduct?.pro_id, selectedVendor]);
+
+  const selectedBatch = openBatches.find((b) => b.id === selectedBatchId) || null;
+  const vendorInBatch = shopVendorOf(selectedBatch, selectedVendor);
+  // Old Stock or a saved line: cost / price can't be typed
+  const pricesLocked = !selectedBatch || !!savedLine || defaultLoading;
+
+  // Saved line of this product + batch + vendor (first time = none, prices typed)
+  useEffect(() => {
+    setSavedLine(null);
+    if (!selectedProduct || !selectedBatchId || !selectedVendor) return;
+    const known = prefill.current;
+    if (known && known.key === `${selectedProduct.pro_id}|${selectedBatchId}|${selectedVendor}`) {
+      setSavedLine(known.line);
+      return;
+    }
+    if (!vendorInBatch) return;
+    let cancelled = false;
+    setSavedLoading(true);
+    const params = new URLSearchParams({ batch_id: selectedBatchId, vendor_id: selectedVendor });
+    fetch(`/api/shop-batches/product/${selectedProduct.pro_id}/saved?${params.toString()}`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data) => { if (!cancelled && data.saved) setSavedLine({ cost: data.cost, selling_price: data.selling_price, barcode: data.barcode }); })
+      .catch(() => { if (!cancelled) showToast('Could not load the saved batch price', 'error'); })
+      .finally(() => { if (!cancelled) setSavedLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedProduct?.pro_id, selectedBatchId, selectedVendor, vendorInBatch?.id]);
+
+  // Prices shown: the saved line's, else the product's own (Old Stock locked, a new line editable)
+  useEffect(() => {
+    if (!selectedProduct) return;
+    if (savedLine) {
+      setCostPrice(savedLine.cost);
+      setSellingPrice(savedLine.selling_price);
+    } else {
+      setCostPrice(selectedProduct.pro_cost || 0);
+      setSellingPrice(selectedProduct.pro_price || 0);
+    }
+  }, [selectedProduct?.pro_id, selectedBatchId, savedLine]);
+
+  const handleAddVendorToBatch = async () => {
+    if (!selectedBatch || !selectedVendor || addingToBatch) return;
+    setAddingToBatch(true);
+    try {
+      const updated: ShopBatch = await shopBatchCall(`/${selectedBatch.id}/vendors`, 'POST', { vendor_id: selectedVendor });
+      (updated.branch_warnings || []).forEach((w) => showToast(w, 'warning'));
+      setOpenBatches((list) => list.map((b) => (b.id === updated.id ? updated : b)));
+    } catch (error) {
+      showToast((error as Error).message, 'error');
+    } finally {
+      setAddingToBatch(false);
+    }
+  };
 
   useEffect(() => {
     if (searchMode === 'barcode') barcodeInputRef.current?.focus();
@@ -221,6 +325,12 @@ const StockInPage: React.FC = () => {
     if (!vendor) { showToast('Invalid vendor selected', 'error'); return; }
 
     const qty = parseInt(quantity) || 0;
+    if (defaultLoading) { showToast('Loading the batch, try again', 'error'); return; }
+    if (selectedBatch) {
+      if (savedLoading) { showToast('Loading the saved batch price, try again', 'error'); return; }
+      if (!vendorInBatch) { showToast(`Add ${vendor.ven_name} to ${selectedBatch.label} first`, 'error'); return; }
+      if (!(costPrice > 0) || !(sellingPrice > 0)) { showToast('Cost and selling price must be more than 0', 'error'); return; }
+    }
 
     const newItem: StockInItem = {
       product_id: selectedProduct.pro_id,
@@ -233,9 +343,21 @@ const StockInPage: React.FC = () => {
       selling_price: sellingPrice,
       total_cost: qty * costPrice,
       date: date,
+      batch_id: selectedBatch?.id,
+      batch_label: selectedBatch?.label,
+      batch_barcode: savedLine?.barcode,
     };
 
-    setStockInItems([...stockInItems, newItem]);
+    // Same product + vendor twice in one batch: one line (one barcode, one price), qty added
+    const same = selectedBatch
+      ? stockInItems.findIndex((i) => i.product_id === newItem.product_id && i.batch_id === newItem.batch_id && i.vendor_id === newItem.vendor_id)
+      : -1;
+    if (same >= 0) {
+      const qtyTotal = stockInItems[same].quantity + qty;
+      setStockInItems(stockInItems.map((item, i) => (i === same ? { ...newItem, quantity: qtyTotal, total_cost: qtyTotal * newItem.cost_price } : item)));
+    } else {
+      setStockInItems([...stockInItems, newItem]);
+    }
     setSelectedProduct(null);
     setBarcode('');
     setNameSearch('');
@@ -259,10 +381,15 @@ const StockInPage: React.FC = () => {
   const handlePrintBarcodesOnly = async () => {
     if (stockInItems.length === 0) { showToast('Please add at least one item', 'error'); return; }
     if (submitting) return;
+    // A new batch line's barcode is made on save
+    if (stockInItems.some((item) => item.batch_id && !item.batch_barcode)) {
+      showToast('New batch barcodes are made on save - use "Stock In + Print Barcodes"', 'error');
+      return;
+    }
     setSubmitting(true);
     try {
       const payload = stockInItems.map(item => ({
-        product_id: item.product_id, quantity: item.quantity, barcode: item.barcode, price: item.selling_price,
+        product_id: item.product_id, quantity: item.quantity, barcode: item.batch_barcode || item.barcode, price: item.selling_price,
       }));
       const response = await fetch('/api/stock/generatebarcodesonly', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload),
@@ -286,12 +413,14 @@ const StockInPage: React.FC = () => {
       const payload = stockInItems.map(item => ({
         product_id: item.product_id, vendor_id: item.vendor_id, quantity: item.quantity,
         cost_price: item.cost_price, selling_price: item.selling_price, date: item.date,
+        batch_id: item.batch_id || null,
       }));
       const response = await fetch('/api/stock/savestockin', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload),
       });
       if (response.ok) {
         const result = await response.json();
+        (result.branch_warnings || []).forEach((w: string) => showToast(w, 'warning'));
         const errors = result.results?.filter((r: any) => r.status === 'error') || [];
         const successes = result.results?.filter((r: any) => r.status === 'success') || [];
         if (errors.length > 0) {
@@ -327,12 +456,14 @@ const StockInPage: React.FC = () => {
       const payload = stockInItems.map(item => ({
         product_id: item.product_id, vendor_id: item.vendor_id, quantity: item.quantity,
         cost_price: item.cost_price, selling_price: item.selling_price, date: item.date,
+        batch_id: item.batch_id || null,
       }));
       const response = await fetch('/api/stock/savestockinwithbarcode', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload),
       });
       if (response.ok) {
         const apiResult = await response.json();
+        (apiResult.branch_warnings || []).forEach((w: string) => showToast(w, 'warning'));
         const errors = apiResult.results?.filter((r: any) => r.status === 'error') || [];
         const successes = apiResult.results?.filter((r: any) => r.status === 'success') || [];
         if (errors.length > 0) {
@@ -622,6 +753,18 @@ const StockInPage: React.FC = () => {
             </div>
 
             <div>
+              <label className="block text-sm font-medium mb-1">Batch</label>
+              <select value={selectedBatchId} onChange={(e) => setSelectedBatchId(e.target.value)} className="regal-input w-full"
+                      disabled={defaultLoading}>
+                <option value="">{defaultLoading ? 'Loading...' : 'Old Stock (no batch)'}</option>
+                {openBatches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.label}{b.note ? ` · ${b.note}` : ''}</option>
+                ))}
+              </select>
+              {!selectedBatch && lastClosedNote && <p className="text-xs text-amber-700 mt-1">{lastClosedNote}</p>}
+            </div>
+
+            <div>
               <label className="block text-sm font-medium mb-1">Vendor *</label>
               <select
                 id="vendor-select"
@@ -637,6 +780,15 @@ const StockInPage: React.FC = () => {
               </select>
               {vendors.length === 0 && (
                 <p className="text-xs text-red-600 mt-1">No vendors found. Please add vendors first.</p>
+              )}
+              {selectedBatch && selectedVendor && !vendorInBatch && (
+                <div className="mt-1 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs flex items-center justify-between gap-2">
+                  <span>Not in {selectedBatch.label} yet</span>
+                  <button type="button" onClick={handleAddVendorToBatch} disabled={addingToBatch}
+                          className="regal-btn bg-regal-yellow text-regal-black !px-2 !py-1 text-xs whitespace-nowrap">
+                    {addingToBatch ? 'Adding...' : '+ Add to batch'}
+                  </button>
+                </div>
               )}
             </div>
 
@@ -654,28 +806,43 @@ const StockInPage: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium mb-1">Cost Price (Rs.) *</label>
-              <input
-                type="number"
-                value={costPrice}
-                onChange={(e) => setCostPrice(parseFloat(e.target.value) || 0)}
-                className="regal-input w-full"
-                min="0"
-                step="0.01"
-                required
-              />
+              {pricesLocked ? (
+                <input type="text" value={defaultLoading || savedLoading ? '...' : costPrice} readOnly className="regal-input w-full bg-gray-100 cursor-not-allowed" />
+              ) : (
+                <input
+                  type="number"
+                  value={costPrice}
+                  onChange={(e) => setCostPrice(parseFloat(e.target.value) || 0)}
+                  className="regal-input w-full"
+                  min="0"
+                  step="0.01"
+                  required
+                />
+              )}
             </div>
 
             <div>
               <label className="block text-sm font-medium mb-1">Selling Price (Rs.) *</label>
-              <input
-                type="number"
-                value={sellingPrice}
-                onChange={(e) => setSellingPrice(parseFloat(e.target.value) || 0)}
-                className="regal-input w-full"
-                min="0"
-                step="0.01"
-                required
-              />
+              {pricesLocked ? (
+                <input type="text" value={defaultLoading || savedLoading ? '...' : sellingPrice} readOnly className="regal-input w-full bg-gray-100 cursor-not-allowed" />
+              ) : (
+                <input
+                  type="number"
+                  value={sellingPrice}
+                  onChange={(e) => setSellingPrice(parseFloat(e.target.value) || 0)}
+                  className="regal-input w-full"
+                  min="0"
+                  step="0.01"
+                  required
+                />
+              )}
+              <p className="text-xs text-gray-500 mt-1">
+                {defaultLoading ? 'Loading batch...'
+                  : !selectedBatch ? "🔒 Old Stock: the product's own prices"
+                  : savedLoading ? 'Loading saved price...'
+                  : savedLine ? `🔒 Saved in ${selectedBatch.label} · ${savedLine.barcode}`
+                  : vendorInBatch ? `First time in ${selectedBatch.label} - prices are saved on Stock In` : ''}
+              </p>
             </div>
 
             <div>
@@ -763,7 +930,9 @@ const StockInPage: React.FC = () => {
                     <td className="px-4 py-3 text-gray-400 text-xs">{index + 1}</td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-gray-900">{item.product_name}</div>
-                      <div className="text-xs text-gray-400 mt-0.5">{item.barcode}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">
+                        {item.batch_id ? `${item.batch_label} · ${item.batch_barcode || 'new barcode on save'}` : item.barcode}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-gray-700">{item.vendor_name}</td>
                     <td className="px-4 py-3 text-center">

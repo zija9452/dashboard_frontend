@@ -42,6 +42,7 @@ function BatchPicker({ value, batches, nextLabel, onChange, onCreated }: {
   const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
+  const [typing, setTyping] = useState(false); // false = box shows the selected item (highlighted)
   const [at, setAt] = useState(-1);
   const box = useRef<HTMLDivElement>(null);
   const [newForm, setNewForm] = useState<ReturnType<typeof emptyForm> | null>(null); // null = pop-up closed
@@ -57,12 +58,13 @@ function BatchPicker({ value, batches, nextLabel, onChange, onCreated }: {
   });
 
   const chosen = batches.find((b) => b.id === value);
-  const term = q.trim().toLowerCase();
+  const term = typing ? q.trim().toLowerCase() : '';
   const shown = batches.filter((b) => shopBatchOption(b).toLowerCase().includes(term));
 
   function close() {
     setOpen(false);
     setQ('');
+    setTyping(false);
     setAt(-1);
   }
 
@@ -72,7 +74,7 @@ function BatchPicker({ value, batches, nextLabel, onChange, onCreated }: {
   };
 
   const startCreate = () => {
-    setNewForm({ ...emptyForm(), note: q.trim() });
+    setNewForm({ ...emptyForm(), note: typing ? q.trim() : '' });
     close();
   };
 
@@ -97,11 +99,11 @@ function BatchPicker({ value, batches, nextLabel, onChange, onCreated }: {
       <input
         role="combobox"
         aria-expanded={open}
-        value={open ? q : chosen ? shopBatchOption(chosen) : ''}
-        placeholder={open && chosen ? shopBatchOption(chosen) : 'Search or create batch'}
-        onFocus={() => setOpen(true)}
-        onClick={() => setOpen(true)}
-        onChange={(e) => { setQ(e.target.value); setOpen(true); setAt(-1); }}
+        value={typing ? q : chosen ? shopBatchOption(chosen) : ''}
+        placeholder='Search or create batch'
+        onFocus={(e) => { setOpen(true); e.target.select(); }}
+        onClick={(e) => { if (!open) e.currentTarget.select(); setOpen(true); }}
+        onChange={(e) => { setQ(e.target.value); setTyping(true); setOpen(true); setAt(-1); }}
         onKeyDown={(e) => {
           if (e.key === 'Escape') { e.preventDefault(); close(); }
           if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setAt(Math.min(at + 1, shown.length - 1)); }

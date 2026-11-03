@@ -84,6 +84,7 @@ function VendorPicker({ value, vendors, disabled, onChange, onCreate }: {
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
+  const [typing, setTyping] = useState(false); // false = box shows the selected item (highlighted)
   const [at, setAt] = useState(-1);
   const box = useRef<HTMLDivElement>(null);
 
@@ -97,12 +98,13 @@ function VendorPicker({ value, vendors, disabled, onChange, onCreate }: {
   });
 
   const chosen = vendors.find((v) => v.ven_id === value);
-  const term = q.trim().toLowerCase();
+  const term = typing ? q.trim().toLowerCase() : '';
   const shown = vendors.filter((v) => vendorLabel(v).toLowerCase().includes(term));
 
   function close() {
     setOpen(false);
     setQ('');
+    setTyping(false);
     setAt(-1);
   }
 
@@ -112,7 +114,7 @@ function VendorPicker({ value, vendors, disabled, onChange, onCreate }: {
   };
 
   const create = () => {
-    onCreate(q.trim());
+    onCreate(typing ? q.trim() : '');
     close();
   };
 
@@ -123,12 +125,13 @@ function VendorPicker({ value, vendors, disabled, onChange, onCreate }: {
         aria-expanded={open}
         disabled={disabled}
         required={!chosen}
-        value={open ? q : chosen ? vendorLabel(chosen) : ''}
-        placeholder={open && chosen ? vendorLabel(chosen) : 'Search or create vendor'}
-        onFocus={() => setOpen(true)}
-        onClick={() => setOpen(true)}
+        value={typing ? q : chosen ? vendorLabel(chosen) : ''}
+        placeholder='Search or create vendor'
+        onFocus={(e) => { setOpen(true); e.target.select(); }}
+        onClick={(e) => { if (!open) e.currentTarget.select(); setOpen(true); }}
         onChange={(e) => {
           setQ(e.target.value);
+          setTyping(true);
           setOpen(true);
           setAt(-1);
         }}
@@ -206,6 +209,7 @@ function BatchPicker({ value, batches, onChange, onCreated }: {
   const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
+  const [typing, setTyping] = useState(false); // false = box shows the selected item (highlighted)
   const [at, setAt] = useState(-1);
   const box = useRef<HTMLDivElement>(null);
   const [newForm, setNewForm] = useState<ReturnType<typeof emptyForm> | null>(null); // null = pop-up closed
@@ -233,12 +237,13 @@ function BatchPicker({ value, batches, onChange, onCreated }: {
   });
 
   const chosen = batches.find((b) => b.id === value);
-  const term = q.trim().toLowerCase();
+  const term = typing ? q.trim().toLowerCase() : '';
   const shown = batches.filter((b) => batchOption(b).toLowerCase().includes(term));
 
   function close() {
     setOpen(false);
     setQ('');
+    setTyping(false);
     setAt(-1);
   }
 
@@ -249,7 +254,7 @@ function BatchPicker({ value, batches, onChange, onCreated }: {
 
   // Date = today unless changed (not shown in the batch dropdowns); each vendor's bill has its own date
   const startCreate = () => {
-    setNewForm({ ...emptyForm(), note: q.trim() });
+    setNewForm({ ...emptyForm(), note: typing ? q.trim() : '' });
     close();
     loadNextNo(); // refresh in the background (someone else may have made one)
   };
@@ -283,12 +288,13 @@ function BatchPicker({ value, batches, onChange, onCreated }: {
       <input
         role="combobox"
         aria-expanded={open}
-        value={open ? q : chosen ? batchOption(chosen) : ''}
-        placeholder={open && chosen ? batchOption(chosen) : 'Search or create batch'}
-        onFocus={() => setOpen(true)}
-        onClick={() => setOpen(true)}
+        value={typing ? q : chosen ? batchOption(chosen) : ''}
+        placeholder='Search or create batch'
+        onFocus={(e) => { setOpen(true); e.target.select(); }}
+        onClick={(e) => { if (!open) e.currentTarget.select(); setOpen(true); }}
         onChange={(e) => {
           setQ(e.target.value);
+          setTyping(true);
           setOpen(true);
           setAt(-1);
         }}

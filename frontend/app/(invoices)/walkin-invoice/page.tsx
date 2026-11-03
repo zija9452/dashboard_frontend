@@ -9,6 +9,7 @@ import { PLAIN_BOX } from '@/components/CartNumberInputs';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import { Product as ProductAPI } from '@/lib/api/products';
+import AddCustomerModal from '@/components/AddCustomerModal';
 
 // Print styles - only print modal content
 const printStyles = `
@@ -64,6 +65,128 @@ interface Customer {
 interface Salesman {
   sal_id: string;
   sal_name: string;
+}
+
+// "Walk-in", "Walk in", "Walkin", "Walking" - spaces / dashes ignored.
+const isWalkInName = (name: string) => (name || '').toLowerCase().replace(/[^a-z]/g, '').includes('walkin');
+
+/**
+ * Customer picker - same as the Batch page vendor picker: the field is the search box,
+ * the list opens below with "+ Create customer" on top (opens the Add Customer pop-up).
+ */
+function CustomerPicker({ value, customers, onChange, onCreate }: {
+  value: string;
+  customers: Customer[];
+  onChange: (id: string) => void;
+  onCreate: (typedName: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const [at, setAt] = useState(-1);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => {
+      if (!box.current?.contains(e.target as Node)) close();
+    };
+    document.addEventListener('mousedown', away);
+    return () => document.removeEventListener('mousedown', away);
+  });
+
+  const chosen = customers.find((c) => c.cus_id === value);
+  const term = q.trim().toLowerCase();
+  const shown = customers.filter((c) =>
+    c.cus_name.toLowerCase().includes(term) || (c.cus_phone || '').toLowerCase().includes(term));
+
+  function close() {
+    setOpen(false);
+    setQ('');
+    setAt(-1);
+  }
+
+  const pick = (id: string) => {
+    onChange(id);
+    close();
+  };
+
+  const create = () => {
+    onCreate(q.trim());
+    close();
+  };
+
+  return (
+    <div ref={box} className="relative">
+      <input
+        role="combobox"
+        aria-expanded={open}
+        value={open ? q : chosen ? chosen.cus_name : ''}
+        placeholder={open && chosen ? chosen.cus_name : 'Search or create customer'}
+        onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setOpen(true);
+          setAt(-1);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            close();
+          }
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setOpen(true);
+            setAt(Math.min(at + 1, shown.length - 1));
+          }
+          if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setAt(Math.max(at - 1, -1));
+          }
+          if (e.key === 'Enter' && open) {
+            e.preventDefault();
+            if (at >= 0 && shown[at]) pick(shown[at].cus_id);
+            else if (shown.length === 1 && term) pick(shown[0].cus_id);
+            else create();
+          }
+        }}
+        className="regal-input w-full pr-8"
+      />
+      <span aria-hidden className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[10px] text-gray-500">
+        ▼
+      </span>
+      {open && (
+        <div role="listbox" className="absolute top-[calc(100%+2px)] left-0 right-0 z-40 max-h-72 overflow-auto bg-white border rounded-lg shadow-lg">
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={create}
+            className="w-full text-left px-4 py-3 border-b font-medium text-regal-black bg-yellow-200 hover:bg-yellow-100"
+          >
+            + Create customer
+          </button>
+          {shown.map((c, i) => (
+            <button
+              key={c.cus_id}
+              type="button"
+              role="option"
+              aria-selected={c.cus_id === value}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => pick(c.cus_id)}
+              onMouseEnter={() => setAt(i)}
+              className={`w-full flex justify-between items-center px-4 py-2.5 text-left text-sm ${i === at ? 'bg-gray-200' : ''}`}
+            >
+              <span className="truncate">{c.cus_name}</span>
+              {c.cus_id === value && <span className="text-green-600">✓</span>}
+            </button>
+          ))}
+          {!shown.length && (
+            <div className="px-4 py-2 text-sm text-gray-500">{term ? 'No match. Use Create above.' : 'No customers yet. Use Create above.'}</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface Product {
@@ -162,6 +285,9 @@ const WalkInInvoicePage: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [salesmans, setSalesmans] = useState<Salesman[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<string>('');
+  const walkInIdRef = useRef<string>(''); // remembered once, re-selected after every bill
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState('');
   const [selectedSalesman, setSelectedSalesman] = useState<string>('');
 
   // Search and selection state
@@ -603,7 +729,8 @@ const WalkInInvoicePage: React.FC = () => {
   };
 
   // Fetch customers
-  const fetchCustomers = async () => {
+  // keepSelection: after creating a customer, don't jump back to Walk-in.
+  const fetchCustomers = async (keepSelection = false) => {
     try {
       const response = await fetch('/api/customers/viewcustomer?page=1&limit=1000', {
         method: 'GET',
@@ -612,16 +739,17 @@ const WalkInInvoicePage: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        const customersList = Array.isArray(data.data) ? data.data : [];
+        const list: Customer[] = Array.isArray(data.data) ? data.data : [];
+        // Walk-in customer(s) on top, the rest in the same order as before
+        const customersList = [...list.filter(c => isWalkInName(c.cus_name)), ...list.filter(c => !isWalkInName(c.cus_name))];
         setCustomers(customersList);
-        
-        // Set default to Walk-in Customer
-        const walkInCustomer = customersList.find((c: Customer) => 
-          c.cus_name.toLowerCase().includes('walk-in') || 
-          c.cus_name.toLowerCase().includes('walk in')
-        );
+
+        // Default = Walk-in Customer (exact "walk-in customer" name preferred)
+        const walkInCustomer = customersList.find(c => c.cus_name.toLowerCase().replace(/[^a-z]/g, '') === 'walkincustomer')
+          || customersList.find(c => isWalkInName(c.cus_name));
         if (walkInCustomer) {
-          setSelectedCustomer(walkInCustomer.cus_id);
+          walkInIdRef.current = walkInCustomer.cus_id;
+          if (!keepSelection) setSelectedCustomer(walkInCustomer.cus_id);
         }
       }
     } catch (error) {
@@ -993,11 +1121,7 @@ const WalkInInvoicePage: React.FC = () => {
         clearAll();
         setShowPaymentModal(false);
         setAmountPaid('');
-        const walkInCustomerAfterSave = customers.find((c) =>
-          c.cus_name.toLowerCase().includes('walk-in') ||
-          c.cus_name.toLowerCase().includes('walk in')
-        );
-        setSelectedCustomer(walkInCustomerAfterSave ? walkInCustomerAfterSave.cus_id : '');
+        setSelectedCustomer(walkInIdRef.current);
         const defaultSalesmanAfterSave = salesmans.find(
           (s) => s.sal_name?.toLowerCase() === 'suleman'
         );
@@ -1642,18 +1766,15 @@ const WalkInInvoicePage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Select Customer</label>
-                <select
+                <CustomerPicker
                   value={selectedCustomer}
-                  onChange={(e) => setSelectedCustomer(e.target.value)}
-                  className="regal-input w-full"
-                >
-                  <option value="">Select Customer</option>
-                  {customers.map((customer) => (
-                    <option key={customer.cus_id} value={customer.cus_id}>
-                      {customer.cus_name}
-                    </option>
-                  ))}
-                </select>
+                  customers={customers}
+                  onChange={setSelectedCustomer}
+                  onCreate={(typed) => {
+                    setNewCustomerName(typed);
+                    setShowAddCustomerModal(true);
+                  }}
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Select Salesman</label>
@@ -1786,6 +1907,20 @@ const WalkInInvoicePage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Add Customer Modal - same pop-up as Customer Invoice / Quotation */}
+      <AddCustomerModal
+        open={showAddCustomerModal}
+        initialName={newCustomerName}
+        onClose={() => {
+          setShowAddCustomerModal(false);
+          setNewCustomerName('');
+        }}
+        onAdded={async (customerId) => {
+          await fetchCustomers(true);
+          setSelectedCustomer(customerId);
+        }}
+      />
 
       {/* Stock View Modal */}
       {showStockModal && (

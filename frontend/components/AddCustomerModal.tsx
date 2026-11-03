@@ -35,12 +35,17 @@ const AddCustomerModal: React.FC<{
   open: boolean;
   onClose: () => void;
   onAdded: (customerId: string) => void | Promise<void>;
-}> = ({ open, onClose, onAdded }) => {
+  initialName?: string; // Walk-in picker: the typed search text becomes the name
+}> = ({ open, onClose, onAdded, initialName }) => {
   const { showToast } = useToast();
   const currentBranch = useBranch();
   const [salesmans, setSalesmans] = useState<Salesman[]>([]);
   const [customer, setCustomer] = useState<NewCustomer>(EMPTY_CUSTOMER);
   const [adding, setAdding] = useState(false);
+
+  useEffect(() => {
+    if (open && initialName) setCustomer(c => (c.cus_name ? c : { ...c, cus_name: initialName }));
+  }, [open, initialName]);
 
   useEffect(() => {
     if (!open || salesmans.length > 0) return;

@@ -82,6 +82,7 @@ function CustomerPicker({ value, customers, onChange, onCreate }: {
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
+  const [typing, setTyping] = useState(false); // false = box shows the selected name (highlighted)
   const [at, setAt] = useState(-1);
   const box = useRef<HTMLDivElement>(null);
 
@@ -95,13 +96,14 @@ function CustomerPicker({ value, customers, onChange, onCreate }: {
   });
 
   const chosen = customers.find((c) => c.cus_id === value);
-  const term = q.trim().toLowerCase();
+  const term = typing ? q.trim().toLowerCase() : '';
   const shown = customers.filter((c) =>
     c.cus_name.toLowerCase().includes(term) || (c.cus_phone || '').toLowerCase().includes(term));
 
   function close() {
     setOpen(false);
     setQ('');
+    setTyping(false);
     setAt(-1);
   }
 
@@ -111,7 +113,7 @@ function CustomerPicker({ value, customers, onChange, onCreate }: {
   };
 
   const create = () => {
-    onCreate(q.trim());
+    onCreate(typing ? q.trim() : '');
     close();
   };
 
@@ -120,12 +122,19 @@ function CustomerPicker({ value, customers, onChange, onCreate }: {
       <input
         role="combobox"
         aria-expanded={open}
-        value={open ? q : chosen ? chosen.cus_name : ''}
-        placeholder={open && chosen ? chosen.cus_name : 'Search or create customer'}
-        onFocus={() => setOpen(true)}
-        onClick={() => setOpen(true)}
+        value={typing ? q : chosen ? chosen.cus_name : ''}
+        placeholder="Search or create customer"
+        onFocus={(e) => {
+          setOpen(true);
+          e.target.select(); // selected name highlighted; typing replaces it
+        }}
+        onClick={(e) => {
+          if (!open) e.currentTarget.select();
+          setOpen(true);
+        }}
         onChange={(e) => {
           setQ(e.target.value);
+          setTyping(true);
           setOpen(true);
           setAt(-1);
         }}

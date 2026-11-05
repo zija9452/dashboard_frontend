@@ -114,7 +114,14 @@ const STATUS_BADGE: Record<RecordStatus, string> = {
   REJECTED: 'bg-red-100 text-red-800',
 };
 
-const BANKS = ['Faysal Bank', 'Islami Bank', 'Jns Sportswear Bank'];
+const BANKS = [
+  'Faysal Bank',
+  'Islami Bank',
+  'Jns Sportswear Bank',
+  'Cash to Sir Noman',
+  'Cash to Sir Zohaib',
+  'Cash to Sir Yasir',
+];
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 const PAGE_SIZE = 20;
 // Each column fills the screen height whatever the number of entries; more rows scroll inside it

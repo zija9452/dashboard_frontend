@@ -854,7 +854,8 @@ const ProductsPage: React.FC = () => {
                       {product.pro_name}
                       {!!product.batch_count && (
                         <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-regal-black whitespace-nowrap">
-                          {product.batch_count} batch{product.batch_count > 1 ? 'es' : ''} {product.pro_id in openLines ? '▲' : '▼'}
+                          {/* Old Stock counts as a batch too (always shown, user 2026-11-07) */}
+                          {product.batch_count + 1} batches {product.pro_id in openLines ? '▲' : '▼'}
                         </span>
                       )}
                     </td>

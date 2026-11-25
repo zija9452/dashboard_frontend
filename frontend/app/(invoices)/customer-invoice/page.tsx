@@ -1058,7 +1058,8 @@ const CustomerInvoicePage: React.FC = () => {
         required_by_date: requiredByDate,
         rush_rate_per_piece: rushRateValue,
         rush_threshold_days: rushThresholdDays,
-        mockup_charges: mockups.map(m => ({ team: m.team, category: m.category, amount: m.amount })),
+        // default_amount = the software's MOQ; lower amount = waived / reduced (staff record).
+        mockup_charges: mockups.map(m => ({ team: m.team, category: m.category, amount: m.amount, default_amount: mockupDefaultFor(m.category, m.team) })),
         idempotency_key: idempotencyKeyRef.current,
       };
 

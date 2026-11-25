@@ -25,7 +25,17 @@ interface InvoiceItem {
   similar_of?: number; // 1-based line it was added "+ Similar" from - shown under it
 }
 
-interface FlatCharge { category: string; pieces: number; amount: number; team?: string }
+interface FlatCharge {
+  category: string; pieces: number; amount: number; team?: string;
+  // Set when the MOQ was billed below the software's amount (staff record, not printed).
+  default_amount?: number; change?: 'waived' | 'reduced'; changed_by?: string;
+}
+
+// "Waived by Ali Khan · standard MOQ Rs. 500.00" - staff note under a lowered MOQ.
+const flatChangeNote = (mc: FlatCharge) =>
+  mc.change
+    ? `${mc.change === 'waived' ? 'Waived' : 'Reduced'} by ${mc.changed_by || 'unknown user'} · standard MOQ Rs. ${Number(mc.default_amount || 0).toFixed(2)}`
+    : '';
 
 // Lines with their 1-based number, grouped by team in saved order (lines are saved
 // grouped). An order without teams is one group with no heading.
@@ -354,10 +364,11 @@ const ViewCustomerInvoicePage: React.FC = () => {
               {teamOrder && (
                 <>
                   {flatsOf(group.team).map(mc => (
-                    <tr key={`flat-${mc.category}`} className="text-gray-900">
+                    <tr key={`flat-${mc.category}`} className={mc.change ? 'bg-amber-50 text-gray-900' : 'text-gray-900'}>
                       <td colSpan={8} className="px-4 py-2 text-sm font-medium">
                         MOQ Charges - {mc.category}
                         <span className="ml-2 text-xs font-normal">{mc.pieces} pcs (under 5) in this team · once, not per piece</span>
+                        {mc.change && <div className="text-xs font-medium text-amber-700 mt-0.5">{flatChangeNote(mc)}</div>}
                       </td>
                       <td className="px-4 py-2 text-sm font-semibold">Rs. {Number(mc.amount).toFixed(2)}</td>
                     </tr>
@@ -442,9 +453,12 @@ const ViewCustomerInvoicePage: React.FC = () => {
               </div>
             )}
             {!teamOrder && invoice.mockup_charges.map(mc => (
-              <div key={mc.category} className="flex justify-between text-purple-700 font-medium mb-2">
-                <span>MOQ Charges ({mc.category})</span>
-                <span>+ Rs. {Number(mc.amount).toFixed(2)}</span>
+              <div key={mc.category} className="mb-2">
+                <div className="flex justify-between text-purple-700 font-medium">
+                  <span>MOQ Charges ({mc.category})</span>
+                  <span>+ Rs. {Number(mc.amount).toFixed(2)}</span>
+                </div>
+                {mc.change && <p className="text-xs font-medium text-amber-700">{flatChangeNote(mc)}</p>}
               </div>
             ))}
             {!teamOrder && (invoice.dtf_charges || []).map(dc => (

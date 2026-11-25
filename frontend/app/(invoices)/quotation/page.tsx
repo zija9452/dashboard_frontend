@@ -83,7 +83,7 @@ interface SavedQuotation {
   required_by_date: string | null;
   discounts: number;
   rush_rate_snapshot: number | null;
-  totals: { mockup_charges?: { category: string; amount: number; team?: string }[] };
+  totals: { mockup_charges?: { category: string; amount: number; team?: string; default_amount?: number; change?: 'waived' | 'reduced'; changed_by?: string }[] };
   items: {
     product_name: string;
     cat_name: string;
@@ -162,6 +162,9 @@ const QuotationPage: React.FC = () => {
   // category's own amount (customer_categories.mockup_charge), editable per order in the
   // cart. Keyed by mockupKey(team, category).
   const [mockupAmounts, setMockupAmounts] = useState<Record<string, number>>({});
+  // Saved quotation's waived / reduced MOQs (by mockupKey), shown as a staff note in the
+  // cart while the amount is still the saved one.
+  const [savedFlatChanges, setSavedFlatChanges] = useState<Record<string, { amount: number; default_amount: number; change: 'waived' | 'reduced'; changed_by: string }>>({});
   // Our ready articles (products without size) for the Team Name search and the kit flat.
   const [articles, setArticles] = useState<ReadyArticle[]>([]);
   const [articlesLoaded, setArticlesLoaded] = useState(false);
@@ -405,6 +408,12 @@ const QuotationPage: React.FC = () => {
         }
       }
       setMockupAmounts(amounts);
+      setSavedFlatChanges(Object.fromEntries(
+        (data.totals.mockup_charges || []).filter(m => m.change).map(m => [
+          mockupKey(cleanTeamName(m.team || '') || oldTeam, m.category),
+          { amount: Number(m.amount), default_amount: Number(m.default_amount || 0), change: m.change!, changed_by: m.changed_by || '' },
+        ])
+      ));
 
       setSelectedCustomer(data.customer_id || '');
       setRequiredByDate(data.required_by_date || '');
@@ -435,6 +444,7 @@ const QuotationPage: React.FC = () => {
     setDiscount('');
     setRushRate(rushRatePerPiece ?? '');
     setMockupAmounts({});
+    setSavedFlatChanges({});
     router.push('/view-quotation');
   };
 
@@ -500,6 +510,10 @@ const QuotationPage: React.FC = () => {
     };
 
     updateCart([...cart, newItem]);
+    // MOQ typed in the form becomes this team + category's MOQ in the cart
+    if (moqEditable && moqOverride !== null) {
+      setMockupAmounts(prev => ({ ...prev, [mockupKey(activeTeam, selectedCategory)]: moqOverride }));
+    }
     clearItemForm();
     // Team Name stays (shown with its spelling), so the rest of the kit - Short, Trouser -
     // goes to the same team; clicking into the box selects it to type another team.
@@ -589,7 +603,7 @@ const QuotationPage: React.FC = () => {
 
   // MOQ Charges of the line being entered = what it adds to its team + category's flat
   // (0 when that flat is already in the cart, or for a free kit line). Line Total adds it.
-  const moq = (() => {
+  const moqCalc = (() => {
     if (!activeTeam || !selectedCategory || quantity === '' || quantity <= 0) return { amount: 0, reason: '' };
     const key = mockupKey(activeTeam, selectedCategory);
     const before = mockups.find(m => m.key === key);
@@ -605,6 +619,15 @@ const QuotationPage: React.FC = () => {
     const kit = flatDefault(selectedCategory, activeTeam, withLine);
     return { amount: 0, reason: kit.amount === 0 && findArticle(articles, activeTeam) ? kit.reason : '' };
   })();
+  // A line that brings its team + category's MOQ can have it typed here (0 = waived), like
+  // in the cart; null = the default. Kept as the cart's MOQ amount when the line is added.
+  // Same as the Customer Invoice page.
+  const [moqOverride, setMoqOverride] = useState<number | null>(null);
+  useEffect(() => {
+    setMoqOverride(null);
+  }, [activeTeam, selectedCategory]);
+  const moqEditable = moqCalc.amount > 0;
+  const moq = { ...moqCalc, amount: moqEditable && moqOverride !== null ? moqOverride : moqCalc.amount };
 
   // Per team: its lines (display order), pieces, flat charges and total (lines + flat + DTF).
   const teamBlocks = teams.map(team => {
@@ -691,7 +714,8 @@ const QuotationPage: React.FC = () => {
         discounts: discount || 0,
         rush_rate_per_piece: rushRateValue,
         rush_threshold_days: rushThresholdDays,
-        mockup_charges: mockups.map(m => ({ team: m.team, category: m.category, amount: m.amount })),
+        // default_amount = the software's MOQ; lower amount = waived / reduced (staff record).
+        mockup_charges: mockups.map(m => ({ team: m.team, category: m.category, amount: m.amount, default_amount: mockupDefaultFor(m.category, m.team) })),
       };
 
       // A revision is saved against the old quotation (it becomes REVISED, this is Rev.N+1).
@@ -975,11 +999,23 @@ const QuotationPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Flat charge this line brings (once per team + category, 1-4 pcs; kit rule) -
-                  editable later in the cart. */}
+              {/* MOQ Charges - the flat charge this line brings (once per team + category,
+                  1-4 pcs; kit rule): editable here when the line brings it, and later in the cart */}
               <div>
                 <label htmlFor="quotation-moq" className="block text-xs font-medium text-gray-600 mb-1">MOQ Charges</label>
-                <input id="quotation-moq" type="text" value={moq.amount ? `Rs. ${moq.amount}` : '0'} disabled className="regal-input w-full bg-gray-100 text-gray-700" />
+                {moqEditable ? (
+                  <input
+                    id="quotation-moq"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={moq.amount}
+                    onChange={(e) => setMoqOverride(e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)))}
+                    className="regal-input w-full"
+                  />
+                ) : (
+                  <input id="quotation-moq" type="text" value={moq.amount ? `Rs. ${moq.amount}` : '0'} readOnly className="regal-input w-full bg-gray-100 text-gray-700" />
+                )}
                 {moq.reason && <p className="text-[11px] text-gray-500 mt-1">{moq.reason}</p>}
               </div>
 
@@ -1130,6 +1166,11 @@ const QuotationPage: React.FC = () => {
                               <tr key={m.key}>
                                 <td className="px-4 py-2 text-gray-900" colSpan={3}>
                                   <label htmlFor={`mockup-${m.key}`} className="font-medium">MOQ Charges - {m.category}</label>
+                                  {savedFlatChanges[m.key] && savedFlatChanges[m.key].amount === m.amount && (
+                                    <div className="text-xs font-medium text-amber-700 mt-0.5">
+                                      {savedFlatChanges[m.key].change === 'waived' ? 'Waived' : 'Reduced'} by {savedFlatChanges[m.key].changed_by || 'unknown user'} · standard MOQ Rs. {savedFlatChanges[m.key].default_amount.toFixed(2)}
+                                    </div>
+                                  )}
                                 </td>
                                 {/* Amount in the Total column, under the line totals */}
                                 {/* pr-[7px] + the box's padding = px-4, so the number sits under the line totals */}

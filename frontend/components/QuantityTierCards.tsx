@@ -3,12 +3,44 @@
 import React from 'react';
 import { CategoryTierSummary, MockupLine, MOCKUP_MAX_PIECES } from '@/lib/quantityPricing';
 
-// One card per category above the cart: current tier + mockup, and what adding a few
-// more pieces would give (next tier's rate per variant, mockup waived).
-export const QuantityTierCards: React.FC<{ summaries: CategoryTierSummary[] }> = ({ summaries }) => {
+// The team's one MOQ (TEAM_MOQ_PLAN.md): its pieces, amount and when it goes away.
+export interface TeamMoqInfo {
+  pieces: number;      // all pieces of the team
+  categories: number;  // categories in the team (1 = MOQ at 1-4 pcs, 2+ = 1-9 pcs)
+  limit: number;       // teamMoqLimit
+  amount: number;      // the MOQ in the cart (may be edited / waived)
+}
+
+// Above the cart: one MOQ card for the team, then one card per category with its rate
+// tier and what adding a few more pieces would give (only when the next rate is lower).
+export const QuantityTierCards: React.FC<{ summaries: CategoryTierSummary[]; moq?: TeamMoqInfo | null }> = ({ summaries, moq }) => {
   if (summaries.length === 0) return null;
+  // Only the next-tier rates that are actually lower than now.
+  const cheaper = (s: CategoryTierSummary) => (s.next?.rates || []).filter(r => r.currentRate === null || r.nextRate < r.currentRate);
   return (
     <div className="flex flex-col gap-2 mb-3">
+      {moq && (
+        <div className="rounded-lg border px-3 py-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm text-gray-600 bg-gray-50 border-gray-200">
+          <span className="whitespace-nowrap">
+            <span className="font-semibold text-gray-900">
+              Total {moq.pieces} pcs ({moq.categories} {moq.categories > 1 ? 'categories' : 'category'})
+            </span>
+          </span>
+          <span className="whitespace-nowrap text-xs font-semibold text-purple-700 bg-white border border-purple-200 rounded-full px-2 py-px">
+            + Rs. {moq.amount} MOQ
+          </span>
+          <span className="whitespace-nowrap text-xs font-semibold text-gray-800">
+            MOQ is removed at {moq.limit + 1}+ pcs
+          </span>
+          <span className="whitespace-nowrap text-xs font-bold text-regal-black bg-regal-yellow rounded px-1.5 py-px">
+            Add {moq.limit + 1 - moq.pieces} more pc{moq.limit - moq.pieces > 0 ? 's' : ''}
+          </span>
+          <span className="whitespace-nowrap inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-px">
+            MOQ
+            <span className="line-through text-gray-400">Rs. {moq.amount}</span>
+          </span>
+        </div>
+      )}
       {summaries.map(s => (
         // One wrapping line: the current tier first, then the next-tier hint right after
         // it - it only moves to a second line when the first one runs out of space.
@@ -19,40 +51,25 @@ export const QuantityTierCards: React.FC<{ summaries: CategoryTierSummary[] }> =
         >
           <span className="whitespace-nowrap">
             <span className="font-semibold text-gray-900">{s.category} · {s.pieces} pcs</span>
-            <span className="text-gray-400"> → </span>
-            {s.tierLabel}
           </span>
-          {s.mockupAmount !== null && (
-            <span className="whitespace-nowrap text-xs font-semibold text-purple-700 bg-white border border-purple-200 rounded-full px-2 py-px">
-              + Rs. {s.mockupAmount} MOQ
-            </span>
-          )}
           {s.dyeMultiplier > 1 && (
             <span className="whitespace-nowrap text-xs font-semibold text-pink-700 bg-white border border-pink-200 rounded-full px-2 py-px">
               Dye {s.dyePieces} pcs · rate ×{s.dyeMultiplier}
             </span>
           )}
-          {s.next && (
+          {s.next && (cheaper(s).length > 0 || (s.next.tierPriceMissing && s.next.rates.length === 0)) && (
             <>
               <span className="whitespace-nowrap text-xs font-bold text-regal-black bg-regal-yellow rounded px-1.5 py-px">
                 Add {s.next.need} more pc{s.next.need > 1 ? 's' : ''}
               </span>
               <span className="whitespace-nowrap text-xs font-semibold text-gray-800">→ {s.next.label}</span>
-              {s.next.rates.map((r, i) => (
+              {cheaper(s).map((r, i) => (
                 <span key={i} className="whitespace-nowrap text-xs text-green-700">
                   {r.variant && <span className="text-gray-600 font-medium">{r.variant}: </span>}
                   <b className="text-[13px]">{r.nextRate}</b>/pc
                   {r.currentRate !== null && r.nextRate < r.currentRate && <span className="text-gray-500"> instead of {r.currentRate}</span>}
                 </span>
               ))}
-              {s.mockupAmount !== null && (
-                // The MOQ charge this category drops at the next tier - struck out
-                // like any other price that goes down.
-                <span className="whitespace-nowrap inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-px">
-                  MOQ
-                  <span className="line-through text-gray-400">Rs. {s.mockupAmount}</span>
-                </span>
-              )}
               {s.next.tierPriceMissing && s.next.rates.length === 0 && (
                 <span className="whitespace-nowrap text-xs text-gray-500">qty rate not set yet</span>
               )}

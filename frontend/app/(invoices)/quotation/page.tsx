@@ -26,7 +26,8 @@ import {
   teamsIn,
   mockupKey,
   MockupLine,
-  MOCKUP_MAX_PIECES,
+  teamPieces,
+  teamMoqLimit,
 } from '@/lib/quantityPricing';
 import { QuantityTierCards } from '@/components/QuantityTierCards';
 import TeamSearchInput, { KitKindChips } from '@/components/TeamSearchInput';
@@ -512,7 +513,7 @@ const QuotationPage: React.FC = () => {
     updateCart([...cart, newItem]);
     // MOQ typed in the form becomes this team + category's MOQ in the cart
     if (moqEditable && moqOverride !== null) {
-      setMockupAmounts(prev => ({ ...prev, [mockupKey(activeTeam, selectedCategory)]: moqOverride }));
+      setMockupAmounts(prev => ({ ...prev, [moqCalc.key]: moqOverride }));
     }
     clearItemForm();
     // Team Name stays (shown with its spelling), so the rest of the kit - Short, Trouser -
@@ -603,21 +604,22 @@ const QuotationPage: React.FC = () => {
 
   // MOQ Charges of the line being entered = what it adds to its team + category's flat
   // (0 when that flat is already in the cart, or for a free kit line). Line Total adds it.
+  // One MOQ per team (TEAM_MOQ_PLAN.md): key = the team's MOQ line this line brings.
   const moqCalc = (() => {
-    if (!activeTeam || !selectedCategory || quantity === '' || quantity <= 0) return { amount: 0, reason: '' };
-    const key = mockupKey(activeTeam, selectedCategory);
-    const before = mockups.find(m => m.key === key);
+    if (!activeTeam || !selectedCategory || quantity === '' || quantity <= 0) return { amount: 0, reason: '', key: '' };
+    const before = mockups.find(m => m.team === activeTeam);
     const withLine: CartItem[] = [...cart, {
       id: '__new__', category: selectedCategory, unitPrice: unitPrice || 0, quantity, totalPrice: price,
       category_fields: { ...dynamicCategoryFields }, autoPriced: false, team: activeTeam,
     }];
-    const after = mockupLines(withLine, customerCategories, mockupAmounts, mockupDefaultFor).find(m => m.key === key);
-    if (before) return { amount: 0, reason: `Already added for ${activeTeam} · ${selectedCategory} (Rs. ${before.amount})` };
-    if (after) return { amount: after.amount, reason: flatDefault(selectedCategory, activeTeam, withLine).reason };
-    if (tierPieces !== '' && tierPieces > MOCKUP_MAX_PIECES) return { amount: 0, reason: `${tierPieces} pcs (${MOCKUP_MAX_PIECES + 1}+) - no MOQ charges` };
-    if (entryIsDye) return { amount: 0, reason: 'Dye - the dye rate applies instead' };
-    const kit = flatDefault(selectedCategory, activeTeam, withLine);
-    return { amount: 0, reason: kit.amount === 0 && findArticle(articles, activeTeam) ? kit.reason : '' };
+    const after = mockupLines(withLine, customerCategories, mockupAmounts, mockupDefaultFor).find(m => m.team === activeTeam);
+    if (before && after) return { amount: 0, reason: `One MOQ for ${activeTeam} - already added (Rs. ${before.amount})`, key: '' };
+    if (after) return { amount: after.amount, reason: flatDefault(after.category, activeTeam, withLine).reason, key: after.key };
+    const pcs = teamPieces(withLine, activeTeam);
+    const limit = teamMoqLimit(withLine, activeTeam);
+    if (pcs > limit) return { amount: 0, reason: `${activeTeam} has ${pcs} pcs (over 1-${limit}) - no MOQ charges`, key: '' };
+    if (entryIsDye) return { amount: 0, reason: 'Dye - the dye rate applies instead', key: '' };
+    return { amount: 0, reason: '', key: '' };
   })();
   // A line that brings its team + category's MOQ can have it typed here (0 = waived), like
   // in the cart; null = the default. Kept as the cart's MOQ amount when the line is added.
@@ -1072,7 +1074,10 @@ const QuotationPage: React.FC = () => {
                       <span className="text-sm font-medium text-regal-black">{block.pieces} pcs · Rs. {block.total}</span>
                     </div>
                     <div className="border border-t-0 border-gray-200 rounded-b-lg p-2 md:p-3">
-                      <QuantityTierCards summaries={block.tierSummaries} />
+                      <QuantityTierCards
+                        summaries={block.tierSummaries}
+                        moq={block.flats[0] ? { pieces: block.pieces, categories: block.tierSummaries.length, limit: teamMoqLimit(cart, block.team), amount: block.flatTotal } : null}
+                      />
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead className="bg-gray-100">
@@ -1165,7 +1170,7 @@ const QuotationPage: React.FC = () => {
                             {block.flats.map(m => (
                               <tr key={m.key}>
                                 <td className="px-4 py-2 text-gray-900" colSpan={3}>
-                                  <label htmlFor={`mockup-${m.key}`} className="font-medium">MOQ Charges - {m.category}</label>
+                                  <label htmlFor={`mockup-${m.key}`} className="font-medium">MOQ Charges ({m.pieces} pcs)</label>
                                   {savedFlatChanges[m.key] && savedFlatChanges[m.key].amount === m.amount && (
                                     <div className="text-xs font-medium text-amber-700 mt-0.5">
                                       {savedFlatChanges[m.key].change === 'waived' ? 'Waived' : 'Reduced'} by {savedFlatChanges[m.key].changed_by || 'unknown user'} · standard MOQ Rs. {savedFlatChanges[m.key].default_amount.toFixed(2)}
@@ -1175,7 +1180,7 @@ const QuotationPage: React.FC = () => {
                                 {/* Amount in the Total column, under the line totals */}
                                 {/* pr-[7px] + the box's padding = px-4, so the number sits under the line totals */}
                                 <td className="py-2 pl-4 pr-[7px] text-right whitespace-nowrap">
-                                  <AmountInput plain id={`mockup-${m.key}`} value={m.amount} label={`MOQ Charges - ${m.category}`} onChange={(v) => setMockupAmounts(prev => ({ ...prev, [m.key]: v }))} />
+                                  <AmountInput plain id={`mockup-${m.key}`} value={m.amount} label={`MOQ Charges (${m.pieces} pcs)`} onChange={(v) => setMockupAmounts(prev => ({ ...prev, [m.key]: v }))} />
                                 </td>
                                 <td></td>
                               </tr>

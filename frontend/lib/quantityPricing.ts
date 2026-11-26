@@ -9,15 +9,13 @@
  *   team (Customer Invoice page) are all one team, so they price as before.
  * - When pieces are added/removed, auto-priced lines move to the new tier by
  *   themselves. A rate the staff typed (manual) never changes by itself.
- * - A category with only 1-4 pcs gets one mockup charge (once per category, not per
- *   piece). The amount is the category's own customer_categories.mockup_charge.
+ * - MOQ (mockup) charge: ONE per team, from all its pieces - 1-4 pcs with one category,
+ *   1-9 pcs with 2+ categories (see needsMockup / kitFlatDefault, TEAM_MOQ_PLAN.md).
  * - Dye lines (an option ticked "Dye" on the Customer Category page) get no mockup
  *   charge; their rate is raised instead, by the dye pieces of the category: 1-4 pcs =
  *   dye_rate_single (default x2), 5-15 = dye_rate_qty (x1.5), 16+ = normal. Both rates
  *   are set per category on the Ideal Pricing page (see dyeMultiplier).
- * - Kit (see kitFlatDefault): for a team that is one of our ready articles, its Jersey /
- *   Short share ONE kit flat (the first one added pays it, the other 0), and its Trouser
- *   is 0 when the team's Jersey is in the order. Still only at 1-4 pcs.
+ * - Our article (see kitFlatDefault): the team's MOQ is the Our article MOQ (300).
  */
 
 import type { DtfBlock } from './dtfLayout';
@@ -254,28 +252,44 @@ export function repriceCart<T extends PricedLine>(
   return { items: out, changed };
 }
 
-// 1-4 pcs of the category in the team and at least one non-dye piece (dye pays x2 instead).
+// Team MOQ (TEAM_MOQ_PLAN.md): ONE MOQ per team, from all its pieces together. A team
+// with one category has it at 1-4 pcs, a team with 2+ categories at 1-9 pcs.
+export const TEAM_MOQ_MAX_MULTI = 9;
+
+export const teamPieces = (items: PricedLine[], team = '') =>
+  items.filter(i => teamOf(i) === team).reduce((sum, i) => sum + i.quantity, 0);
+
+export const teamMoqLimit = (items: PricedLine[], team = '') =>
+  categoriesIn(items.filter(i => teamOf(i) === team)).length > 1 ? TEAM_MOQ_MAX_MULTI : MOCKUP_MAX_PIECES;
+
+const teamNonDyePieces = (items: PricedLine[], categories: CustomerCategoryGrouped[], team: string) =>
+  items.filter(i => teamOf(i) === team && !isDyeLine(findCategory(categories, i.category), i.category_fields))
+    .reduce((sum, i) => sum + i.quantity, 0);
+
+// The team is within its MOQ limit and not all dye (dye pays x2 instead). Same answer for
+// every category of the team - `category` is kept so callers stay as they were.
 export const needsMockup = (items: PricedLine[], categories: CustomerCategoryGrouped[], category: string, team = '') => {
-  const pieces = piecesOfCategory(items, category, team);
-  return pieces > 0 && pieces <= MOCKUP_MAX_PIECES && pieces > dyePiecesOfCategory(items, categories, category, team);
+  const pieces = teamPieces(items, team);
+  return piecesOfCategory(items, category, team) > 0 && pieces <= teamMoqLimit(items, team)
+    && teamNonDyePieces(items, categories, team) > 0;
 };
 
-// The flat (MOQ) charge a team + category starts with, and why. Only used where the
-// category has a flat at all (1-4 pcs, not dye-only - see needsMockup).
-// - Custom team, or a category that isn't in the team's kit: the category's own MOQ.
-// - Our article's kit: its Jersey when we have it; its Short when we have the Short or the
-//   Jersey; its Trouser when we have the Jersey (we have the design). The first kit
-//   category added (cart order, with a MOQ) pays the Our article MOQ once, the rest 0 -
-//   e.g. only a Trouser of a team whose Jersey we have still pays 300, not 500.
+// The flat (MOQ) charge a team + category starts with, and why. The team's one MOQ sits on
+// a single "payer" category (first in cart order with non-dye pieces - and, for the normal
+// MOQ, with an MOQ set); every other category of the team is 0.
+// - Our article MOQ (300): the team's Jersey is in our system, or the team is ours and the
+//   order has no Jersey / Hoodie / Jacket (designs we don't have).
+// - Otherwise the lowest MOQ set among the team's categories (Jacket alone 1000, Jacket +
+//   Jersey 500).
 export interface FlatDefault {
   amount: number;
   reason: string;
-  kitPayer: boolean; // pays the kit flat for the team's whole kit
+  kitPayer: boolean; // carries the team's MOQ
 }
 
-// Is this kit part in the team's kit? (see kitFlatDefault)
-const inKit = (article: ReadyArticle, role: KitRole) =>
-  article.kinds.includes(role) || (role !== 'jersey' && article.kinds.includes('jersey'));
+// Jersey / Hoodie / Jacket - a new design unless it is our article's Jersey.
+const isDesignCategory = (c?: CustomerCategoryGrouped) =>
+  !!c && (kitRoleOf(c) === 'jersey' || /hoodie|jacket/i.test(c.main_category));
 
 export function kitFlatDefault(
   items: PricedLine[],
@@ -284,29 +298,29 @@ export function kitFlatDefault(
   category: string,
   team: string
 ): FlatDefault {
-  const categoryData = findCategory(categories, category);
-  const own = Number(categoryData?.mockup_charge ?? 0);
-  const role = kitRoleOf(categoryData);
+  const teamItems = items.filter(i => teamOf(i) === team);
+  const teamCategories = categoriesIn(teamItems);
   const article = findArticle(articles, team);
-  const normal = (reason: string): FlatDefault => ({ amount: own, reason, kitPayer: false });
-  if (!article || !role) return normal('MOQ charges (1-4 pcs)');
-  if (role === 'trouser' && !article.kinds.includes('jersey')) return normal(`We don't have a ${team} Jersey - normal MOQ`);
-  if (!inKit(article, role)) return normal(`We don't have a ${team} ${KIT_LABEL[role]} - normal MOQ`);
+  const kitCharge = categories.find(c => kitRoleOf(c) === 'jersey' && c.kit_flat_charge)?.kit_flat_charge
+    ?? categories.find(c => c.kit_flat_charge)?.kit_flat_charge;
+  const ours = !!article && !!kitCharge &&
+    (article.kinds.includes('jersey') || !teamCategories.some(c => isDesignCategory(findCategory(categories, c))));
+  const ownMoqs = teamCategories.map(c => Number(findCategory(categories, c)?.mockup_charge ?? 0)).filter(m => m > 0);
+  const amount = ours ? Number(kitCharge) : ownMoqs.length ? Math.min(...ownMoqs) : 0;
 
-  // The first kit category of this team added (cart order) that has a MOQ pays it.
-  const payer = categoriesIn(items.filter(i => teamOf(i) === team)).find(c => {
-    const r = kitRoleOf(findCategory(categories, c));
-    return r !== null && inKit(article, r) && needsMockup(items, categories, c, team);
-  });
-  if (payer && payer !== category) {
-    const payerRole = kitRoleOf(findCategory(categories, payer)) as KitRole;
-    return { amount: 0, reason: `Kit: ${team} ${KIT_LABEL[payerRole]} already pays the Our article MOQ`, kitPayer: false };
+  const hasNonDye = (c: string) => teamItems.some(i => i.category === c && !isDyeLine(findCategory(categories, c), i.category_fields));
+  const payer = teamCategories.find(c => hasNonDye(c) && (ours || Number(findCategory(categories, c)?.mockup_charge ?? 0) > 0))
+    ?? teamCategories.find(hasNonDye);
+  const limit = teamMoqLimit(items, team);
+  const label = team || 'this order';
+  if (payer !== category) {
+    return { amount: 0, reason: payer ? `One MOQ for ${label} - it is on ${payer}` : '', kitPayer: false };
   }
-  // A Trouser has no Our article MOQ of its own - it pays the Jersey's.
-  const jerseyKit = categories.find(c => kitRoleOf(c) === 'jersey')?.kit_flat_charge;
   return {
-    amount: Number(categoryData?.kit_flat_charge ?? jerseyKit ?? own),
-    reason: `Our article MOQ - ${team} (rest of the kit Rs. 0)`,
+    amount,
+    reason: ours
+      ? `Our article MOQ - ${label} (1-${limit} pcs, once for the team)`
+      : `MOQ charges - ${label} (1-${limit} pcs, once for the team)`,
     kitPayer: true,
   };
 }
@@ -335,7 +349,7 @@ export function mockupLines(
       .filter(c => needsMockup(items, categories, c, team) && defaultFor(c, team, items) > 0)
       .map(c => {
         const key = mockupKey(team, c);
-        return { team, category: c, key, pieces: piecesOfCategory(items, c, team), amount: amounts[key] ?? defaultFor(c, team, items) };
+        return { team, category: c, key, pieces: teamPieces(items, team), amount: amounts[key] ?? defaultFor(c, team, items) };
       });
   });
 }
@@ -372,22 +386,22 @@ export function categoryTierSummaries(
   return categoriesIn(items).map(category => {
     const pieces = piecesOfCategory(items, category, team);
     const dyePieces = dyePiecesOfCategory(items, categories, category, team);
-    const next = nextTierFor(pieces);
-    let nextInfo: CategoryTierSummary['next'] = null;
-    if (next) {
-      const categoryData = categories.find(c => c.main_category === category);
-      const autoLines = items.filter(i => i.category === category && i.autoPriced);
-      // Name items by the options that differ between them (e.g. Half / Full).
-      const keys = categoryData ? categoryData.sub_categories.map(sc => sc.sub_category) : [];
-      const differing = keys.filter(k => new Set(autoLines.map(i => i.category_fields?.[k] || '')).size > 1);
+    const categoryData = categories.find(c => c.main_category === category);
+    const autoLines = items.filter(i => i.category === category && i.autoPriced);
+    // Name items by the options that differ between them (e.g. Half / Full).
+    const keys = categoryData ? categoryData.sub_categories.map(sc => sc.sub_category) : [];
+    const differing = keys.filter(k => new Set(autoLines.map(i => i.category_fields?.[k] || '')).size > 1);
+    // The rates at one higher tier, for every auto-priced item kind.
+    const infoAt = (tier: typeof PRICE_TIERS[number]): NonNullable<CategoryTierSummary['next']> => {
+      const need = tier.minQty - pieces;
       const seen = new Set<string>();
       const rates: NextTierRate[] = [];
       let tierPriceMissing = false;
       for (const line of autoLines) {
-        // Same lookup the cart uses, at the next tier's piece count. For a dye line the
+        // Same lookup the cart uses, at that tier's piece count. For a dye line the
         // added pieces are taken as more of the same dye item.
         const lineIsDye = isDyeLine(categoryData, line.category_fields);
-        const nextRate = lookupIdealPrice(categoryData, line.category_fields || {}, next.minQty, lineIsDye ? dyePieces + next.need : 0);
+        const nextRate = lookupIdealPrice(categoryData, line.category_fields || {}, tier.minQty, lineIsDye ? dyePieces + need : 0);
         if (nextRate === null) { tierPriceMissing = true; continue; }
         // A bare "Yes"/"No" means nothing on its own, so those get their sub-category
         // name ("Panel: Yes"); other options read fine alone ("Full", "Oversize+").
@@ -400,8 +414,14 @@ export function categoryTierSummaries(
         seen.add(key);
         rates.push({ variant, nextRate, currentRate: line.unitPrice });
       }
-      nextInfo = { need: next.need, label: next.label, rates, tierPriceMissing };
-    }
+      return { need, label: tier.label, rates, tierPriceMissing };
+    };
+    // The first higher tier where some rate is lower than now - a tier with the same
+    // rate (e.g. 5-15 = 1-4) is skipped, so the hint shows 16-99 instead. None lower =
+    // the next tier as before (the card then shows only "qty rate not set yet", if so).
+    const higher = PRICE_TIERS.filter(t => t.minQty > pieces).map(infoAt);
+    const nextInfo: CategoryTierSummary['next'] =
+      higher.find(h => h.rates.some(r => r.currentRate === null || r.nextRate < r.currentRate)) ?? higher[0] ?? null;
     return {
       category,
       pieces,

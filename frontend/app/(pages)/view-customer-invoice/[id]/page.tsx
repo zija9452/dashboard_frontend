@@ -29,6 +29,7 @@ interface FlatCharge {
   category: string; pieces: number; amount: number; team?: string;
   // Set when the MOQ was billed below the software's amount (staff record, not printed).
   default_amount?: number; change?: 'waived' | 'reduced'; changed_by?: string;
+  scope?: 'team'; // one MOQ for the whole team (TEAM_MOQ_PLAN.md); absent = older per-category MOQ
 }
 
 // "Waived by Ali Khan · standard MOQ Rs. 500.00" - staff note under a lowered MOQ.
@@ -366,8 +367,8 @@ const ViewCustomerInvoicePage: React.FC = () => {
                   {flatsOf(group.team).map(mc => (
                     <tr key={`flat-${mc.category}`} className={mc.change ? 'bg-amber-50 text-gray-900' : 'text-gray-900'}>
                       <td colSpan={8} className="px-4 py-2 text-sm font-medium">
-                        MOQ Charges - {mc.category}
-                        <span className="ml-2 text-xs font-normal">{mc.pieces} pcs (under 5) in this team · once, not per piece</span>
+                        {mc.scope === 'team' ? 'MOQ Charges' : `MOQ Charges - ${mc.category}`}
+                        <span className="ml-2 text-xs font-normal">{mc.pieces} pcs {mc.scope === 'team' ? '' : '(under 5) '}in this team · once, not per piece</span>
                         {mc.change && <div className="text-xs font-medium text-amber-700 mt-0.5">{flatChangeNote(mc)}</div>}
                       </td>
                       <td className="px-4 py-2 text-sm font-semibold">Rs. {Number(mc.amount).toFixed(2)}</td>
@@ -455,7 +456,7 @@ const ViewCustomerInvoicePage: React.FC = () => {
             {!teamOrder && invoice.mockup_charges.map(mc => (
               <div key={mc.category} className="mb-2">
                 <div className="flex justify-between text-purple-700 font-medium">
-                  <span>MOQ Charges ({mc.category})</span>
+                  <span>{mc.scope === 'team' ? `MOQ Charges (${mc.pieces} pcs)` : `MOQ Charges (${mc.category})`}</span>
                   <span>+ Rs. {Number(mc.amount).toFixed(2)}</span>
                 </div>
                 {mc.change && <p className="text-xs font-medium text-amber-700">{flatChangeNote(mc)}</p>}

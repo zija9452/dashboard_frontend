@@ -835,7 +835,7 @@ const IdealPricingPage: React.FC = () => {
             <p className="text-xs text-gray-500 w-full">
               {selectedCategory.mockup_charge == null || Number(selectedCategory.mockup_charge) === 0
                 ? `No MOQ for ${selectedCategory.main_category}.`
-                : `Rs. ${Number(selectedCategory.mockup_charge).toLocaleString()} once when ${selectedCategory.main_category} has 1-4 pcs in a Quotation or Customer Invoice — not per piece, and none at 5+ pcs.`}
+                : `Rs. ${Number(selectedCategory.mockup_charge).toLocaleString()} MOQ for ${selectedCategory.main_category}. One MOQ per team in a Quotation or Customer Invoice: 1-4 pcs with one category, 1-9 pcs (all categories together) with more. With other categories the team pays the lowest MOQ among them.`}
               {' '}Leave empty for no MOQ. Staff can change or waive it on each order.
             </p>
           </div>
@@ -873,7 +873,7 @@ const IdealPricingPage: React.FC = () => {
                   {savingKitFlat ? 'Saving...' : 'Save'}
                 </button>
                 <p className="text-xs text-gray-500 w-full">
-                  For a team from our products (1-4 pcs): the kit (Jersey / Short / Trouser) pays this once - the first one added - and the rest Rs. 0. Custom teams pay the normal MOQ. Leave empty to use the normal MOQ.
+                  For a team from our products: the whole team pays this once instead of the normal MOQ (when we have the team&apos;s Jersey, or the order has no Jersey / Hoodie / Jacket). Custom teams pay the normal MOQ. Leave empty to use the normal MOQ.
                 </p>
               </>
             )}

@@ -67,6 +67,16 @@ export const findArticle = (articles: ReadyArticle[], team: string) => {
 export const categoryMockupDefault = (categories: CustomerCategoryGrouped[], category: string): number =>
   Number(categories.find(c => c.main_category === category)?.mockup_charge ?? 0);
 
+// Required By date a new Quotation / Customer Invoice starts with: today + 7 days, from
+// the local date (not UTC, which is a day behind before 5 am in Pakistan). Past the rush
+// threshold (3 days), so no rush charge unless the cashier picks an earlier date.
+export const DEFAULT_DEADLINE_DAYS = 7;
+export const defaultRequiredByDate = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + DEFAULT_DEADLINE_DAYS);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 // Quantity tiers, keyed by min_qty in ideal_prices: 1-4 pcs, 5-15, 16-99, 100+.
 export const PRICE_TIERS = [
   { minQty: 1, label: 'Single piece rate (1-4 pcs)' },

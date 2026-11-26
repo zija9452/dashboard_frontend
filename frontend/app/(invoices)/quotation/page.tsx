@@ -28,6 +28,7 @@ import {
   MockupLine,
   teamPieces,
   teamMoqLimit,
+  defaultRequiredByDate,
 } from '@/lib/quantityPricing';
 import { QuantityTierCards } from '@/components/QuantityTierCards';
 import TeamSearchInput, { KitKindChips } from '@/components/TeamSearchInput';
@@ -107,7 +108,7 @@ const QuotationPage: React.FC = () => {
 
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
-  const [requiredByDate, setRequiredByDate] = useState('');
+  const [requiredByDate, setRequiredByDate] = useState(defaultRequiredByDate); // today + 7, staff can change
 
   // Team Name box at the top of the item form. Emptied after every Add; "+ Similar"
   // fills it with that line's team.
@@ -441,7 +442,7 @@ const QuotationPage: React.FC = () => {
     setTeamInput('');
     setCartView(ALL_TEAMS);
     setSimilarOf(null);
-    setRequiredByDate('');
+    setRequiredByDate(defaultRequiredByDate());
     setDiscount('');
     setRushRate(rushRatePerPiece ?? '');
     setMockupAmounts({});
@@ -746,7 +747,7 @@ const QuotationPage: React.FC = () => {
         setTeamInput('');
         setCartView(ALL_TEAMS);
         setSimilarOf(null);
-        setRequiredByDate('');
+        setRequiredByDate(defaultRequiredByDate());
         setDiscount('');
         setRushRate(rushRatePerPiece ?? '');
         setMockupAmounts({});

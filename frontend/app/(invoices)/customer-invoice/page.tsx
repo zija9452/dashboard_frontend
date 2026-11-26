@@ -29,6 +29,7 @@ import {
   MockupLine,
   teamPieces,
   teamMoqLimit,
+  defaultRequiredByDate,
 } from '@/lib/quantityPricing';
 import { QuantityTierCards } from '@/components/QuantityTierCards';
 import TeamSearchInput, { KitKindChips } from '@/components/TeamSearchInput';
@@ -272,7 +273,7 @@ const CustomerInvoicePage: React.FC = () => {
   const [similarOf, setSimilarOf] = useState<string | null>(null);
   const quantityInputRef = useRef<HTMLInputElement>(null);
   const itemFormRef = useRef<HTMLDivElement>(null);
-  const [requiredByDate, setRequiredByDate] = useState('');
+  const [requiredByDate, setRequiredByDate] = useState(defaultRequiredByDate); // today + 7, cashier can change
   // Fetched once so the rush charge can be previewed live, the same way the
   // backend computes it on submit (deadline within threshold_days => rush).
   const [rushRatePerPiece, setRushRatePerPiece] = useState<number | null>(null);
@@ -1087,7 +1088,7 @@ const CustomerInvoicePage: React.FC = () => {
         setTeamInput('');
         setCartView(ALL_TEAMS);
         setSimilarOf(null);
-        setRequiredByDate('');
+        setRequiredByDate(defaultRequiredByDate());
         setRushRate(rushRatePerPiece ?? '');
         setMockupAmounts({});
         setAmountPaid('');

@@ -744,7 +744,6 @@ const DemandPage: React.FC = () => {
                         className="flex items-center justify-between px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 border-b border-gray-100 last:border-0"
                       >
                         <span className="truncate">{item.name}</span>
-                        <span className="text-xs text-gray-400 shrink-0 ml-2">{item.demand_count}x</span>
                       </div>
                     ))}
                   </div>
